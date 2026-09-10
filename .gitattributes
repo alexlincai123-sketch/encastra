@@ -1,0 +1,20 @@
+# Normalise to LF everywhere, including on Windows checkouts.
+#
+# This is not a style preference. `packages/protocol/data/compat-matrix.json` is compared
+# byte-for-byte by the conformance test, and `include_str!` embeds it into the Rust binary
+# verbatim. If Git rewrote line endings on checkout, the test would pass on Linux and fail on
+# a Windows clone for a reason that looks nothing like its cause.
+* text=auto eol=lf
+
+# Generated: excluded from diffs and language statistics, but still reviewed when it changes,
+# because a change here means the type rules moved.
+packages/protocol/data/compat-matrix.json linguist-generated=true
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.wasm binary
+*.encastra binary
