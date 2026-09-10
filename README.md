@@ -44,10 +44,13 @@ Early. What exists today, and what does not:
 | Capability broker — handles, grants, refusals, audit trail | working |
 | Runtime — executes a graph, records a journal | working, sequential |
 | Five first-party components + a CLI to run them | working |
-| Desktop app, canvas, WebAssembly host, registry service, website | **not started** |
+| Design tokens, brand mark, application icons | working |
+| Desktop app: canvas, palette, inspector/debugger, consent UI | working |
+| WebAssembly host, project files, versioning, registry service, website | **not started** |
 
-A graph runs end to end today, from a terminal. There is no user interface yet, and nothing
-here is production software.
+A graph runs end to end today, in the desktop app and from a terminal. Projects cannot yet be
+saved or opened, third-party components cannot yet be executed, and nothing here is production
+software.
 
 ```console
 $ cd examples/json-report

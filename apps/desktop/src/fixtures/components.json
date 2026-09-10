@@ -1,0 +1,238 @@
+[
+  {
+    "schema": 1,
+    "id": "encastra.data.json",
+    "version": "1.0.0",
+    "name": "Parse JSON",
+    "description": "Turns text into structured data.",
+    "author": null,
+    "license": null,
+    "category": "data",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "ports": {
+      "inputs": {
+        "text": {
+          "type": "string",
+          "required": true,
+          "label": null,
+          "doc": null
+        }
+      },
+      "outputs": {
+        "json": {
+          "type": "json",
+          "required": false,
+          "label": null,
+          "doc": null
+        }
+      }
+    },
+    "config": {},
+    "capabilities": [],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.file.read",
+    "version": "1.0.0",
+    "name": "Read File",
+    "description": "Reads the text content of the file connected to it.",
+    "author": null,
+    "license": null,
+    "category": "file",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "ports": {
+      "inputs": {
+        "file": {
+          "type": "file",
+          "required": true,
+          "label": "File",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "text": {
+          "type": "string",
+          "required": false,
+          "label": "Text",
+          "doc": null
+        }
+      }
+    },
+    "config": {},
+    "capabilities": [
+      {
+        "kind": "fs.read",
+        "scope": "input-handles",
+        "reason": "Reads the file you connect to this node, and nothing else."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.file.write",
+    "version": "1.0.0",
+    "name": "Write File",
+    "description": "Saves text into a file in a folder you choose.",
+    "author": null,
+    "license": null,
+    "category": "file",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "ports": {
+      "inputs": {
+        "content": {
+          "type": "string",
+          "required": true,
+          "label": null,
+          "doc": null
+        }
+      },
+      "outputs": {
+        "saved": {
+          "type": "bool",
+          "required": false,
+          "label": null,
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "filename": {
+        "type": "string",
+        "label": "File name",
+        "doc": null,
+        "required": true,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "folder": {
+        "type": "string",
+        "label": "Folder",
+        "doc": "Where to save. You will be asked to allow this folder before the first run.",
+        "required": true,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "fs.write",
+        "scope": "chosen-folder",
+        "reason": "Saves the result into the folder you pick. It cannot write anywhere else."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.flow.if",
+    "version": "1.0.0",
+    "name": "If",
+    "description": "Sends the value one way or the other depending on a condition.",
+    "author": null,
+    "license": null,
+    "category": "flow",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "ports": {
+      "inputs": {
+        "condition": {
+          "type": "bool",
+          "required": true,
+          "label": null,
+          "doc": null
+        },
+        "value": {
+          "type": "json",
+          "required": true,
+          "label": null,
+          "doc": null
+        }
+      },
+      "outputs": {
+        "else": {
+          "type": "option<json>",
+          "required": false,
+          "label": "If false",
+          "doc": null
+        },
+        "then": {
+          "type": "option<json>",
+          "required": false,
+          "label": "If true",
+          "doc": null
+        }
+      }
+    },
+    "config": {},
+    "capabilities": [],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.system.notify",
+    "version": "1.0.0",
+    "name": "Notify",
+    "description": "Shows a desktop notification.",
+    "author": null,
+    "license": null,
+    "category": "system",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "ports": {
+      "inputs": {
+        "message": {
+          "type": "string",
+          "required": true,
+          "label": null,
+          "doc": null
+        }
+      },
+      "outputs": {
+        "shown": {
+          "type": "bool",
+          "required": false,
+          "label": null,
+          "doc": null
+        }
+      }
+    },
+    "config": {},
+    "capabilities": [
+      {
+        "kind": "system.notify",
+        "scope": "notifications",
+        "reason": "Shows a notification when this step runs."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  }
+]

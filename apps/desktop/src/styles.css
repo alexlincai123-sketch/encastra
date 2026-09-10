@@ -1,0 +1,617 @@
+/*
+ * Application shell.
+ *
+ * Every value here comes from a token. If something needs a colour or a measurement that is
+ * not in packages/ui/src/tokens.css, it goes in the token file — not in this one.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ground-0);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+  border-radius: var(--radius-sm);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Shell
+ * ------------------------------------------------------------------------------------ */
+
+.shell {
+  display: grid;
+  grid-template-rows: 44px 1fr 26px;
+  grid-template-columns: 236px 1fr 320px;
+  grid-template-areas:
+    "top     top     top"
+    "palette canvas  inspector"
+    "status  status  status";
+  height: 100%;
+}
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  background: var(--ground-1);
+  border-bottom: var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-label);
+}
+
+.brand svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.topbar__spacer {
+  flex: 1;
+}
+
+.preview-badge {
+  padding: 2px var(--space-2);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--warn);
+  background: var(--warn-dim);
+  border-radius: var(--radius-full);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Buttons
+ * ------------------------------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 28px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--ink);
+  background: var(--ground-3);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-instant) var(--ease-out);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--ground-4);
+}
+
+.btn:disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  color: var(--ink-inverse);
+  background: var(--accent);
+  border-color: transparent;
+  font-weight: var(--weight-strong);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.btn--primary:disabled {
+  color: var(--ink-faint);
+  background: var(--ground-3);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Panels
+ * ------------------------------------------------------------------------------------ */
+
+.panel {
+  overflow-y: auto;
+  background: var(--ground-1);
+}
+
+.panel--palette {
+  grid-area: palette;
+  border-right: var(--border);
+}
+
+.panel--inspector {
+  grid-area: inspector;
+  border-left: var(--border);
+}
+
+.panel__title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  background: var(--ground-1);
+}
+
+.panel__section {
+  padding: 0 var(--space-3) var(--space-4);
+}
+
+.panel__group-label {
+  padding: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.empty {
+  padding: var(--space-4) var(--space-3);
+  color: var(--ink-faint);
+  font-size: var(--text-sm);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Palette
+ * ------------------------------------------------------------------------------------ */
+
+.palette-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2);
+  margin-bottom: var(--space-1);
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition:
+    background var(--duration-instant) var(--ease-out),
+    border-color var(--duration-instant) var(--ease-out);
+}
+
+.palette-item:hover {
+  background: var(--ground-2);
+  border-color: var(--line);
+}
+
+.palette-item__name {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.palette-item__desc {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  line-height: var(--leading-tight);
+}
+
+.palette-item__needs {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--warn);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Canvas
+ * ------------------------------------------------------------------------------------ */
+
+.canvas {
+  grid-area: canvas;
+  position: relative;
+  background: var(--canvas-bg);
+}
+
+.react-flow__background-pattern {
+  color: var(--canvas-dot);
+}
+
+.react-flow__handle {
+  /* Every port is drawn by the node itself; React Flow's default dot would sit on top. */
+  all: unset;
+  position: absolute;
+}
+
+.react-flow__edge-path {
+  stroke: var(--edge);
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__connection-path {
+  stroke: var(--edge-active);
+  stroke-width: 2;
+}
+
+/* Conversion badge on an edge: small, quiet, and readable at a glance. */
+.wire__badge {
+  position: absolute;
+  padding: 1px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+  background: var(--ground-3);
+  border: var(--border-strong);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.wire__badge[data-selected="true"] {
+  color: var(--ink);
+  border-color: var(--focus);
+}
+
+.react-flow__minimap {
+  background: var(--ground-1);
+  border: var(--border);
+  border-radius: var(--radius-md);
+}
+
+.react-flow__attribution {
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+
+/* The canvas starts empty. An empty tool should say what to do, not just be blank. */
+.canvas__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  pointer-events: none;
+  text-align: center;
+}
+
+.canvas__empty h2 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  color: var(--ink-muted);
+}
+
+.canvas__empty p {
+  margin: 0;
+  max-width: 32ch;
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+  line-height: var(--leading-normal);
+}
+
+.react-flow__controls-button {
+  background: var(--ground-2);
+  border-bottom: var(--border);
+  fill: var(--ink-muted);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--ground-3);
+}
+
+/* --- The node ---------------------------------------------------------------------------
+ * A tight card with tabs down each side. The tabs are the same geometry as the mark: this is
+ * a joint, not a dot on a wire.
+ */
+
+.node {
+  width: var(--node-width);
+  background: var(--ground-2);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.node.is-selected {
+  border-color: var(--focus);
+  box-shadow: var(--ring-focus), var(--shadow-md);
+}
+
+.node.is-disabled {
+  opacity: 0.45;
+}
+
+.node__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+}
+
+.node__name {
+  flex: 1;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Status is a bar down the left edge, not a coloured card: the node keeps one appearance and
+   the run state is a separate layer on top of it. */
+.node__state {
+  position: absolute;
+  left: -1px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+
+.node[data-state="ok"] .node__state {
+  background: var(--ok);
+}
+
+.node[data-state="failed"] .node__state {
+  background: var(--danger);
+}
+
+.node[data-state="skipped"] .node__state {
+  background: var(--ink-faint);
+}
+
+.node[data-state="running"] .node__state {
+  background: var(--accent);
+  animation: pulse 1s var(--ease-in-out) infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.node__ports {
+  padding: var(--space-2) 0;
+}
+
+.port {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.port--out {
+  justify-content: flex-end;
+}
+
+/* The tab. A rectangle that breaks the node's edge — the tongue from the mark. */
+.port__tab {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 10px;
+  transform: translateY(-50%);
+  background: var(--tab-colour, var(--type-slate));
+  border: 1px solid var(--ground-2);
+}
+
+.port--in .port__tab {
+  left: -5px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.port--out .port__tab {
+  right: -5px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.port__required {
+  color: var(--accent);
+}
+
+.port__type {
+  margin-left: var(--space-2);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.port--out .port__type {
+  margin: 0 var(--space-2) 0 0;
+  order: -1;
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Inspector
+ * ------------------------------------------------------------------------------------ */
+
+.field {
+  margin-bottom: var(--space-3);
+}
+
+.field__label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.field__doc {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  line-height: var(--leading-tight);
+}
+
+.input,
+select.input {
+  width: 100%;
+  height: 26px;
+  padding: 0 var(--space-2);
+  color: var(--ink);
+  background: var(--ground-0);
+  border: var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.input:focus-visible {
+  border-color: var(--focus);
+}
+
+.row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.kv dt {
+  color: var(--ink-faint);
+}
+
+.kv dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.note {
+  padding: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid transparent;
+}
+
+.note--error {
+  color: var(--danger);
+  background: var(--danger-dim);
+  border-left-color: var(--danger);
+}
+
+.note--warn {
+  color: var(--warn);
+  background: var(--warn-dim);
+  border-left-color: var(--warn);
+}
+
+.note--ok {
+  color: var(--ok);
+  background: var(--ok-dim);
+  border-left-color: var(--ok);
+}
+
+.note__hint {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--ink-muted);
+}
+
+.trace {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.trace__line {
+  display: flex;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+
+.trace__denied {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Status bar
+ * ------------------------------------------------------------------------------------ */
+
+.statusbar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  background: var(--ground-1);
+  border-top: var(--border);
+}
+
+.statusbar__message--error {
+  color: var(--danger);
+}
+
+.statusbar__message--info {
+  color: var(--ok);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--ink-faint);
+}
+
+.dot--ok {
+  background: var(--ok);
+}
+
+.dot--failed {
+  background: var(--danger);
+}
+
+.dot--skipped {
+  background: var(--ink-faint);
+}

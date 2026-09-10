@@ -11,13 +11,13 @@
 |---|---|---|
 | 0 | Research, architecture, threat model, protocol spec | ✅ done |
 | 1 | Monorepo, tooling, CI skeleton | ✅ done |
-| 2 | Design system + visual language | ⬜ |
-| 3 | Desktop shell (Tauri) boots and holds a window | ⬜ |
+| 2 | Design system + visual language | 🔨 tokens, mark and icons exist; no component library yet |
+| 3 | Desktop shell (Tauri) boots and holds a window | 🔨 builds and runs; no SQLite, no migrations, no project storage |
 | 4 | Component engine: manifest → registry → instantiation | 🔨 manifests, validation and a local registry work; installing from a registry service does not exist |
-| 5 | Canvas: place, connect, type-check, save | ⬜ |
+| 5 | Canvas: place, connect, type-check, save | 🔨 place, connect and type-check work; save does not exist |
 | 6 | Runtime: RUN / STOP, journal, debugger | 🔨 executes a validated graph and writes a journal, sequentially; STOP is cooperative, concurrency and preemptive timeouts are not built |
 | 7 | Projects + native versioning | ⬜ |
-| 8 | Capability broker + consent UI + Security Center | 🔨 the broker enforces and audits; there is no UI to grant anything, so grants are assembled in code |
+| 8 | Capability broker + consent UI + Security Center | 🔨 the broker enforces and audits, and the inspector grants per run; grants are not remembered and there is no Security Center |
 | 9 | Component SDK + CLI + first Wasm component end-to-end | ⬜ |
 | 10 | Backend: auth, users, projects, registry | ⬜ |
 | 11 | Community | ⬜ |

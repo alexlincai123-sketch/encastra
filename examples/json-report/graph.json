@@ -1,14 +1,17 @@
 {
   "nodes": {
-    "read":   { "component": "encastra.file.read@1.0.0",     "position": { "x": 0,   "y": 0 } },
-    "parse":  { "component": "encastra.data.json@1.0.0",     "position": { "x": 260, "y": 0 } },
-    "write":  { "component": "encastra.file.write@1.0.0",    "position": { "x": 520, "y": 0 },
-                "config": { "folder": "./out", "filename": "report.json" } },
+    "read": { "component": "encastra.file.read@1.0.0", "position": { "x": 0, "y": 0 } },
+    "parse": { "component": "encastra.data.json@1.0.0", "position": { "x": 260, "y": 0 } },
+    "write": {
+      "component": "encastra.file.write@1.0.0",
+      "position": { "x": 520, "y": 0 },
+      "config": { "folder": "./out", "filename": "report.json" }
+    },
     "notify": { "component": "encastra.system.notify@1.0.0", "position": { "x": 780, "y": 0 } }
   },
   "edges": [
-    { "from": { "node": "read",  "port": "text" },  "to": { "node": "parse",  "port": "text" } },
-    { "from": { "node": "parse", "port": "json" },  "to": { "node": "write",  "port": "content" } },
+    { "from": { "node": "read", "port": "text" }, "to": { "node": "parse", "port": "text" } },
+    { "from": { "node": "parse", "port": "json" }, "to": { "node": "write", "port": "content" } },
     { "from": { "node": "write", "port": "saved" }, "to": { "node": "notify", "port": "message" } }
   ]
 }

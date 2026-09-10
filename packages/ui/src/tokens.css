@@ -1,0 +1,215 @@
+/*
+ * Design tokens.
+ *
+ * One file, one source of truth, shared by the desktop app and the website. Nothing else in
+ * the product writes a colour or a spacing value literally — if a component needs a shade
+ * that is not here, the answer is to add it here, not to inline it.
+ *
+ * The look is meant to read as an instrument rather than a dashboard: dense type, small radii,
+ * restrained colour, and motion that is fast enough to feel like a response instead of an
+ * animation. Colour carries meaning — a type, a state, a warning — so decoration gets none.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Ground -------------------------------------------------------------------------- */
+  /* Not pure black. A slight cool cast keeps large dark areas from looking like a hole, and
+     gives the elevated surfaces something to be lighter *than*. */
+  --ground-0: #0b0d10; /* app background, behind everything */
+  --ground-1: #111419; /* panels */
+  --ground-2: #171b21; /* cards, nodes */
+  --ground-3: #1e232b; /* raised: menus, dialogs, hover */
+  --ground-4: #262d37; /* pressed, selected row */
+
+  --line: #262c35; /* hairlines between regions */
+  --line-strong: #384252; /* borders that need to be seen */
+
+  /* --- Ink ----------------------------------------------------------------------------- */
+  --ink: #e6eaf0; /* primary text */
+  --ink-muted: #9aa4b2; /* secondary text, labels */
+  --ink-faint: #6b7482; /* hints, disabled, metadata */
+  --ink-inverse: #0b0d10; /* on a bright accent */
+
+  /* --- Accent -------------------------------------------------------------------------- */
+  /* One accent for "you can act here", one for "this is selected or connected". Two, not six:
+     when everything is highlighted, nothing is. */
+  --accent: #ff8a3d; /* actions: run, primary buttons */
+  --accent-strong: #ff9d5c;
+  --accent-dim: #7a4520;
+  --focus: #4da3ff; /* selection, live connection, focus ring */
+  --focus-dim: #1f3f63;
+
+  /* --- State --------------------------------------------------------------------------- */
+  --ok: #3ecf8e;
+  --warn: #f5c14e;
+  --danger: #ff6b6b;
+  --ok-dim: #14382a;
+  --warn-dim: #3d3312;
+  --danger-dim: #3d1f1f;
+
+  /* --- Port and edge colours by data type ----------------------------------------------
+   * The names come from `type-graph.json`, so the palette and the type system cannot drift:
+   * a new type declares its colour name in the same file that declares its conversions.
+   */
+  --type-blue: #5b9dff; /* numbers */
+  --type-green: #4fd08a; /* text */
+  --type-amber: #f0b429; /* booleans */
+  --type-violet: #a78bfa; /* json */
+  --type-slate: #94a3b8; /* file, folder, bytes */
+  --type-pink: #f472b6; /* image */
+  --type-orange: #fb923c; /* video, audio */
+
+  /* --- Typography -----------------------------------------------------------------------
+   * Small and dense on purpose. This is a tool people keep open, not a page they read once.
+   */
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "Cascadia Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+
+  /* Labels and ports use tracking to stay legible at 11px. */
+  --tracking-label: 0.04em;
+
+  /* --- Space ---------------------------------------------------------------------------
+   * A 4px grid. Every margin and padding in the product is one of these.
+   */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* --- Shape --------------------------------------------------------------------------- */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+  --radius-full: 999px;
+
+  --border: 1px solid var(--line);
+  --border-strong: 1px solid var(--line-strong);
+
+  /* --- Elevation ------------------------------------------------------------------------
+   * Dark interfaces get depth from a light edge at the top plus a soft shadow, not from a
+   * heavier drop shadow alone.
+   */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 45%);
+  --shadow-lg: 0 16px 40px rgb(0 0 0 / 55%);
+  --ring-focus: 0 0 0 2px var(--focus-dim), 0 0 0 1px var(--focus);
+
+  /* --- Motion ---------------------------------------------------------------------------
+   * Fast. A 300ms transition on a tool feels like lag; 120ms feels like the thing responded.
+   */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-instant: 80ms;
+  --duration-fast: 140ms;
+  --duration-slow: 240ms;
+
+  /* --- Canvas ---------------------------------------------------------------------------- */
+  --canvas-bg: #0e1116;
+  --canvas-dot: #1b2029;
+  --canvas-dot-strong: #232a35;
+  --edge: #4b5563;
+  --edge-active: var(--focus);
+  --node-width: 200px;
+}
+
+/*
+ * Light theme.
+ *
+ * The product is dark-first, but a tool somebody uses next to a browser all day needs the
+ * option. Only the tokens change; no component knows which theme it is in.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ground-0: #f7f8fa;
+  --ground-1: #ffffff;
+  --ground-2: #ffffff;
+  --ground-3: #f1f3f6;
+  --ground-4: #e6e9ef;
+
+  --line: #e2e6ec;
+  --line-strong: #c3cad5;
+
+  --ink: #10151c;
+  --ink-muted: #4a5462;
+  --ink-faint: #78838f;
+  --ink-inverse: #ffffff;
+
+  --accent: #d9601a;
+  --accent-strong: #b94f12;
+  --accent-dim: #ffe2cf;
+  --focus: #1f6feb;
+  --focus-dim: #cfe1ff;
+
+  --ok: #167c50;
+  --warn: #9a6b06;
+  --danger: #c23b3b;
+  --ok-dim: #d9f2e5;
+  --warn-dim: #fbf0d0;
+  --danger-dim: #fadddd;
+
+  --type-blue: #2563eb;
+  --type-green: #16a34a;
+  --type-amber: #b45309;
+  --type-violet: #7c3aed;
+  --type-slate: #475569;
+  --type-pink: #db2777;
+  --type-orange: #ea580c;
+
+  --shadow-sm: 0 1px 2px rgb(16 21 28 / 8%);
+  --shadow-md: 0 4px 12px rgb(16 21 28 / 10%);
+  --shadow-lg: 0 16px 40px rgb(16 21 28 / 14%);
+
+  --canvas-bg: #fbfcfd;
+  --canvas-dot: #dfe4ea;
+  --canvas-dot-strong: #ccd3dc;
+  --edge: #9aa4b2;
+}
+
+/*
+ * Reduced motion is handled once, here, rather than in each component.
+ *
+ * Putting it at the token layer means a component cannot forget it: every transition in the
+ * product reads one of these durations.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-slow: 0ms;
+  }
+
+  /* biome-ignore-start lint/complexity/noImportantStyles: a reduced-motion override has to
+     beat every author rule, including the inline styles a third-party library sets on a
+     transitioning element. This is the one place where !important is the correct tool. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* biome-ignore-end lint/complexity/noImportantStyles: see above. */
+}

@@ -5,6 +5,7 @@ members = [
   "crates/encastra-core",
   "crates/encastra-builtins",
   "crates/encastra-cli",
+  "apps/desktop/src-tauri",
 ]
 
 [workspace.package]

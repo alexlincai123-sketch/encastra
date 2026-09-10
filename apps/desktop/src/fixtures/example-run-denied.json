@@ -1,0 +1,91 @@
+{
+  "run_id": "cli",
+  "started_at_ms": 1789081709139,
+  "finished_at_ms": 1789081709140,
+  "status": "partial",
+  "nodes": {
+    "notify": {
+      "component": "encastra.system.notify@1.0.0",
+      "status": "skipped",
+      "inputs": {},
+      "outputs": {},
+      "capability_calls": [],
+      "logs": [],
+      "skipped_because": "write"
+    },
+    "parse": {
+      "component": "encastra.data.json@1.0.0",
+      "status": "ok",
+      "started_at_ms": 1789081709140,
+      "duration_ms": 0,
+      "inputs": {
+        "text": "text (62 characters)"
+      },
+      "outputs": {
+        "json": "json (3 fields)"
+      },
+      "capability_calls": [],
+      "logs": []
+    },
+    "read": {
+      "component": "encastra.file.read@1.0.0",
+      "status": "ok",
+      "started_at_ms": 1789081709139,
+      "duration_ms": 0,
+      "inputs": {
+        "file": "file #1"
+      },
+      "outputs": {
+        "text": "text (62 characters)"
+      },
+      "capability_calls": [
+        {
+          "at_ms": 1789081709139,
+          "kind": "fs.read",
+          "detail": "file #1",
+          "allowed": true
+        }
+      ],
+      "logs": [
+        {
+          "at_ms": 1789081709139,
+          "level": "info",
+          "message": "Read 62 characters."
+        }
+      ]
+    },
+    "write": {
+      "component": "encastra.file.write@1.0.0",
+      "status": "failed",
+      "started_at_ms": 1789081709140,
+      "duration_ms": 0,
+      "inputs": {
+        "content": "text (54 characters)"
+      },
+      "outputs": {},
+      "capability_calls": [
+        {
+          "at_ms": 1789081709140,
+          "kind": "fs.write",
+          "detail": "scratch file #2",
+          "allowed": true
+        },
+        {
+          "at_ms": 1789081709140,
+          "kind": "fs.write",
+          "detail": "2 \u2192 report.json",
+          "allowed": false,
+          "denied_because": "no folder has been allowed for this node"
+        }
+      ],
+      "logs": [],
+      "error": {
+        "code": "denied",
+        "message": "This component tried to use fs.write and was not allowed: no folder has been allowed for this node.",
+        "hint": "Grant this component access to a folder, then run again.",
+        "retryable": false
+      }
+    }
+  },
+  "order": ["read", "parse", "write", "notify"]
+}

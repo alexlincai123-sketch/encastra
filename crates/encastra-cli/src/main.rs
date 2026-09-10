@@ -26,7 +26,7 @@ encastra — run a component graph
 
 USAGE:
     encastra run <graph.json> [OPTIONS]
-    encastra components
+    encastra components [--json]
     encastra validate <graph.json>
 
 OPTIONS:
@@ -54,7 +54,7 @@ fn main() -> ExitCode {
     let result = match args[0].as_str() {
         "run" => command_run(&args[1..], true),
         "validate" => command_run(&args[1..], false),
-        "components" => command_components(),
+        "components" => command_components(args.get(1).map(String::as_str) == Some("--json")),
         other => Err(format!(
             "Unknown command \"{other}\". Try `encastra --help`."
         )),
@@ -69,10 +69,18 @@ fn main() -> ExitCode {
     }
 }
 
-fn command_components() -> Result<ExitCode, String> {
+fn command_components(as_json: bool) -> Result<ExitCode, String> {
     let (registry, _) = encastra_builtins::install();
     let mut manifests = registry.list();
     manifests.sort_by(|a, b| a.id.cmp(&b.id));
+
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&manifests).map_err(|e| e.to_string())?
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
 
     for manifest in manifests {
         println!("{}@{}  {}", manifest.id, manifest.version, manifest.name);

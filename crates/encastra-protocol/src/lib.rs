@@ -13,14 +13,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::LazyLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub mod manifest;
 
 /// The shared rule table, embedded from the same file the TypeScript side imports.
 const TYPE_GRAPH_JSON: &str = include_str!("../../../packages/protocol/data/type-graph.json");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CoercionKind {
     /// Same type, or a widening. Nothing happens at run time.
@@ -31,14 +31,14 @@ pub enum CoercionKind {
     Explicit,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TypeKind {
     Scalar,
     Handle,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeDef {
     pub kind: TypeKind,
     pub label: String,
@@ -48,7 +48,7 @@ pub struct TypeDef {
     pub extends_: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Coercion {
     pub from: String,
     pub to: String,

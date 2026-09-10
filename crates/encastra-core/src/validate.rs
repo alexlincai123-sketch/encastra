@@ -19,7 +19,10 @@ use encastra_protocol::{Compatibility, check_compatibility_str};
 use crate::graph::{Graph, NodeId, PortRef};
 use crate::registry::ComponentRegistry;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// The graph cannot run.
     Error,
@@ -28,7 +31,8 @@ pub enum Severity {
 }
 
 /// What the editor should highlight.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Location {
     Graph,
     Node(NodeId),
@@ -36,7 +40,7 @@ pub enum Location {
     Edge { from: PortRef, to: PortRef },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Issue {
     pub severity: Severity,
     pub location: Location,
@@ -74,14 +78,14 @@ impl Issue {
 
 /// A conversion the runtime will perform on an edge, decided once here so the editor and the
 /// runtime cannot disagree about it later.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EdgePlan {
     pub from: PortRef,
     pub to: PortRef,
     pub ops: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Validation {
     pub issues: Vec<Issue>,
     /// Topological execution order. Empty when there are errors — a graph that does not

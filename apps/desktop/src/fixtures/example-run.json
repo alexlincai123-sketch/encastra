@@ -1,0 +1,110 @@
+{
+  "run_id": "cli",
+  "started_at_ms": 1789081709093,
+  "finished_at_ms": 1789081709097,
+  "status": "ok",
+  "nodes": {
+    "notify": {
+      "component": "encastra.system.notify@1.0.0",
+      "status": "ok",
+      "started_at_ms": 1789081709097,
+      "duration_ms": 0,
+      "inputs": {
+        "message": "text (4 characters)"
+      },
+      "outputs": {
+        "shown": "true"
+      },
+      "capability_calls": [
+        {
+          "at_ms": 1789081709097,
+          "kind": "system.notify",
+          "detail": "true",
+          "allowed": true
+        }
+      ],
+      "logs": [
+        {
+          "at_ms": 1789081709097,
+          "level": "info",
+          "message": "Notification requested."
+        }
+      ]
+    },
+    "parse": {
+      "component": "encastra.data.json@1.0.0",
+      "status": "ok",
+      "started_at_ms": 1789081709094,
+      "duration_ms": 0,
+      "inputs": {
+        "text": "text (62 characters)"
+      },
+      "outputs": {
+        "json": "json (3 fields)"
+      },
+      "capability_calls": [],
+      "logs": []
+    },
+    "read": {
+      "component": "encastra.file.read@1.0.0",
+      "status": "ok",
+      "started_at_ms": 1789081709093,
+      "duration_ms": 0,
+      "inputs": {
+        "file": "file #1"
+      },
+      "outputs": {
+        "text": "text (62 characters)"
+      },
+      "capability_calls": [
+        {
+          "at_ms": 1789081709094,
+          "kind": "fs.read",
+          "detail": "file #1",
+          "allowed": true
+        }
+      ],
+      "logs": [
+        {
+          "at_ms": 1789081709094,
+          "level": "info",
+          "message": "Read 62 characters."
+        }
+      ]
+    },
+    "write": {
+      "component": "encastra.file.write@1.0.0",
+      "status": "ok",
+      "started_at_ms": 1789081709094,
+      "duration_ms": 2,
+      "inputs": {
+        "content": "text (54 characters)"
+      },
+      "outputs": {
+        "saved": "true"
+      },
+      "capability_calls": [
+        {
+          "at_ms": 1789081709094,
+          "kind": "fs.write",
+          "detail": "scratch file #2",
+          "allowed": true
+        },
+        {
+          "at_ms": 1789081709096,
+          "kind": "fs.write",
+          "detail": "2 \u2192 report.json",
+          "allowed": true
+        }
+      ],
+      "logs": [
+        {
+          "at_ms": 1789081709096,
+          "level": "info",
+          "message": "Saved report.json."
+        }
+      ]
+    }
+  },
+  "order": ["read", "parse", "write", "notify"]
+}

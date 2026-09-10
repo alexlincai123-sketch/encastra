@@ -1,0 +1,26 @@
+[package]
+name = "encastra-desktop"
+description = "The Encastra desktop application."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+# Tauri 2 splits the app into a library plus a thin binary so the same code can be reached from
+# mobile targets and from integration tests.
+name = "encastra_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+encastra-builtins = { path = "../../../crates/encastra-builtins" }
+encastra-core = { path = "../../../crates/encastra-core" }
+encastra-protocol = { path = "../../../crates/encastra-protocol" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
