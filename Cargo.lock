@@ -53,6 +53,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "encastra-core"
+version = "0.1.0"
+dependencies = [
+ "encastra-protocol",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "encastra-protocol"
 version = "0.1.0"
 dependencies = [
