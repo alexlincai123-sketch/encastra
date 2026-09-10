@@ -9,14 +9,22 @@ changelog. The reflex is "it's a file, use Git".
 
 ## Decision
 
-Version history is **content-addressed snapshots in the local SQLite database**, owned by the
-app. Git is not required, not embedded, and not assumed.
+Version history is **content-addressed snapshots inside the project file**. Git is not
+required, not embedded, and not assumed.
 
-```sql
-snapshot(id, project_id, parent_id, created_at, label, message, graph_hash, blob)
+```
+versions/index.json     the chain: id, parent, created_at, label, message, graph_hash
+versions/<id>.json      the graph at that point
 ```
 
-Snapshots are immutable and singly-linked by `parent_id`.
+Snapshots are immutable and singly linked by `parent`.
+
+**Amended during implementation.** This ADR originally put snapshots in a local SQLite
+database. They live in the `.encastra` container instead, because history that does not travel
+with the project is history that vanishes the moment somebody shares the file — and sharing is
+the whole point of the format. It also removes a second store that could disagree with the
+first about what a project's past was. The cost is that a project with a long history is a
+larger file; snapshot bodies are graph JSON, not assets, so it is a small cost.
 
 ## Why not Git
 

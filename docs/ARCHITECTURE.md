@@ -331,14 +331,18 @@ that is a hard invariant with a test that asserts no secret value can reach the 
 Native, not Git — users are not required to know Git, and the unit of versioning is a graph,
 not a text diff.
 
-Content-addressed snapshots in the local SQLite database:
+Content-addressed snapshots, stored **inside the project file** so that history travels with
+the project:
 
 ```
-snapshot { id, project_id, parent_id, created_at, label, message, graph_hash, blob }
+versions/index.json     id, parent, created_at, label, message, graph_hash
+versions/<id>.json      the graph at that point
 ```
 
-Immutable, singly-linked, so `RESTORE` is "create a new snapshot whose content equals an old
-one" — history is never rewritten and restore is itself undoable. `COMPARE` diffs at the graph
+Immutable and singly linked, so `RESTORE` is "append a new snapshot whose content equals an old
+one" — history is never rewritten and a restore is itself undoable. A snapshot created by a
+restore records which version it came from, so the history reads as what happened rather than
+as a mysterious duplicate. `COMPARE` diffs at the graph
 level (node added / config changed / edge rewired), which is the only diff a user of this
 product can act on. Branches and merge are a later phase; the parent pointer is already the
 shape they need.

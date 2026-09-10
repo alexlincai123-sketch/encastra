@@ -23,7 +23,9 @@ import type {
   EncastraGraph,
   GrantSpec,
   InputSpec,
+  OpenProject,
   RunJournal,
+  Snapshot,
   Validation,
 } from './types';
 
@@ -53,6 +55,12 @@ interface EditorState {
   busy: boolean;
   message: { tone: 'info' | 'error'; text: string } | null;
 
+  projectPath: string | null;
+  projectName: string;
+  versions: Snapshot[];
+  /** True when the canvas differs from what was last written to disk. */
+  dirty: boolean;
+
   loadComponents: () => Promise<void>;
   addNode: (componentRef: string, position: { x: number; y: number }) => void;
   select: (id: string | null) => void;
@@ -70,6 +78,10 @@ interface EditorState {
   manifestFor: (nodeId: string) => ComponentManifest | undefined;
   portType: (nodeId: string, port: string, side: 'inputs' | 'outputs') => string | undefined;
   toGraph: () => EncastraGraph;
+  newProject: () => void;
+  openProject: () => Promise<void>;
+  saveProject: (options?: { as?: boolean; label?: string }) => Promise<void>;
+  restoreVersion: (snapshot: string) => Promise<void>;
 }
 
 let nextId = 1;
@@ -90,6 +102,10 @@ export const useEditor = create<EditorState>((set, get) => ({
   grants: [],
   busy: false,
   message: null,
+  projectPath: null,
+  projectName: 'Untitled',
+  versions: [],
+  dirty: false,
 
   async loadComponents() {
     try {
@@ -133,7 +149,12 @@ export const useEditor = create<EditorState>((set, get) => ({
         data: { componentRef, config, disabled: false },
       };
       // A newly placed node is the one you want to configure, so it is selected immediately.
-      return { nodes: [...s.nodes, node], selectedNodeId: node.id, validation: null };
+      return {
+        nodes: [...s.nodes, node],
+        selectedNodeId: node.id,
+        validation: null,
+        dirty: true,
+      };
     });
   },
 
@@ -149,6 +170,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           : n,
       ),
       validation: null,
+      dirty: true,
     }));
   },
 
@@ -158,6 +180,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         n.id === nodeId ? { ...n, data: { ...n.data, disabled: !n.data.disabled } } : n,
       ),
       validation: null,
+      dirty: true,
     }));
   },
 
@@ -170,15 +193,25 @@ export const useEditor = create<EditorState>((set, get) => ({
       edges: s.edges.filter((e) => e.source !== id && e.target !== id),
       selectedNodeId: null,
       validation: null,
+      dirty: true,
     }));
   },
 
   onNodesChange(changes) {
-    set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) }));
+    set((s) => ({
+      nodes: applyNodeChanges(changes, s.nodes),
+      // Dragging a node changes the file even though it does not change what runs. The
+      // history diff is where that distinction belongs, not the save prompt.
+      dirty: s.dirty || changes.some((c) => c.type !== 'select'),
+    }));
   },
 
   onEdgesChange(changes) {
-    set((s) => ({ edges: applyEdgeChanges(changes, s.edges), validation: null }));
+    set((s) => ({
+      edges: applyEdgeChanges(changes, s.edges),
+      validation: null,
+      dirty: s.dirty || changes.some((c) => c.type !== 'select'),
+    }));
   },
 
   connect(connection) {
@@ -191,6 +224,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       return {
         edges: addEdge({ ...connection, type: 'wire' }, withoutExisting),
         validation: null,
+        dirty: true,
       };
     });
   },
@@ -304,7 +338,138 @@ export const useEditor = create<EditorState>((set, get) => ({
 
     return graph;
   },
+
+  newProject() {
+    set({
+      nodes: [],
+      edges: [],
+      selectedNodeId: null,
+      validation: null,
+      journal: null,
+      journalIsRecording: false,
+      inputs: [],
+      grants: [],
+      projectPath: null,
+      projectName: 'Untitled',
+      versions: [],
+      dirty: false,
+      message: null,
+    });
+  },
+
+  async openProject() {
+    set({ busy: true, message: null });
+    try {
+      const path = await ipc.pickProjectToOpen();
+      if (!path) return;
+      applyProject(set, await ipc.openProject(path));
+    } catch (error) {
+      set({ message: { tone: 'error', text: describe(error) } });
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  async saveProject(options) {
+    set({ busy: true, message: null });
+    try {
+      const state = get();
+      const path =
+        options?.as || !state.projectPath
+          ? await ipc.pickProjectToSave(state.projectName)
+          : state.projectPath;
+      if (!path) return;
+
+      const name = fileStem(path) ?? state.projectName;
+      const project = await ipc.saveProject(path, name, state.toGraph(), options?.label);
+      set({
+        projectPath: project.path,
+        projectName: project.name,
+        versions: project.history.snapshots,
+        dirty: false,
+        message: {
+          tone: 'info',
+          text: `Saved. ${project.history.snapshots.length} version(s) kept.`,
+        },
+      });
+    } catch (error) {
+      set({ message: { tone: 'error', text: describe(error) } });
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  async restoreVersion(snapshot) {
+    const path = get().projectPath;
+    if (!path) return;
+    set({ busy: true, message: null });
+    try {
+      applyProject(set, await ipc.restoreVersion(path, snapshot));
+      set({
+        message: {
+          tone: 'info',
+          text: 'Restored. The version you came from is still in the history.',
+        },
+      });
+    } catch (error) {
+      set({ message: { tone: 'error', text: describe(error) } });
+    } finally {
+      set({ busy: false });
+    }
+  },
 }));
+
+/** Replaces the canvas with what a project file contains. */
+function applyProject(set: (partial: Partial<EditorState>) => void, project: OpenProject): void {
+  const nodes: EditorNode[] = Object.entries(project.graph.nodes).map(([id, node]) => ({
+    id,
+    type: 'component',
+    position: node.position,
+    data: {
+      componentRef: node.component,
+      config: node.config,
+      disabled: node.disabled ?? false,
+      ...(node.label ? { label: node.label } : {}),
+    },
+  }));
+
+  const edges: Edge[] = project.graph.edges.map((edge) => ({
+    id: `${edge.from.node}.${edge.from.port}->${edge.to.node}.${edge.to.port}`,
+    source: edge.from.node,
+    sourceHandle: edge.from.port,
+    target: edge.to.node,
+    targetHandle: edge.to.port,
+    type: 'wire',
+  }));
+
+  set({
+    nodes,
+    edges,
+    selectedNodeId: null,
+    validation: null,
+    journal: null,
+    journalIsRecording: false,
+    inputs: [],
+    grants: [],
+    projectPath: project.path,
+    projectName: project.name,
+    versions: project.history.snapshots,
+    dirty: false,
+    // A project pinning components this build does not have cannot run as saved. Saying so on
+    // open beats letting somebody press Run and read a confusing refusal.
+    message: project.missing.length
+      ? {
+          tone: 'error',
+          text: `This project needs ${project.missing.join(', ')}, which is not installed.`,
+        }
+      : null,
+  });
+}
+
+function fileStem(path: string): string | undefined {
+  const name = path.split(/[\\/]/).pop();
+  return name?.replace(/\.encastra$/i, '');
+}
 
 function summarise(journal: RunJournal): string {
   const failed = Object.values(journal.nodes).filter((n) => n.status === 'failed').length;

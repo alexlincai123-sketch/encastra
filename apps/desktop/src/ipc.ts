@@ -19,6 +19,7 @@ import type {
   EncastraGraph,
   GrantSpec,
   InputSpec,
+  OpenProject,
   RunJournal,
   RunResult,
   Validation,
@@ -32,6 +33,17 @@ export interface Ipc {
   runGraph(graph: EncastraGraph, inputs: InputSpec[], grants: GrantSpec[]): Promise<RunResult>;
   pickFile(): Promise<string | null>;
   pickFolder(): Promise<string | null>;
+  pickProjectToOpen(): Promise<string | null>;
+  pickProjectToSave(suggested: string): Promise<string | null>;
+  saveProject(
+    path: string,
+    name: string,
+    graph: EncastraGraph,
+    label?: string,
+  ): Promise<OpenProject>;
+  openProject(path: string): Promise<OpenProject>;
+  restoreVersion(path: string, snapshot: string): Promise<OpenProject>;
+  compareVersions(path: string, from: string, to: string): Promise<string[]>;
 }
 
 function inTauri(): boolean {
@@ -69,6 +81,45 @@ class TauriIpc implements Ipc {
     const chosen = await open({ multiple: false, directory: true });
     return typeof chosen === 'string' ? chosen : null;
   }
+
+  async pickProjectToOpen(): Promise<string | null> {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const chosen = await open({
+      multiple: false,
+      filters: [{ name: 'Encastra project', extensions: ['encastra'] }],
+    });
+    return typeof chosen === 'string' ? chosen : null;
+  }
+
+  async pickProjectToSave(suggested: string): Promise<string | null> {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const chosen = await save({
+      defaultPath: `${suggested}.encastra`,
+      filters: [{ name: 'Encastra project', extensions: ['encastra'] }],
+    });
+    return typeof chosen === 'string' ? chosen : null;
+  }
+
+  saveProject(
+    path: string,
+    name: string,
+    graph: EncastraGraph,
+    label?: string,
+  ): Promise<OpenProject> {
+    return this.invoke<OpenProject>('save_project', { path, name, graph, label });
+  }
+
+  openProject(path: string): Promise<OpenProject> {
+    return this.invoke<OpenProject>('open_project', { path });
+  }
+
+  restoreVersion(path: string, snapshot: string): Promise<OpenProject> {
+    return this.invoke<OpenProject>('restore_version', { path, snapshot });
+  }
+
+  compareVersions(path: string, from: string, to: string): Promise<string[]> {
+    return this.invoke<string[]>('compare_versions', { path, from, to });
+  }
 }
 
 /** Thrown when the preview is asked for something only the real runtime can answer. */
@@ -103,6 +154,30 @@ class PreviewIpc implements Ipc {
 
   async pickFolder(): Promise<string | null> {
     throw new PreviewOnlyError('Choosing a folder');
+  }
+
+  async pickProjectToOpen(): Promise<string | null> {
+    throw new PreviewOnlyError('Opening a project');
+  }
+
+  async pickProjectToSave(): Promise<string | null> {
+    throw new PreviewOnlyError('Saving a project');
+  }
+
+  async saveProject(): Promise<OpenProject> {
+    throw new PreviewOnlyError('Saving a project');
+  }
+
+  async openProject(): Promise<OpenProject> {
+    throw new PreviewOnlyError('Opening a project');
+  }
+
+  async restoreVersion(): Promise<OpenProject> {
+    throw new PreviewOnlyError('Restoring a version');
+  }
+
+  async compareVersions(): Promise<string[]> {
+    throw new PreviewOnlyError('Comparing versions');
   }
 }
 

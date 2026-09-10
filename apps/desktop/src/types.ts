@@ -171,3 +171,26 @@ export interface GrantSpec {
   folder?: string;
   hosts?: string[];
 }
+
+export interface Snapshot {
+  id: string;
+  parent?: string;
+  created_at_ms: number;
+  label?: string;
+  message?: string;
+  graph_hash: string;
+  restored_from?: string;
+}
+
+export interface History {
+  snapshots: Snapshot[];
+}
+
+export interface OpenProject {
+  name: string;
+  path: string;
+  graph: EncastraGraph;
+  history: History;
+  /** Components the file pins that this build does not have. */
+  missing: string[];
+}

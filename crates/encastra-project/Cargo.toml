@@ -1,0 +1,24 @@
+[package]
+name = "encastra-project"
+description = "The .encastra project container: graph, lockfile, variables and version history in one portable file."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+encastra-core = { path = "../encastra-core" }
+encastra-protocol = { path = "../encastra-protocol" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+# Deflate only. The default features drag in bzip2, lzma, zstd, deflate64 and AES — five
+# five compression and crypto implementations for a container that uses one of them.
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+# The on-disk test opens the container the way any other tool would, to hold the format to
+# its promise that a .encastra file is an ordinary archive.
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }

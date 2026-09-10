@@ -67,6 +67,11 @@ export function App() {
   const busy = useEditor((s) => s.busy);
   const nodeCount = useEditor((s) => s.nodes.length);
   const showRecording = useEditor((s) => s.showRecording);
+  const newProject = useEditor((s) => s.newProject);
+  const openProject = useEditor((s) => s.openProject);
+  const saveProject = useEditor((s) => s.saveProject);
+  const projectName = useEditor((s) => s.projectName);
+  const dirty = useEditor((s) => s.dirty);
 
   useEffect(() => {
     void loadComponents();
@@ -78,10 +83,18 @@ export function App() {
         event.preventDefault();
         void run();
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void saveProject({ as: event.shiftKey });
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o') {
+        event.preventDefault();
+        void openProject();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [run]);
+  }, [run, saveProject, openProject]);
 
   return (
     <div className="shell">
@@ -95,7 +108,35 @@ export function App() {
           <span className="preview-badge" title="No runtime is attached to this window.">
             preview
           </span>
-        ) : null}
+        ) : (
+          <>
+            <span className="topbar__divider" />
+            <button type="button" className="btn" onClick={newProject}>
+              New
+            </button>
+            <button type="button" className="btn" onClick={() => void openProject()} title="Ctrl+O">
+              Open
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void saveProject()}
+              disabled={busy}
+              title="Ctrl+S"
+            >
+              Save
+            </button>
+            <span className="project-name">
+              {projectName}
+              {dirty ? (
+                <span className="project-name__dirty" title="Unsaved changes">
+                  {' '}
+                  •
+                </span>
+              ) : null}
+            </span>
+          </>
+        )}
 
         <span className="topbar__spacer" />
 

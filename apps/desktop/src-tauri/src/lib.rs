@@ -17,6 +17,7 @@ use encastra_core::registry::{ComponentRegistry, InMemoryRegistry};
 use encastra_core::runner::{CoreComponentSet, run_seeded};
 use encastra_core::validate::{Validation, validate_with_supplied};
 use encastra_core::value::{HandleKind, Value};
+use encastra_project::{History, LockedComponent, Lockfile, Project, SnapshotId};
 use encastra_protocol::manifest::ComponentManifest;
 use serde::{Deserialize, Serialize};
 
@@ -177,6 +178,134 @@ fn kind_for(path: &std::path::Path) -> HandleKind {
     }
 }
 
+/// What the editor needs to know about an open project.
+#[derive(Debug, Serialize)]
+struct OpenProject {
+    name: String,
+    path: String,
+    graph: Graph,
+    history: History,
+    /// Components the file pins that this build does not have. Named rather than silently
+    /// ignored: a project that cannot be run as saved should say so before anything runs.
+    missing: Vec<String>,
+}
+
+/// Pins every component the graph uses, by digest.
+///
+/// Built at save time from what is actually installed, so a project records the bytes it was
+/// built against rather than a version range that could resolve differently tomorrow.
+fn lock_for(graph: &Graph, registry: &InMemoryRegistry) -> Lockfile {
+    let mut components: Vec<LockedComponent> = graph
+        .nodes
+        .values()
+        .filter_map(|node| {
+            registry
+                .get(&node.component)
+                .map(|manifest| LockedComponent {
+                    id: manifest.id.clone(),
+                    version: manifest.version.clone(),
+                    manifest_digest: manifest.digest(),
+                    origin: "builtin".to_owned(),
+                })
+        })
+        .collect();
+    components.sort_by(|a, b| (&a.id, &a.version).cmp(&(&b.id, &b.version)));
+    components.dedup();
+    Lockfile { components }
+}
+
+#[tauri::command]
+fn save_project(
+    state: tauri::State<'_, Runtime>,
+    path: String,
+    name: String,
+    graph: Graph,
+    label: Option<String>,
+) -> Result<OpenProject, String> {
+    let target = PathBuf::from(&path);
+    let now = encastra_core::journal::now_ms();
+
+    // Saving over an existing project keeps its identity and its history. Only its content
+    // moves forward.
+    let mut project = match Project::open(&target) {
+        Ok(existing) => existing,
+        Err(_) => Project::new(name.clone(), now),
+    };
+    project.manifest.name = name;
+    project.manifest.modified_at_ms = now;
+    project.graph = graph;
+    project.lock = lock_for(&project.graph, &state.registry);
+    project.history.record(&project.graph, label, None, now);
+
+    project.save(&target).map_err(|e| e.to_string())?;
+    Ok(describe(project, &path, &state.registry))
+}
+
+#[tauri::command]
+fn open_project(state: tauri::State<'_, Runtime>, path: String) -> Result<OpenProject, String> {
+    let project = Project::open(&PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    Ok(describe(project, &path, &state.registry))
+}
+
+#[tauri::command]
+fn restore_version(
+    state: tauri::State<'_, Runtime>,
+    path: String,
+    snapshot: String,
+) -> Result<OpenProject, String> {
+    let target = PathBuf::from(&path);
+    let mut project = Project::open(&target).map_err(|e| e.to_string())?;
+    let id = SnapshotId(snapshot);
+
+    // Restoring appends a new version equal to the old one, so the restore itself can be
+    // undone. Nothing in the history is rewritten.
+    let graph = project
+        .history
+        .restore(&id, encastra_core::journal::now_ms())
+        .ok_or("That version is not in this project.")?;
+    project.graph = graph;
+    project.manifest.modified_at_ms = encastra_core::journal::now_ms();
+    project.save(&target).map_err(|e| e.to_string())?;
+    Ok(describe(project, &path, &state.registry))
+}
+
+#[tauri::command]
+fn compare_versions(path: String, from: String, to: String) -> Result<Vec<String>, String> {
+    let project = Project::open(&PathBuf::from(path)).map_err(|e| e.to_string())?;
+    let changes = project
+        .history
+        .compare(&SnapshotId(from), &SnapshotId(to))
+        .ok_or("One of those versions is not in this project.")?;
+    Ok(changes
+        .iter()
+        .map(encastra_project::Change::describe)
+        .collect())
+}
+
+fn describe(project: Project, path: &str, registry: &InMemoryRegistry) -> OpenProject {
+    let missing = project
+        .lock
+        .components
+        .iter()
+        .filter(|locked| {
+            let reference = format!("{}@{}", locked.id, locked.version);
+            encastra_core::ComponentRef::parse(&reference)
+                .ok()
+                .and_then(|r| registry.get(&r))
+                .is_none()
+        })
+        .map(|locked| format!("{}@{}", locked.id, locked.version))
+        .collect();
+
+    OpenProject {
+        name: project.manifest.name,
+        path: path.to_owned(),
+        graph: project.graph,
+        history: project.history,
+        missing,
+    }
+}
+
 pub fn run() {
     let (registry, components) = encastra_builtins::install();
 
@@ -190,7 +319,11 @@ pub fn run() {
             list_components,
             type_graph,
             validate_graph,
-            run_graph
+            run_graph,
+            save_project,
+            open_project,
+            restore_version,
+            compare_versions
         ])
         .run(tauri::generate_context!())
         .expect("the application window could not be created");

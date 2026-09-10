@@ -10,7 +10,7 @@
 import { Fragment } from 'react';
 import { ipc } from '../ipc';
 import { useEditor } from '../store';
-import type { ComponentManifest, ConfigField, NodeRecord } from '../types';
+import type { ComponentManifest, ConfigField, NodeRecord, Snapshot } from '../types';
 
 function ConfigControl({
   nodeId,
@@ -220,6 +220,57 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
   );
 }
 
+/**
+ * Version history.
+ *
+ * Restoring appends a version equal to the old one rather than rewinding, so the label says
+ * what will happen and the entry you came from stays in the list. That is the property that
+ * makes people willing to press it.
+ */
+function Versions({ versions }: { versions: Snapshot[] }) {
+  const restoreVersion = useEditor((s) => s.restoreVersion);
+  const projectPath = useEditor((s) => s.projectPath);
+
+  if (!projectPath) {
+    return (
+      <section className="panel__section">
+        <h3 className="panel__group-label">Versions</h3>
+        <p className="field__doc">
+          Save this project to start keeping versions. Every save records one, and nothing is ever
+          overwritten.
+        </p>
+      </section>
+    );
+  }
+
+  if (versions.length === 0) return null;
+
+  return (
+    <section className="panel__section">
+      <h3 className="panel__group-label">Versions · {versions.length}</h3>
+      {[...versions].reverse().map((snapshot, index) => (
+        <button
+          type="button"
+          className="version"
+          key={snapshot.id}
+          onClick={() => void restoreVersion(snapshot.id)}
+          title={
+            index === 0
+              ? 'This is the current version.'
+              : 'Restore this. It is added as a new version; nothing is lost.'
+          }
+        >
+          <span className="version__label">
+            {snapshot.label ?? (index === 0 ? 'Current' : `Version ${versions.length - index}`)}
+          </span>
+          <span className="version__when">{new Date(snapshot.created_at_ms).toLocaleString()}</span>
+          {index === 0 ? null : <span className="version__action">Restore</span>}
+        </button>
+      ))}
+    </section>
+  );
+}
+
 /** What actually happened, from the run journal. */
 function RunRecord({ record }: { record: NodeRecord }) {
   const denied = record.capability_calls.filter((c) => !c.allowed);
@@ -308,12 +359,13 @@ export function Inspector() {
   const record = useEditor((s) => (selectedNodeId ? s.journal?.nodes[selectedNodeId] : undefined));
   const validation = useEditor((s) => s.validation);
   const toggleDisabled = useEditor((s) => s.toggleDisabled);
+  const versions = useEditor((s) => s.versions);
 
   if (!node || !manifest || !selectedNodeId) {
     const issues = validation?.issues ?? [];
     return (
       <aside className="panel panel--inspector">
-        <h2 className="panel__title">{issues.length > 0 ? 'Problems' : 'Nothing selected'}</h2>
+        <h2 className="panel__title">{issues.length > 0 ? 'Problems' : 'Project'}</h2>
         <div className="panel__section">
           {issues.length > 0 ? (
             issues.map((issue) => (
@@ -326,11 +378,10 @@ export function Inspector() {
               </div>
             ))
           ) : (
-            <p className="empty">
-              Select a step to configure it, or drag a component onto the canvas to begin.
-            </p>
+            <p className="empty">Select a step to configure it, or pick a component to begin.</p>
           )}
         </div>
+        <Versions versions={versions} />
       </aside>
     );
   }

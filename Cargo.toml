@@ -3,6 +3,7 @@ resolver = "3"
 members = [
   "crates/encastra-protocol",
   "crates/encastra-core",
+  "crates/encastra-project",
   "crates/encastra-builtins",
   "crates/encastra-cli",
   "apps/desktop/src-tauri",
