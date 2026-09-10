@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://encastra.dev/schema/component-1.json",
+  "title": "Encastra component manifest",
+  "description": "DOCUMENTATION, NOT THE AUTHORITY. This schema exists so that an author's editor can autocomplete and catch obvious mistakes early. The runtime's own validator (crates/encastra-protocol/src/manifest.rs) is what decides whether a manifest is acceptable, and it enforces rules a JSON Schema cannot express — that every port type resolves in the type graph, that every declared capability is one this build can actually enforce, and that no floating-point number appears anywhere in the document. Passing this schema does not mean a manifest will load.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "version", "name", "runtime", "kind"],
+
+  "properties": {
+    "schema": {
+      "const": 1,
+      "description": "Protocol revision. Additive-only. A host refuses a value it does not know rather than guessing."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$",
+      "maxLength": 128,
+      "description": "Reverse-DNS, at least two segments, e.g. \"encastra.image.resize\". Immutable for the life of the component."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z-.]+)?(?:\\+[0-9A-Za-z-.]+)?$",
+      "description": "Semver. Immutable once published: the registry refuses different bytes under the same id@version."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "author": { "type": "string" },
+    "license": { "type": "string", "description": "SPDX identifier." },
+    "category": { "type": "string" },
+    "icon": { "type": "string" },
+
+    "runtime": {
+      "type": "string",
+      "description": "Semver range of host versions this component is known to work on, e.g. \">=0.4.0 <2.0.0\"."
+    },
+    "kind": {
+      "enum": ["core", "wasm"],
+      "description": "\"core\" is first-party and compiled into the host. Anything published by a third party is \"wasm\" and runs sandboxed with no ambient authority."
+    },
+
+    "ports": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputs": { "$ref": "#/$defs/portMap" },
+        "outputs": { "$ref": "#/$defs/portMap" }
+      }
+    },
+
+    "config": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/configField" }
+    },
+
+    "capabilities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/capability" },
+      "description": "Ask for the least you can. Every entry beyond an \"input-handles\" scope puts a question in front of the user, and a component that asks for more than it needs is one people decline."
+    },
+
+    "platforms": {
+      "type": "array",
+      "items": { "enum": ["windows", "macos", "linux"] },
+      "uniqueItems": true
+    },
+
+    "retryable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether a failed run is safe to repeat automatically. Leave this false unless the component is genuinely idempotent — retrying a POST or a write is worse than failing once."
+    },
+
+    "documentation": { "type": "string" },
+    "changelog": { "type": "string" }
+  },
+
+  "$defs": {
+    "portMap": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/port" }
+    },
+
+    "port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "A type expression: a named type, list<T>, or option<T>. The runtime checks that it resolves; this schema only checks the shape.",
+          "pattern": "^(list<|option<)*[a-z][a-z0-9_]*>*$"
+        },
+        "required": { "type": "boolean", "default": false },
+        "label": { "type": "string" },
+        "doc": { "type": "string" }
+      }
+    },
+
+    "configField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string" },
+        "label": { "type": "string" },
+        "doc": { "type": "string" },
+        "required": { "type": "boolean", "default": false },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" },
+        "choices": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "default": {
+          "description": "Integers only, never a decimal — the manifest's canonical bytes are what get signed, and float formatting is the one part of that nobody agrees on."
+        }
+      }
+    },
+
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "scope", "reason"],
+      "properties": {
+        "kind": {
+          "enum": ["fs.read", "fs.write", "net.http", "system.notify", "system.clipboard"],
+          "description": "Only capabilities the host can enforce exist. Process execution and raw device access are absent from this list, not merely denied."
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "description": "\"input-handles\" means \"only what the graph wired to my ports\" and needs no decision from the user. Anything wider does."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Shown verbatim in the consent dialog. Write it for the person deciding, not for the reviewer: \"Uploads the finished image to the URL you configure\", not \"network access required\"."
+        }
+      }
+    }
+  }
+}

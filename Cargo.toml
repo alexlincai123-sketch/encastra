@@ -15,6 +15,8 @@ publish = false
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0.20"
+sha2 = "0.11.0"
+semver = "1.0"
 
 [profile.release]
 # A small, fast binary matters more than a fast build for what we ship.

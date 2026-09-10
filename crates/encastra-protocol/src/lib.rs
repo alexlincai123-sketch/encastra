@@ -15,6 +15,8 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 
+pub mod manifest;
+
 /// The shared rule table, embedded from the same file the TypeScript side imports.
 const TYPE_GRAPH_JSON: &str = include_str!("../../../packages/protocol/data/type-graph.json");
 
