@@ -1,0 +1,59 @@
+{
+  "$comment": "SINGLE SOURCE OF TRUTH for the type system. Read by the TypeScript editor AND the Rust runtime. Neither reimplements these rules — see docs/adr/0003. A conformance test asserts both readers agree on every pair.",
+  "schema": 1,
+
+  "types": {
+    "bool":   { "kind": "scalar", "label": "Boolean", "color": "amber",   "doc": "True or false." },
+    "i64":    { "kind": "scalar", "label": "Integer", "color": "blue",    "doc": "64-bit signed integer." },
+    "f64":    { "kind": "scalar", "label": "Number",  "color": "blue",    "doc": "64-bit floating point number." },
+    "string": { "kind": "scalar", "label": "Text",    "color": "green",   "doc": "UTF-8 text." },
+    "json":   { "kind": "scalar", "label": "JSON",    "color": "violet",  "doc": "Arbitrary structured data. The escape hatch — conversions to and from it are always explicit." },
+
+    "file":   { "kind": "handle", "label": "File",    "color": "slate",   "doc": "An opaque handle to a file owned by the runtime. Never a path." },
+    "dir":    { "kind": "handle", "label": "Folder",  "color": "slate",   "doc": "An opaque handle to a directory owned by the runtime." },
+    "bytes":  { "kind": "handle", "label": "Bytes",   "color": "slate",   "doc": "Raw binary content. Deliberately NOT a subtype of file: bytes are a file's contents, not a kind of file. Modelling it as a subtype would let image -> file -> bytes look like a narrowing and break the sibling rule." },
+    "image":  { "kind": "handle", "label": "Image",   "color": "pink",    "extends": "file", "doc": "A file the runtime has verified to be a decodable image." },
+    "video":  { "kind": "handle", "label": "Video",   "color": "orange",  "extends": "file", "doc": "A file the runtime has verified to be a container with a video stream." },
+    "audio":  { "kind": "handle", "label": "Audio",   "color": "orange",  "extends": "file", "doc": "A file the runtime has verified to be decodable audio." }
+  },
+
+  "$coercionKinds": {
+    "direct":   "Same type, or a widening to a supertype. No conversion happens. Silent.",
+    "implicit": "A total conversion that cannot fail for any input. Applied by the runtime, marked on the edge. Silent but visible.",
+    "explicit": "Legal but MAY FAIL, or loses information. The editor materialises a Convert node the user can see and inspect. Never silent — a conversion that can fail must have a place in the graph where its failure is reported."
+  },
+
+  "coercions": [
+    { "from": "i64",    "to": "f64",    "kind": "implicit", "op": "int-to-float",   "note": "Exact for |n| < 2^53; beyond that the runtime reports a precision error rather than rounding silently." },
+    { "from": "i64",    "to": "string", "kind": "implicit", "op": "to-text" },
+    { "from": "f64",    "to": "string", "kind": "implicit", "op": "to-text" },
+    { "from": "bool",   "to": "string", "kind": "implicit", "op": "to-text" },
+    { "from": "bool",   "to": "i64",    "kind": "implicit", "op": "bool-to-int",    "note": "false -> 0, true -> 1." },
+
+    { "from": "i64",    "to": "bool",   "kind": "explicit", "op": "int-to-bool",    "note": "Zero is false. Explicit because the intent is rarely obvious when reading the graph." },
+    { "from": "f64",    "to": "i64",    "kind": "explicit", "op": "round",          "note": "Loses the fractional part; the Convert node exposes the rounding mode." },
+    { "from": "string", "to": "i64",    "kind": "explicit", "op": "parse-int",      "note": "Fails on non-numeric text." },
+    { "from": "string", "to": "f64",    "kind": "explicit", "op": "parse-float",    "note": "Fails on non-numeric text." },
+    { "from": "string", "to": "bool",   "kind": "explicit", "op": "parse-bool",     "note": "Accepts only an explicit allowlist of literals." },
+    { "from": "string", "to": "json",   "kind": "explicit", "op": "parse-json",     "note": "Fails on malformed input." },
+    { "from": "json",   "to": "string", "kind": "explicit", "op": "stringify-json", "note": "Explicit so that a graph never turns structured data into text by accident." },
+
+    { "from": "file",   "to": "bytes",  "kind": "explicit", "op": "read-bytes",     "note": "Performs a read; may fail on permission or size limits." },
+    { "from": "bytes",  "to": "file",   "kind": "explicit", "op": "write-temp",     "note": "Materialises the bytes into a run-scoped temporary file; may fail on disk space." },
+    { "from": "file",   "to": "image",  "kind": "explicit", "op": "decode-image",   "note": "Narrowing. Fails if the file is not a decodable image." },
+    { "from": "file",   "to": "video",  "kind": "explicit", "op": "probe-video",    "note": "Narrowing. Fails if the file has no video stream." },
+    { "from": "file",   "to": "audio",  "kind": "explicit", "op": "probe-audio",    "note": "Narrowing. Fails if the file has no audio stream." },
+
+    { "from": "bool",   "to": "json",   "kind": "explicit", "op": "encode-json" },
+    { "from": "i64",    "to": "json",   "kind": "explicit", "op": "encode-json" },
+    { "from": "f64",    "to": "json",   "kind": "explicit", "op": "encode-json" },
+    { "from": "json",   "to": "bool",   "kind": "explicit", "op": "decode-json" },
+    { "from": "json",   "to": "i64",    "kind": "explicit", "op": "decode-json" },
+    { "from": "json",   "to": "f64",    "kind": "explicit", "op": "decode-json" }
+  ],
+
+  "$genericRules": {
+    "list": "list<A> -> list<B> is legal when A -> B is legal; the resulting kind is the weakest of the element kind and 'direct'. An explicit element conversion makes the whole list conversion explicit.",
+    "option": "T -> option<T> is direct (a value is always a present option). option<T> -> T is explicit, because the absent case has to be handled somewhere the user can see it."
+  }
+}
