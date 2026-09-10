@@ -5,13 +5,20 @@
 //! preview at all (ADR-0003). The editor validates *statically* from the shared type table and
 //! asks this crate for everything else.
 
+pub mod broker;
+pub mod convert;
 pub mod graph;
+pub mod journal;
 pub mod registry;
+pub mod runner;
 pub mod validate;
 pub mod value;
 
+pub use broker::{Broker, Grant, GrantScope, GrantSet};
 pub use graph::{ComponentRef, Edge, Graph, Node, NodeId, PortRef, Position};
+pub use journal::{NodeError, NodeRecord, NodeStatus, RunJournal, RunStatus};
 pub use registry::{ComponentRegistry, InMemoryRegistry};
+pub use runner::{CoreComponent, CoreComponentSet, NodeContext, RunOutcome, run};
 pub use validate::{Issue, Location, Severity, Validation, validate};
 pub use value::{Handle, HandleKind, Value};
 

@@ -262,12 +262,16 @@ shared type table.
 ### 5.1 Execution model
 
 1. **Validate** the graph: no unknown components, no type-illegal edges, required inputs
-   satisfied, versions resolvable from the lockfile.
+   satisfied, versions resolvable from the lockfile. An input may be satisfied by an edge
+   **or** by a value the application supplies — a trigger's event, or the file the user
+   picked. Without that, every graph's first node would look unconnected.
 2. **Cycle check.** The graph is a DAG. Cycles are rejected at validation with the offending
    path named. Iteration is expressed by `Loop`, a component with bounded semantics — not by
    an edge that points backwards. This is what makes "no infinite loops" a structural
    property instead of a watchdog.
-3. **Topological schedule**, executing independent branches concurrently on a bounded pool.
+3. **Topological schedule.** Execution is currently sequential in that order. Running
+   independent branches on a bounded pool is the intended next step and the order already
+   permits it — it is listed here as planned rather than described as done.
 4. **Per-node execution** under: wall-clock timeout (epoch interruption), fuel ceiling,
    memory ceiling, and the node's granted capabilities.
 5. **Record** into the run journal: inputs, outputs, duration, capability calls made, logs,

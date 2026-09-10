@@ -1,0 +1,18 @@
+[package]
+name = "encastra-cli"
+description = "Runs a graph without the desktop app. The same runtime, no second implementation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "encastra"
+path = "src/main.rs"
+
+[dependencies]
+encastra-builtins = { path = "../encastra-builtins" }
+encastra-core = { path = "../encastra-core" }
+encastra-protocol = { path = "../encastra-protocol" }
+serde_json = { workspace = true }

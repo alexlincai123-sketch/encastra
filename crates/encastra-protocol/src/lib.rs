@@ -233,6 +233,15 @@ pub fn all_type_names() -> impl Iterator<Item = &'static String> {
     GRAPH.types.keys()
 }
 
+/// Every declared coercion.
+///
+/// Exposed so that the runtime can assert it implements each one — a table that declares an
+/// operation nothing can execute would otherwise produce an edge the editor accepts and the
+/// run cannot perform.
+pub fn all_coercions() -> impl Iterator<Item = &'static Coercion> {
+    GRAPH.coercions.values()
+}
+
 /// `image` -> `["image", "file"]`. A type is its own first ancestor.
 pub fn ancestors_of(name: &str) -> Vec<String> {
     let mut chain = Vec::new();

@@ -102,6 +102,19 @@ impl Validation {
 }
 
 pub fn validate(graph: &Graph, registry: &dyn ComponentRegistry) -> Validation {
+    validate_with_supplied(graph, registry, &BTreeSet::new())
+}
+
+/// Validation where some inputs are filled in by the application rather than by an edge.
+///
+/// This is what a trigger is, and what "the file the user picked" is. Without it, an entry
+/// node's required input looks unconnected and a perfectly runnable graph is refused — the
+/// first graph anyone builds starts with something the canvas did not produce.
+pub fn validate_with_supplied(
+    graph: &Graph,
+    registry: &dyn ComponentRegistry,
+    supplied: &BTreeSet<PortRef>,
+) -> Validation {
     let mut issues = Vec::new();
     let mut conversions = Vec::new();
 
@@ -126,7 +139,7 @@ pub fn validate(graph: &Graph, registry: &dyn ComponentRegistry) -> Validation {
 
     check_edges(graph, &manifests, &mut issues, &mut conversions);
     check_fan_in(graph, &mut issues);
-    check_required_inputs(graph, &manifests, &mut issues);
+    check_required_inputs(graph, &manifests, supplied, &mut issues);
     check_config(graph, &manifests, &mut issues);
     check_disabled_dependencies(graph, &mut issues);
 
@@ -304,6 +317,7 @@ fn check_fan_in(graph: &Graph, issues: &mut Vec<Issue>) {
 fn check_required_inputs(
     graph: &Graph,
     manifests: &BTreeMap<&NodeId, &ComponentManifest>,
+    supplied: &BTreeSet<PortRef>,
     issues: &mut Vec<Issue>,
 ) {
     let connected: BTreeSet<&PortRef> = graph.edges.iter().map(|e| &e.to).collect();
@@ -323,7 +337,7 @@ fn check_required_inputs(
                 node: id.clone(),
                 port: port_name.clone(),
             };
-            if !connected.contains(&reference) {
+            if !connected.contains(&reference) && !supplied.contains(&reference) {
                 issues.push(
                     Issue::error(
                         Location::Port(reference),

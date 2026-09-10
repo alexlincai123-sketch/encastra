@@ -33,16 +33,42 @@ and they never see a filesystem path. See [ARCHITECTURE](docs/ARCHITECTURE.md) �
 
 ## Status
 
-Early. Phase 1 of [the roadmap](docs/PRODUCT-ROADMAP.md). What exists today:
+Early. What exists today, and what does not:
 
 | Piece | State |
 |---|---|
-| Architecture, threat model, roadmap | written |
-| Type system — shared rule table, TypeScript + Rust readers | working, tested, cross-checked |
-| Monorepo, lint, typecheck, test, CI | working |
-| Desktop app, canvas, runtime, registry, website | not started |
+| Architecture, threat model, roadmap, ten ADRs | written |
+| Type system — one rule table, TypeScript + Rust readers, conformance gate | working, cross-checked |
+| Component manifests — validation, canonical form, digest | working |
+| Graph model, validation, execution order | working |
+| Capability broker — handles, grants, refusals, audit trail | working |
+| Runtime — executes a graph, records a journal | working, sequential |
+| Five first-party components + a CLI to run them | working |
+| Desktop app, canvas, WebAssembly host, registry service, website | **not started** |
 
-Nothing here is production software yet, and nothing claims to be.
+A graph runs end to end today, from a terminal. There is no user interface yet, and nothing
+here is production software.
+
+```console
+$ cd examples/json-report
+$ cargo run -p encastra-cli -- run graph.json --input read.file=./data.json
+ok   read  (encastra.file.read@1.0.0) 0ms
+       -> text: text (62 characters)
+ok   parse  (encastra.data.json@1.0.0) 0ms
+       -> json: json (3 fields)
+FAIL write  (encastra.file.write@1.0.0) 0ms
+       denied: This component tried to use fs.write and was not allowed: no folder has been
+       allowed for this node.
+       Grant this component access to a folder, then run again.
+skip notify  (encastra.system.notify@1.0.0)
+       because "write" did not finish
+
+Finished with 1 failure(s). The rest of the graph still ran. in 0ms
+```
+
+That refusal is the product working, not failing: a first-party component asked to write
+somewhere nobody had allowed, and the broker said no. Add `--allow-write write=./out` and the
+file appears.
 
 ---
 

@@ -3,6 +3,8 @@ resolver = "3"
 members = [
   "crates/encastra-protocol",
   "crates/encastra-core",
+  "crates/encastra-builtins",
+  "crates/encastra-cli",
 ]
 
 [workspace.package]

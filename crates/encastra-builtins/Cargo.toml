@@ -1,0 +1,13 @@
+[package]
+name = "encastra-builtins"
+description = "The first-party component set. Compiled into the host, and still constrained by the capability broker."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+encastra-core = { path = "../encastra-core" }
+encastra-protocol = { path = "../encastra-protocol" }
+serde_json = { workspace = true }

@@ -99,32 +99,53 @@ impl Value {
         matches!(self, Value::Absent)
     }
 
-    /// A short, non-sensitive description for the debugger and the run journal.
+    /// A description safe to write to disk.
     ///
-    /// Deliberately does not include file contents or full text: the journal is written to
-    /// disk and shown in a UI, and neither is a place for a user's data to leak into by
-    /// default.
+    /// This is what goes in the run journal, so it contains **no content**: text and
+    /// structured data are described by size and shape, never quoted. Scalars are shown
+    /// because they are what makes a graph debuggable and they carry no bulk; a secret never
+    /// travels as a graph value in the first place, since secrets are resolved from the OS
+    /// keystore at the point of use.
+    ///
+    /// For the live inspector, which shows a person what actually flowed through a node, use
+    /// [`preview`](Self::preview) — and do not persist the result.
     pub fn summary(&self) -> String {
         match self {
             Value::Bool(b) => b.to_string(),
             Value::Int(i) => i.to_string(),
             Value::Float(f) => f.to_string(),
-            Value::Text(s) => {
-                let chars: Vec<char> = s.chars().collect();
-                if chars.len() <= 60 {
-                    format!("{s:?}")
-                } else {
-                    format!(
-                        "{:?}… ({} characters)",
-                        chars[..60].iter().collect::<String>(),
-                        chars.len()
-                    )
-                }
-            }
+            Value::Text(s) => format!("text ({} characters)", s.chars().count()),
             Value::Json(v) => format!("json ({})", json_shape(v)),
             Value::Handle(h) => format!("{} #{}", h.kind.type_name(), h.id),
             Value::List(items) => format!("list of {}", items.len()),
             Value::Absent => "absent".into(),
+        }
+    }
+
+    /// A short excerpt for the live inspector, including actual content.
+    ///
+    /// **Never persist this and never send it anywhere.** It exists so that a person
+    /// debugging a run can see what flowed through a node; the moment it is written to a file
+    /// or a telemetry payload, the journal's no-content guarantee is gone.
+    pub fn preview(&self) -> String {
+        match self {
+            Value::Text(s) => {
+                let chars: Vec<char> = s.chars().collect();
+                if chars.len() <= 200 {
+                    format!("{s:?}")
+                } else {
+                    format!(
+                        "{:?}… ({} characters)",
+                        chars[..200].iter().collect::<String>(),
+                        chars.len()
+                    )
+                }
+            }
+            Value::Json(v) => {
+                let rendered = serde_json::to_string_pretty(v).unwrap_or_default();
+                rendered.chars().take(2000).collect()
+            }
+            other => other.summary(),
         }
     }
 }
@@ -181,10 +202,22 @@ mod tests {
 
     #[test]
     fn summaries_do_not_spill_user_data() {
-        let secret = Value::Text("a".repeat(500));
-        let summary = secret.summary();
-        assert!(summary.len() < 120, "summary was {} chars", summary.len());
-        assert!(summary.contains("500 characters"));
+        // The journal is persisted, so a summary describes text; it never quotes it. Even a
+        // short string is somebody's data.
+        let secret = Value::Text("hunter2-token".into());
+        assert_eq!(secret.summary(), "text (13 characters)");
+        assert!(!secret.summary().contains("hunter2"));
+
+        let long = Value::Text("a".repeat(500));
+        assert_eq!(long.summary(), "text (500 characters)");
+
+        // Structured data is described by shape, not printed.
+        let json = Value::Json(serde_json::json!({ "token": "hunter2" }));
+        assert_eq!(json.summary(), "json (1 fields)");
+        assert!(!json.summary().contains("hunter2"));
+
+        // The live inspector may show content — it is memory-only, never written down.
+        assert!(Value::Text("hunter2".into()).preview().contains("hunter2"));
 
         // A handle summary reveals the kind and the opaque id, never a path.
         let h = Value::Handle(Handle {
