@@ -1,0 +1,33 @@
+{
+  "name": "encastra",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A local-first runtime that executes a typed graph of sandboxed components.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --build --verbose",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "rust:check": "cargo clippy --workspace --all-targets -- -D warnings",
+    "rust:test": "cargo test --workspace",
+    "clean": "tsc --build --clean"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
+    "@types/node": "^24.9.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

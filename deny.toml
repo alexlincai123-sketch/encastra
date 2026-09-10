@@ -1,0 +1,36 @@
+# cargo-deny: supply-chain policy. Enforced in CI (see .github/workflows/ci.yml).
+
+[graph]
+all-features = true
+
+[advisories]
+# An unpatched advisory fails the build. Exceptions go in `ignore` WITH a reason and a date,
+# never by relaxing this line.
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Allowlist, not a denylist: a dependency arriving under an unexpected licence should fail
+# loudly rather than slip through because nobody thought to ban it.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Adding a second implementation of something we already have is how dependency trees rot.
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

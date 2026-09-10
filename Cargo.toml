@@ -1,0 +1,25 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/encastra-protocol",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0.20"
+
+[profile.release]
+# A small, fast binary matters more than a fast build for what we ship.
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

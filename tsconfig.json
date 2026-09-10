@@ -1,0 +1,5 @@
+{
+  "$comment": "Solution file. It builds nothing itself; it lists the projects and their order.",
+  "files": [],
+  "references": [{ "path": "./packages/protocol" }]
+}
