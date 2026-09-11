@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DEMOS } from '../demos';
 import { usePreferences } from '../preferences';
 import { useEditor } from '../store';
@@ -51,6 +52,19 @@ export function Welcome() {
     setPreference('welcomeSeen', true);
   }, [setPreference]);
 
+  // The step points at a panel, and the stylesheet outlines it. Published on the body rather
+  // than inferred from where the card sits, so moving the card cannot silently break the
+  // highlight. Cleared on the way out, including when the component unmounts mid-tour.
+  const focusArea = step === null ? undefined : TOUR[step]?.focus;
+  useEffect(() => {
+    if (focusArea && focusArea !== 'none') {
+      document.body.dataset.tourFocus = focusArea;
+    } else {
+      document.body.removeAttribute('data-tour-focus');
+    }
+    return () => document.body.removeAttribute('data-tour-focus');
+  }, [focusArea]);
+
   // Escape leaves, from the welcome and from any card. A modal that traps somebody is a modal
   // they remember for the wrong reason.
   useEffect(() => {
@@ -71,7 +85,7 @@ export function Welcome() {
     const satisfied = isStepSatisfied(card, progress);
     const next = advance(step, progress);
 
-    return (
+    return createPortal(
       <aside
         className="tour"
         role="dialog"
@@ -105,7 +119,8 @@ export function Welcome() {
             {next === null ? 'Finish' : 'Next'}
           </button>
         </div>
-      </aside>
+      </aside>,
+      document.body,
     );
   }
 
@@ -113,7 +128,11 @@ export function Welcome() {
 
   const firstDemo = DEMOS[0];
 
-  return (
+  // Rendered into the body rather than in place. `position: fixed` is only viewport-relative
+  // while no ancestor establishes a containing block, and the shell is a grid the modal would
+  // otherwise be a member of — which is what put the card off-centre. A portal removes the
+  // question entirely instead of relying on nothing upstream ever gaining a transform.
+  return createPortal(
     <div className="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
       <div className="welcome__card">
         <h1 id="welcome-title" className="welcome__title">
@@ -163,6 +182,7 @@ export function Welcome() {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

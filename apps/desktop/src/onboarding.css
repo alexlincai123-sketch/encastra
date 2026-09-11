@@ -144,9 +144,10 @@
  * An outline rather than a spotlight overlay: a spotlight would dim the very controls the step
  * is asking somebody to use.
  */
-.tour[data-focus="palette"] ~ .content .panel--palette,
-.tour[data-focus="inspector"] ~ .content .panel--inspector,
-.tour[data-focus="canvas"] ~ .content .canvas {
+body[data-tour-focus="palette"] .panel--palette,
+body[data-tour-focus="inspector"] .panel--inspector,
+body[data-tour-focus="canvas"] .canvas,
+body[data-tour-focus="toolbar"] .topbar {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
