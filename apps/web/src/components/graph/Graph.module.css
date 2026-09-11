@@ -252,6 +252,41 @@
   color: var(--ink);
 }
 
+/* A connection the editor refused outright — no coercion exists between the two types. Danger
+   red rather than the wire's would-be type colour, and the badge carries why. */
+.wire[data-refused="true"] .wireLine {
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--danger) 0,
+    var(--danger) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.wire[data-refused="true"] .wireHead {
+  border-top-color: transparent;
+  border-left-color: transparent;
+  opacity: 0;
+}
+
+.wire[data-refused="true"] .wireBadge {
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+@container (min-width: 720px) {
+  .wire[data-refused="true"] .wireLine {
+    background: repeating-linear-gradient(
+      to right,
+      var(--danger) 0,
+      var(--danger) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+  }
+}
+
 /* --- The flow -------------------------------------------------------------------------------- */
 
 .flowWrap {

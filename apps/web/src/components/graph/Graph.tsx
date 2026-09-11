@@ -146,22 +146,38 @@ export function Wire({
   type,
   label,
   active = false,
+  refused = false,
 }: {
   type?: string;
   /** What travels along the wire, e.g. `IMAGE → IMAGE`. */
   label?: string;
   active?: boolean;
+  /**
+   * The editor refused this connection outright — no coercion exists between the two types, in
+   * either direction. Distinct from `active`: a refused wire never carries a value, so it is
+   * never "active" in the sense a completed edge is.
+   */
+  refused?: boolean;
 }): ReactNode {
-  const colour = type !== undefined ? typeColour(type) : 'var(--edge)';
+  const colour = refused ? 'var(--danger)' : type !== undefined ? typeColour(type) : 'var(--edge)';
+  const lit = active || refused;
   return (
-    <div className={styles.wire} data-active={active ? 'true' : 'false'} aria-hidden="true">
-      <span className={styles.wireLine} style={active ? { background: colour } : undefined} />
+    <div
+      className={styles.wire}
+      data-active={active ? 'true' : 'false'}
+      data-refused={refused ? 'true' : 'false'}
+      aria-hidden="true"
+    >
+      <span className={styles.wireLine} style={lit ? { background: colour } : undefined} />
       {label !== undefined ? (
-        <span className={styles.wireBadge} style={active ? { borderColor: colour } : undefined}>
+        <span
+          className={styles.wireBadge}
+          style={lit ? { borderColor: colour, ...(refused ? { color: colour } : {}) } : undefined}
+        >
           {label}
         </span>
       ) : null}
-      <span className={styles.wireHead} style={active ? { borderLeftColor: colour } : undefined} />
+      <span className={styles.wireHead} style={lit ? { borderLeftColor: colour } : undefined} />
     </div>
   );
 }

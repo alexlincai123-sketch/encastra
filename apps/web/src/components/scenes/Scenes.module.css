@@ -1,0 +1,621 @@
+/*
+ * Shared chrome for the ten scroll scenes. One module for all ten, the same way every route's
+ * `page.module.css` holds every section on that page — a scene-specific detail (scene 3's two
+ * wires, scene 8's nested tiers) lives in its own section below, clearly bordered, rather than in
+ * a separate file per scene.
+ *
+ * Every colour, radius, spacing and duration below is a token from `packages/ui/tokens.css` —
+ * nothing here invents a value the product's own canvas does not already use.
+ */
+
+/* --- Experience shell --------------------------------------------------------------------- */
+
+.experience {
+  position: relative;
+}
+
+/* --- The pin/stage pair every scene shares ---------------------------------------------------
+ * `.scene` is the tall trigger `pinnedTimeline()` measures. `.pin` is what GSAP actually pins —
+ * marked `data-pin` in JSX so `useScrollScene` can find it without a second ref. Under reduced
+ * motion neither ever gets a ScrollTrigger, so `.pin`'s `min-height: 100vh` is what a
+ * reduced-motion visitor sees: one full screen per scene, in normal document flow, never pinned.
+ */
+
+.scene {
+  position: relative;
+  isolation: isolate;
+}
+
+.pin {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding-block: var(--site-section-y);
+  overflow: hidden;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: var(--site-page);
+  margin-inline: auto;
+  padding-inline: var(--site-gutter);
+}
+
+/* A stage that hosts absolutely-positioned children (node clusters, wires) rather than a text
+   column needs a defined height to position against. */
+.stageFull {
+  composes: stage;
+  height: min(72vh, 640px);
+}
+
+/* --- Scene furniture: index numeral + eyebrow + headline -------------------------------------- */
+
+.index {
+  display: block;
+  margin-block-end: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  color: var(--ink-faint);
+}
+
+.headline {
+  max-width: 18ch;
+  font-size: var(--site-step-5);
+  letter-spacing: -0.02em;
+}
+
+.headlineMd {
+  composes: headline;
+  max-width: 20ch;
+  font-size: var(--site-step-4);
+}
+
+/* Word-mask reveal: each word sits in an `overflow: hidden` box; the inner span is what
+   `Scene01Intro` translates from `translateY(110%)` to `0`, so the reveal masks rather than
+   simply fades — a technical, drawn-open feel rather than a soft dissolve. */
+.wordMask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.word {
+  display: inline-block;
+  will-change: transform;
+}
+
+.body {
+  max-width: var(--site-measure);
+  margin-block-start: var(--space-5);
+}
+
+.centerCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-inline: auto;
+}
+
+/* --- Scene 01 — Intro ------------------------------------------------------------------------ */
+
+.introGhosts {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+/* `pathLength="1"` is set as an SVG attribute in the JSX, not here — it is not a CSS property;
+   setting it on the element is what makes `stroke-dasharray: 1` mean "the whole path" regardless
+   of its actual geometry. */
+.introGhostRect {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 1;
+}
+
+.introScroll {
+  position: absolute;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.introScrollLine {
+  width: 1px;
+  height: 28px;
+  background: linear-gradient(to bottom, var(--ink-faint), transparent);
+}
+
+/* --- Scene 02 — What if: a scattered cluster of real component cards -------------------------- */
+
+.cluster {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.clusterChip {
+  position: absolute;
+  width: min(220px, 46vw);
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+.clusterIntro {
+  position: relative;
+  z-index: 1;
+  max-width: 34ch;
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in oklab, var(--ground-0) 78%, transparent) 0%,
+    transparent 72%
+  );
+}
+
+/* --- Scene 03 — Connect: two attempts at the same input --------------------------------------- */
+
+.connectGrid {
+  display: grid;
+  gap: var(--space-7);
+  width: 100%;
+  align-items: start;
+}
+
+@media (min-width: 60rem) {
+  .connectGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.connectAttempt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.connectLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.connectLabel[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.connectLabel[data-tone="danger"] {
+  color: var(--danger);
+}
+
+/* Deliberately always the column stack — `Wire`'s horizontal mode only switches on inside the
+   product's `.flowWrap` container query at 720px, which this two-up comparison never reaches per
+   attempt. Two vertical mini-flows side by side reads correctly as "the same input, two
+   attempts" without fighting that component's own responsive contract. */
+.connectPair {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.connectNode {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Both overlays sit centred on the wire they annotate — their parent is the `position: relative`
+   wrapper `Scene03Connect` puts around each `<Wire>`. */
+
+.convertChip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  color: var(--ink);
+  background: var(--ground-3);
+  border: var(--border-strong);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.refusedMark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  color: var(--danger);
+  background: var(--ground-1);
+  border: 1px solid var(--danger);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* --- Scene 04 — Build: growing node field ------------------------------------------------------ */
+
+/* Its own stage rather than `.stageFull` — reduced motion needs to collapse this one's fixed
+   height back to `auto` (see below) without touching scene 2's cluster, which reuses
+   `.stageFull` and must keep its fixed height so its absolutely-positioned chips stay placed. */
+.buildStage {
+  composes: stage;
+  height: min(80vh, 720px);
+}
+
+.buildField {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.buildNode {
+  position: absolute;
+  width: 128px;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+.buildResolve {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  will-change: opacity;
+}
+
+.buildResolveInner {
+  width: min(560px, 92vw);
+}
+
+.buildCaption {
+  position: absolute;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: var(--site-step--1);
+}
+
+/* A compact card for density scenes — the name and category a real manifest gives it, none of
+   the port detail `GraphNode` shows when there is room to teach it. */
+.miniNode {
+  padding: var(--space-2) var(--space-3);
+  background: var(--site-card);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.miniNodeName {
+  display: block;
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.miniNodeCategory {
+  display: block;
+  margin-block-start: 2px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.buildNode[data-dim="true"] .miniNode {
+  border-color: var(--line);
+}
+
+/* Under reduced motion the growth story is never animated, so it stays in the prose above and
+   this scene shows only the one state worth showing without motion: the resolved workflow. */
+@media (prefers-reduced-motion: reduce) {
+  .buildField {
+    display: none;
+  }
+
+  .buildStage {
+    height: auto;
+  }
+
+  .buildResolve {
+    position: static;
+    opacity: 1;
+    margin-block-start: var(--space-6);
+  }
+}
+
+/* --- Scene 05 — Run -------------------------------------------------------------------------- */
+
+.runStage {
+  width: min(720px, 100%);
+}
+
+.runLog {
+  margin-block-start: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+  min-height: 4.5em;
+}
+
+.runLogLine {
+  opacity: 0;
+  will-change: opacity;
+}
+
+.runLogLine[data-tone="ok"] {
+  color: var(--ok);
+}
+
+/* --- Scene 06 — Result ------------------------------------------------------------------------ */
+
+.resultRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.resultFile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.resultSwatch {
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--type-pink) 0%, var(--ground-3) 120%);
+  box-shadow: var(--shadow-md);
+  will-change: transform;
+}
+
+.resultMeta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.resultArrow {
+  color: var(--ink-faint);
+  font-size: var(--site-step-2);
+}
+
+/* Normal flow, not an absolute overlay — it needs to sit between the body copy and the result
+   row without competing with either for the same centred space. `transform` (what the fly-apart
+   tween in Scene06Result animates) works exactly the same whether or not the element is
+   absolutely positioned, so this loses nothing when the three chips scatter. */
+.disassemble {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-block: var(--space-5);
+  pointer-events: none;
+}
+
+.disassembleNode {
+  width: 104px;
+  will-change: transform, opacity;
+}
+
+/* --- Scene 07 — Reuse ------------------------------------------------------------------------- */
+
+/* An explicit height, not `100%` — its parent is a plain `.stage`/`.centerCol` div with no
+   defined height of its own, and a percentage height against an auto-height ancestor resolves
+   to nothing, which would collapse this and its absolutely-positioned children to zero size. */
+.reuseStage {
+  position: relative;
+  width: 100%;
+  height: min(46vh, 340px);
+}
+
+.reuseFlow {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  will-change: transform, opacity;
+}
+
+.reuseFlowNode {
+  width: 150px;
+}
+
+.reuseCard {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: min(300px, 88vw);
+  height: fit-content;
+  padding: var(--space-5);
+  background: var(--site-card);
+  border: var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.reuseCardTitle {
+  font-size: var(--site-step-0);
+  font-weight: var(--weight-medium);
+}
+
+.reuseCardNote {
+  margin-block-start: var(--space-2);
+  font-size: var(--site-step--1);
+  color: var(--ink-muted);
+}
+
+.reuseSteps {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-block-start: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.reuseStep {
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border: var(--border);
+  border-radius: var(--radius-full);
+}
+
+.reuseStep[data-active="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* --- Scene 08 — Ecosystem: component inside workflow inside project ----------------------------
+ * True DOM nesting rather than three positioned siblings faking it with grid alignment — the
+ * markup shape *is* the concept: a component sits inside a workflow, a workflow inside a
+ * project, exactly as nested elements.
+ */
+
+.tierWrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.tier {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--site-panel) 92%, transparent);
+}
+
+.tierLabel {
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: var(--border);
+}
+
+.tierProject {
+  composes: tier;
+  width: min(560px, 90vw);
+  height: min(420px, 66vh);
+}
+
+.tierWorkflow {
+  composes: tier;
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-5);
+  transform: translateX(-50%);
+  width: min(380px, 82%);
+  height: min(230px, 56%);
+}
+
+.tierComponent {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-4);
+  transform: translateX(-50%);
+  width: 158px;
+}
+
+/* --- Scene 09 — Terminal ----------------------------------------------------------------------- */
+
+/* Not pinned — the terminal's own transcript runs on real timers with its own play/pause/speed
+   controls, and its combined height (with the graph card beside it) can exceed one viewport, so
+   this scene reveals on normal scroll instead of fighting `pin: true`'s viewport-height limit. */
+.terminalSection {
+  padding-block: var(--site-section-y);
+}
+
+.terminalIntro {
+  max-width: 56ch;
+  text-align: center;
+  margin-inline: auto;
+}
+
+.terminalStage {
+  width: 100%;
+  margin-block-start: var(--space-6);
+  will-change: transform, opacity;
+}
+
+/* --- Scene 10 — Try --------------------------------------------------------------------------- */
+
+.tryActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-block-start: var(--space-6);
+}
+
+.tryMeta {
+  margin-block-start: var(--space-4);
+  font-size: var(--site-step--1);
+  color: var(--ink-faint);
+}

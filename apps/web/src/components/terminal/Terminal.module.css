@@ -19,13 +19,36 @@
 /* --- The terminal card -------------------------------------------------------------------- */
 
 .terminalCard {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--ground-1);
   border: var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  /* A wider, softer shadow than the product's own card treatment — this one has to hold its own
+     as a scene's centrepiece, not sit in a list of equal cards. */
+  box-shadow:
+    var(--shadow-lg),
+    0 0 0 1px color-mix(in oklab, var(--accent) 14%, transparent);
   overflow: hidden;
+}
+
+/* A faint scanline texture on the transcript — reads as "a screen", not a document. Pure CSS, a
+   pseudo-element on top of the existing markup, so nothing about the terminal's DOM changes. */
+.terminalCard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--ink) 5%, transparent) 0px,
+    color-mix(in oklab, var(--ink) 5%, transparent) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.5;
 }
 
 .toolbar {
@@ -241,5 +264,6 @@
   background: var(--site-panel);
   border: var(--border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   min-height: min(56vh, 460px);
 }

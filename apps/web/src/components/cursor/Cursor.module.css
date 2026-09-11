@@ -1,0 +1,49 @@
+/*
+ * A dot and a ring, following the pointer. Both are `transform`-only so the browser can move them
+ * on the compositor without ever touching layout — the one property GSAP's `quickTo` writes to
+ * every pointer move.
+ */
+
+.cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 90;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.dot,
+.ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border-radius: var(--radius-full);
+  transform: translate(-50%, -50%);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+}
+
+.ring {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  transition:
+    width var(--duration-fast) var(--ease-out),
+    height var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.cursor[data-hover="true"] .ring {
+  width: 44px;
+  height: 44px;
+  border-color: var(--accent);
+}
+
+.cursor[data-hover="true"] .dot {
+  background: var(--accent-strong);
+}

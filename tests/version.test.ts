@@ -49,6 +49,18 @@ describe('the version is declared once', () => {
     expect(expected).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
   });
 
+  it('the website constant agrees with Cargo.toml', () => {
+    // A seventh declaration, and one that escaped this test when it was first written: the site
+    // needs the version at render time, and importing a package.json into the bundle is a
+    // build-config decision nobody should have to make to print a number. It is covered here
+    // because a declaration the enforcement does not know about is not enforced — which is
+    // exactly how it came to be showing 0.2 while everything else said 0.3.
+    const site = read('apps/web/src/config/site.ts');
+    const found = site.match(/export\s+const\s+VERSION\s*(?::[^=]+)?=\s*['"]([^'"]+)['"]/);
+    expect(found, 'site.ts should declare a VERSION constant').toBeTruthy();
+    expect(found?.[1], 'run python scripts/version.py --sync').toBe(expected);
+  });
+
   for (const file of MUST_AGREE) {
     it(`${file} agrees with Cargo.toml`, () => {
       let raw: string;

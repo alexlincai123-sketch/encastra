@@ -38,6 +38,13 @@ JSON_TARGETS = [
     (ROOT / "apps/desktop/src-tauri/tauri.conf.json", ("version",)),
 ]
 
+# Declarations that are not JSON. The website carries one because a page needs the version
+# at render time and importing a package.json into the bundle is a build-config decision
+# nobody should have to make to print a number.
+TS_TARGETS = [
+    (ROOT / "apps/web/src/config/site.ts", "VERSION"),
+]
+
 # The version in [workspace.package], not any dependency's version= that happens to look alike.
 WORKSPACE_VERSION = re.compile(
     r"(?P<before>\[workspace\.package\](?:[^\[]*?)\bversion\s*=\s*\")(?P<version>[^\"]+)(?P<after>\")",
@@ -58,6 +65,32 @@ def set_source(version: str) -> None:
         lambda m: f"{m.group('before')}{version}{m.group('after')}", text, count=1
     )
     CARGO.write_text(updated, encoding="utf-8", newline="\n")
+
+
+def ts_pattern(name: str) -> re.Pattern[str]:
+    """`export const NAME = 'x.y.z'`, with the quotes captured so only the value is replaced."""
+    return re.compile(rf"(export\s+const\s+{re.escape(name)}\s*(?::[^=]+)?=\s*['\"])([^'\"]*)(['\"])")
+
+
+def read_ts(path: pathlib.Path, name: str) -> str | None:
+    if not path.exists():
+        return None
+    match = ts_pattern(name).search(path.read_text("utf-8"))
+    return match.group(2) if match else None
+
+
+def write_ts(path: pathlib.Path, name: str, version: str) -> bool:
+    if not path.exists():
+        return False
+    text = path.read_text("utf-8")
+    pattern = ts_pattern(name)
+    if not pattern.search(text):
+        return False
+    updated = pattern.sub(lambda m: f"{m.group(1)}{version}{m.group(3)}", text, count=1)
+    if updated != text:
+        path.write_text(updated, encoding="utf-8", newline="\n")
+        return True
+    return False
 
 
 def read_at(path: pathlib.Path, keys: tuple[str, ...]) -> str | None:
@@ -116,6 +149,22 @@ def main() -> int:
             print(f"  {rel}: {found} -> {version}")
         else:
             print(f"  {rel}: {found}   DISAGREES", file=sys.stderr)
+            disagreements += 1
+
+    for path, name in TS_TARGETS:
+        found = read_ts(path, name)
+        rel = path.relative_to(ROOT).as_posix()
+        if found is None:
+            print(f"  {rel}: no {name} constant (skipped)")
+            continue
+        if found == version:
+            print(f"  {rel} ({name}): {found}")
+            continue
+        if args.sync:
+            write_ts(path, name, version)
+            print(f"  {rel} ({name}): {found} -> {version}")
+        else:
+            print(f"  {rel} ({name}): {found}   DISAGREES", file=sys.stderr)
             disagreements += 1
 
     if args.check and disagreements:
