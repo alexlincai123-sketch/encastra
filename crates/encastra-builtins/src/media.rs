@@ -107,6 +107,8 @@ static RESIZE: LazyLock<ComponentManifest> = LazyLock::new(|| {
                        "doc": "Leave at 0 to work it out from the width." },
           "mode":    { "type": "string", "choices": ["contain", "cover", "stretch"], "label": "Fit",
                        "doc": "Contain fits inside the box. Cover fills it and crops. Stretch distorts." },
+          "enlarge": { "type": "bool", "default": false, "label": "Allow making it bigger",
+                       "doc": "Off by default. An image smaller than the size you asked for is left alone, because scaling up invents pixels rather than finding them." },
           "quality": { "type": "i64", "min": 1, "max": 100, "label": "JPEG quality" }
         },
         "capabilities": [
@@ -144,6 +146,22 @@ impl CoreComponent for Resize {
             .unwrap_or(FitMode::Contain);
 
         let before = (image.width(), image.height());
+
+        // Asking for 1280 wide and being handed an 800-wide picture should leave it at 800, not
+        // stretch it to 1280. Scaling up invents pixels: the file gets larger, the picture gets
+        // softer, and nothing is gained. The sample workflow is exactly this case — resize to
+        // 1280 and save with a `-small` suffix — so without this an ordinary photo came out
+        // bigger than it went in, under a name that said otherwise.
+        //
+        // Clamping the request rather than skipping the resize keeps one path: a 0 stays 0 and
+        // still means "work it out from the other side", and `cover` still crops.
+        let enlarge = ctx.config_bool("enlarge").unwrap_or(false);
+        let (width, height) = if enlarge {
+            (width, height)
+        } else {
+            (width.min(before.0), height.min(before.1))
+        };
+
         let resized = media::resize(&image, width, height, mode)
             .map_err(|e| NodeError::new("resize-failed", e.to_string()))?;
         let after = (resized.width(), resized.height());

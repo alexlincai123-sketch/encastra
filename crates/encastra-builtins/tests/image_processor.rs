@@ -467,3 +467,122 @@ fn a_step_wired_to_the_name_cannot_read_the_file() {
         .open_input(&NodeId("resize".into()), handle)
         .expect("the step the file was wired to must still be able to read it");
 }
+
+/// Watch Folder → Resize Image (to 1280) → Save File, which is the sample's own configuration.
+fn image_processor_at_1280(inbox: &Path, out: &Path) -> Graph {
+    Graph::parse(
+        &serde_json::json!({
+            "nodes": {
+                "watch": {
+                    "component": "encastra.file.watch@1.0.0",
+                    "config": { "folder": inbox.to_string_lossy(), "extensions": "png", "existing": true },
+                    "position": { "x": 0, "y": 0 }
+                },
+                "resize": {
+                    "component": "encastra.image.resize@1.0.0",
+                    "config": { "width": 1280, "height": 0, "mode": "contain", "quality": 85 },
+                    "position": { "x": 260, "y": 0 }
+                },
+                "save": {
+                    "component": "encastra.file.save@1.0.0",
+                    "config": { "folder": out.to_string_lossy(), "suffix": "-small" },
+                    "position": { "x": 520, "y": 0 }
+                }
+            },
+            "edges": [
+                { "from": { "node": "watch",  "port": "file" },  "to": { "node": "resize", "port": "image" } },
+                { "from": { "node": "resize", "port": "image" }, "to": { "node": "save",   "port": "file" } }
+            ]
+        })
+        .to_string(),
+    )
+    .expect("the graph must parse")
+}
+
+#[test]
+fn a_picture_smaller_than_the_target_is_not_enlarged() {
+    // The sample resizes to 1280 and saves with a `-small` suffix. Handed an ordinary 800-wide
+    // photo, it used to produce a 1280-wide one — bigger than it went in, softer than it went
+    // in, and named as though it had shrunk. Scaling up invents pixels; there is nothing to
+    // find. Left alone is the only defensible answer, and the file name stops lying.
+    let sandbox = Sandbox::new("noenlarge");
+    std::fs::write(sandbox.inbox().join("photo.png"), png(800, 400)).unwrap();
+
+    let installed = encastra_builtins::install_all();
+    let graph = image_processor_at_1280(&sandbox.inbox(), &sandbox.out());
+    let mut broker = Broker::new(
+        sandbox.run_dir(),
+        grants(&graph, &installed.registry, &sandbox),
+    )
+    .unwrap();
+
+    let mut session = Session::start(
+        graph,
+        &installed.registry,
+        installed.components.clone(),
+        &installed.triggers,
+        "noenlarge",
+    )
+    .unwrap_or_else(|v| panic!("the graph must validate: {:#?}", v.issues));
+
+    let runs = drive(
+        &mut session,
+        &installed.registry,
+        &mut broker,
+        Duration::from_secs(20),
+    );
+    assert_eq!(runs.len(), 1);
+    assert_eq!(
+        runs[0].journal.status,
+        RunStatus::Ok,
+        "{:#?}",
+        runs[0].journal.nodes
+    );
+
+    let produced = sandbox.out().join("photo-small.png");
+    assert!(produced.exists(), "nothing was written");
+
+    let info = media::probe(&std::fs::read(&produced).unwrap()).unwrap();
+    assert_eq!(
+        (info.width, info.height),
+        (800, 400),
+        "an 800-wide picture asked to fit 1280 must be left alone, not stretched"
+    );
+}
+
+#[test]
+fn a_picture_larger_than_the_target_is_still_shrunk() {
+    // The other half: the clamp must not turn resizing off. A picture bigger than the target
+    // still comes down to it.
+    let sandbox = Sandbox::new("shrink");
+    std::fs::write(sandbox.inbox().join("photo.png"), png(2000, 1000)).unwrap();
+
+    let installed = encastra_builtins::install_all();
+    let graph = image_processor_at_1280(&sandbox.inbox(), &sandbox.out());
+    let mut broker = Broker::new(
+        sandbox.run_dir(),
+        grants(&graph, &installed.registry, &sandbox),
+    )
+    .unwrap();
+
+    let mut session = Session::start(
+        graph,
+        &installed.registry,
+        installed.components.clone(),
+        &installed.triggers,
+        "shrink",
+    )
+    .unwrap_or_else(|v| panic!("{:#?}", v.issues));
+
+    let runs = drive(
+        &mut session,
+        &installed.registry,
+        &mut broker,
+        Duration::from_secs(20),
+    );
+    assert_eq!(runs.len(), 1);
+
+    let info =
+        media::probe(&std::fs::read(sandbox.out().join("photo-small.png")).unwrap()).unwrap();
+    assert_eq!((info.width, info.height), (1280, 640));
+}
