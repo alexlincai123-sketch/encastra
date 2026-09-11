@@ -775,6 +775,10 @@ function describe(error: unknown): string {
  * to page scripts in a packaged application would be a way for anything running in the webview
  * to drive the editor.
  */
-if (import.meta.env.DEV) {
+// The `window` check is not defensive padding. Vitest runs in mode "test", so `DEV` is true
+// there too, and the node environment has no `window` — which meant importing this module from
+// any test threw `ReferenceError: window is not defined` before the store was even read. A test
+// that cannot import the store is a store that cannot be tested.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __encastra?: unknown }).__encastra = useEditor;
 }

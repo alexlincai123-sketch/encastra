@@ -183,6 +183,11 @@ export function Canvas() {
       aria-label="Workflow canvas"
       aria-describedby="canvas-keys"
       aria-activedescendant={selectedNodeId ? `node-${selectedNodeId}` : undefined}
+      /* role="application" is precisely the case this rule cannot see. An application region
+         owns its own keyboard model, so it has to be focusable — an unfocusable one can never
+         receive the arrow keys it exists to handle. Removing the tabindex would restore the
+         defect this replaced: a canvas nobody could reach without a mouse. */
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: an application region must be focusable
       tabIndex={0}
       onKeyDown={onKeyDown}
       onDrop={onDrop}
