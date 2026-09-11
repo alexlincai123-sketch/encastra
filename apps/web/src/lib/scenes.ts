@@ -47,8 +47,23 @@ export const CONNECT_SOURCE_ID = 'encastra.file.watch';
 export const CONNECT_TARGET_ID = 'encastra.image.resize';
 export const CONNECT_REFUSED_SOURCE_ID = 'encastra.system.timer';
 
+/**
+ * The two wire labels.
+ *
+ * `decode-image` is the operation's real id in `packages/protocol/data/type-graph.json` and stays
+ * in every language — it is what the runtime calls the conversion, and a reader who searches for
+ * it should find it. The refusal is a sentence about it rather than a name, so it translates.
+ */
 export const CONNECT_ACCEPTED_LABEL = 'FILE → IMAGE · decode-image';
-export const CONNECT_REFUSED_LABEL = 'INT → IMAGE · no conversion exists';
+
+const CONNECT_REFUSED_LABELS: Record<Locale, string> = {
+  en: 'INT → IMAGE · no conversion exists',
+  es: 'INT → IMAGE · no existe conversión',
+};
+
+export function connectRefusedLabel(locale: Locale): string {
+  return CONNECT_REFUSED_LABELS[locale];
+}
 
 /* -------------------------------------------------------------------------------------------
  * Scene 4 — BUILD: 3 -> 8 -> 20. Real component ids only, one instance each — twenty is every

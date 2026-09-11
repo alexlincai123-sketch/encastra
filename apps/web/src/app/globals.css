@@ -49,6 +49,11 @@
 
   --site-section-y: clamp(3.5rem, 9vw, 7.5rem);
 
+  /* The sticky header's height, declared once so a pinned scene can reserve it.
+     `Header.module.css` sets the same value; a scene that centres its content in the viewport
+     without allowing for this puts the first line of a four-line headline underneath it. */
+  --site-header: 60px;
+
   /* Surfaces that need to read as "a step above the page" without inventing a new colour. */
   --site-panel: var(--ground-1);
   --site-card: var(--ground-2);

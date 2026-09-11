@@ -43,7 +43,11 @@
   align-items: center;
   justify-content: center;
   height: 100svh;
-  padding-block: var(--space-7);
+  /* The header is sticky and sits over the top of every pinned scene, so the usable area is a
+     screen minus its height. Measured before this: the first of four headline lines began at
+     36px with the header's bottom edge at 61px — a quarter of it was simply behind the bar. */
+  padding-block-start: calc(var(--site-header) + var(--space-5));
+  padding-block-end: var(--space-5);
   overflow: hidden;
 }
 

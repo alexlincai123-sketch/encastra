@@ -13,6 +13,8 @@
 .pin {
   position: relative;
   min-height: 100svh;
+  /* The sticky header sits over this too. */
+  padding-block-start: var(--site-header);
   display: grid;
   place-items: center;
   /* Contains anything a scene parks outside the composition before animating it inward. `clip`

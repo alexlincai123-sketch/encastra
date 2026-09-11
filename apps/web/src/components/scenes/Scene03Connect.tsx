@@ -8,10 +8,10 @@ import type { Locale } from '@/lib/i18n/locale';
 import { breakApart, handoff, handon, snap } from '@/lib/motion-system';
 import {
   CONNECT_ACCEPTED_LABEL,
-  CONNECT_REFUSED_LABEL,
   CONNECT_REFUSED_SOURCE_ID,
   CONNECT_SOURCE_ID,
   CONNECT_TARGET_ID,
+  connectRefusedLabel,
   sceneCopy,
 } from '@/lib/scenes';
 import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
@@ -127,9 +127,15 @@ export function Scene03Connect({ locale }: { locale: Locale }): ReactNode {
                   <GraphNode node={SOURCE} />
                 </div>
                 <div className={scene.wireSlot}>
-                  <Wire type="file" label={CONNECT_ACCEPTED_LABEL} active />
+                  {/* The wire carries no label of its own here. `Wire` centres its badge on
+                      itself and `.convertChip` is centred on the same slot, so passing both
+                      drew two labels in exactly the same place — "FILE → IMAGE · decode-image"
+                      underneath "Convert · decode-image", one legible and one not. The chip is
+                      the one that stays, because it is also what `snap` pulses when the
+                      connection is made. */}
+                  <Wire type="file" active />
                   <span className={styles.convertChip} data-animate>
-                    Convert · decode-image
+                    {CONNECT_ACCEPTED_LABEL}
                   </span>
                 </div>
                 <div className={styles.connectNode}>
@@ -147,7 +153,7 @@ export function Scene03Connect({ locale }: { locale: Locale }): ReactNode {
                   <GraphNode node={REFUSED_SOURCE} />
                 </div>
                 <div className={scene.wireSlot}>
-                  <Wire label={CONNECT_REFUSED_LABEL} refused />
+                  <Wire label={connectRefusedLabel(locale)} refused />
                   <span className={styles.refusedMark} aria-hidden="true" data-animate>
                     ×
                   </span>
