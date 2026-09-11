@@ -1,9 +1,50 @@
 import type { Metadata, Viewport } from 'next';
+import { Archivo, Instrument_Sans, JetBrains_Mono } from 'next/font/google';
 import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 
 import '@encastra/ui/tokens.css';
 import './globals.css';
+
+/*
+ * The site's own voice, in three weights of responsibility.
+ *
+ * The application uses the operating system's UI font, and it should: a tool somebody keeps open
+ * all day belongs to their desktop. A page is read once, by somebody deciding whether to care,
+ * and a system font stack says nothing about what it is looking at.
+ *
+ * - **Archivo** for display. A grotesk with a real width axis, so a headline can be set narrow
+ *   and tight without faking it by squashing glyphs. Industrial rather than friendly, which is
+ *   what a product that runs a typed graph should sound like.
+ * - **Instrument Sans** for body. Deliberately not Inter: Inter is excellent and is also the
+ *   default voice of every developer-tool landing page written since 2021, which makes it the
+ *   one choice that cannot carry an identity.
+ * - **JetBrains Mono** for the terminal, ports, types and hashes. Drawn for reading code at
+ *   small sizes, which is exactly what those are.
+ *
+ * `next/font` downloads these at build time and serves them from this origin, so the
+ * Content-Security-Policy keeps `font-src 'self'` — no third-party request, nothing to block,
+ * and no layout shift from a font that arrives late.
+ */
+
+const display = Archivo({
+  subsets: ['latin'],
+  axes: ['wdth'],
+  display: 'swap',
+  variable: '--font-display',
+});
+
+const body = Instrument_Sans({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-body',
+});
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono-site',
+});
 
 import { Footer } from '@/components/site/Footer';
 import { Header } from '@/components/site/Header';
@@ -53,7 +94,12 @@ export default async function RootLayout({
   const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html
+      lang="en"
+      data-theme="dark"
+      className={`${display.variable} ${body.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script
           // The content is a constant defined above. No visitor input reaches it, and nothing

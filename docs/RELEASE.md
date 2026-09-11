@@ -8,17 +8,17 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.3.1-beta.1** · built 2026-09-11 on Windows AMD64 · commit `ab8fb17`
+**Version 0.4.0-beta.1** · built 2026-09-11 on Windows AMD64 · commit `669547c`
 
 | Artefact | Size | SHA-256 |
 |---|---|---|
-| `Encastra_0.3.1-beta.1_x64-setup.exe` | 3.1 MB | `52005c7f12584728956ebe9ed31420b8d1870b05b762a926eb905b28da17593a` |
-| `encastra-desktop.exe` | 8.7 MB | `136e79c3dbdca071cac106c29de0b5a8e2b75a939a5cad0c87655e7c980e7871` |
+| `Encastra_0.4.0-beta.1_x64-setup.exe` | 3.1 MB | `9e31eb99679cabce3109a446b27d7fc580b28ae00965d61ed2e727706a59ac3e` |
+| `encastra-desktop.exe` | 8.7 MB | `1a7918cf51095438b097425f87b0fa724493763e4dd7badf011f6204e72acfab` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.3.1-beta.1_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Encastra_0.4.0-beta.1_x64-setup.exe -Algorithm SHA256
 ```
 
 These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking.

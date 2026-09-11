@@ -75,7 +75,7 @@
 }
 
 /* Word-mask reveal: each word sits in an `overflow: hidden` box; the inner span is what
-   `Scene01Intro` translates from `translateY(110%)` to `0`, so the reveal masks rather than
+   a word translates from `translateY(110%)` to `0`, so the reveal masks rather than
    simply fades — a technical, drawn-open feel rather than a soft dissolve. */
 .wordMask {
   display: inline-block;

@@ -8,7 +8,7 @@
  */
 
 /** The release this website documents. Single module, imported everywhere. */
-export const VERSION = '0.3.1-beta.1';
+export const VERSION = '0.4.0-beta.1';
 
 export const SITE = {
   name: 'Encastra',
@@ -91,16 +91,16 @@ export const RELEASE: {
   installerFormat: string;
 } = {
   /** Exactly as published in docs/RELEASE.md. */
-  installerFilename: 'Encastra_0.3.1-beta.1_x64-setup.exe',
-  installerVersion: '0.3.1-beta.1',
+  installerFilename: 'Encastra_0.4.0-beta.1_x64-setup.exe',
+  installerVersion: '0.4.0-beta.1',
   installerSize: '3.1 MB',
-  installerSha256: '52005c7f12584728956ebe9ed31420b8d1870b05b762a926eb905b28da17593a',
+  installerSha256: '9e31eb99679cabce3109a446b27d7fc580b28ae00965d61ed2e727706a59ac3e',
   binaryFilename: 'encastra-desktop.exe',
   binarySize: '8.7 MB',
-  binarySha256: '136e79c3dbdca071cac106c29de0b5a8e2b75a939a5cad0c87655e7c980e7871',
+  binarySha256: '1a7918cf51095438b097425f87b0fa724493763e4dd7badf011f6204e72acfab',
   builtOn: '2026-09-11',
   builtFor: 'Windows AMD64',
-  commit: 'ab8fb17',
+  commit: '669547c',
   signed: false,
   /** Installer format. Per user, no administrator required. See docs/RELEASE.md. */
   installerFormat: 'NSIS',

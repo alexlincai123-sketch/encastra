@@ -1,0 +1,132 @@
+/*
+ * The layout every 3D scene shares: a pinned viewport-sized stage with the canvas behind, the
+ * copy in front, and the flat diagram that speaks when the canvas cannot.
+ *
+ * Nothing here animates. Everything that moves is either a transform a timeline applies or a
+ * matrix Three computes; this file only describes the two resting states.
+ */
+
+.scene {
+  position: relative;
+}
+
+.pin {
+  position: relative;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  /* Contains anything a scene parks outside the composition before animating it inward. `clip`
+     rather than `hidden`, which would force the other axis to `auto` and hand ScrollTrigger a
+     second scroller to measure. */
+  overflow-x: clip;
+}
+
+/* The canvas host. Absolute and behind, so the text above it is never competing for space with
+   it and never has to be positioned around it. */
+.stage3d {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.copy {
+  position: relative;
+  z-index: 1;
+  width: min(var(--site-page), 100% - var(--site-gutter) * 2);
+  margin-inline: auto;
+  text-align: center;
+  /* The copy sits in the lower third and the composition keeps the optical centre. A headline
+     in the middle of a scene full of objects does not sit on top of them, it competes with
+     them, and both lose. */
+  padding-block-start: 62svh;
+  pointer-events: none;
+}
+
+.eyebrow {
+  display: block;
+  margin-block-end: var(--space-5);
+  font-family: var(--site-mono);
+  font-size: var(--site-step--1);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  opacity: 0;
+}
+
+.headline {
+  font-size: var(--site-step-5);
+  line-height: var(--site-display-leading);
+  text-wrap: balance;
+  margin-inline: auto;
+  max-width: 16ch;
+}
+
+/* One mask per word, so a word can rise out of nothing rather than fade into it. Inline-block is
+   required: an inline box will not clip its overflow. */
+.mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.word {
+  display: inline-block;
+  will-change: transform;
+}
+
+.lead {
+  margin: var(--space-5) auto 0;
+  max-width: 52ch;
+  font-size: var(--site-step-1);
+  line-height: var(--leading-normal);
+  color: var(--ink-muted);
+  opacity: 0;
+}
+
+/*
+ * The flat telling.
+ *
+ * Present in the document for everybody — a crawler, a reader with no WebGL, a visitor who asked
+ * for reduced motion — and taken out of the flow only when a stage really mounted and marked the
+ * host. It is `visibility` rather than `display` so the diagram keeps its layout box and the
+ * section does not change height the instant the canvas appears.
+ */
+.flat {
+  position: relative;
+  z-index: 1;
+  width: min(var(--site-page-narrow), 100% - var(--site-gutter) * 2);
+  margin: var(--space-7) auto 0;
+}
+
+.stage3d[data-three="on"] ~ .flat {
+  visibility: hidden;
+  height: 0;
+  margin: 0;
+}
+
+@media (max-width: 899px) {
+  .copy {
+    padding-block-start: 58svh;
+  }
+
+  .headline {
+    max-width: 12ch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No timeline will ever run, so nothing would lift these off the floor. */
+  .eyebrow,
+  .lead {
+    opacity: 1;
+  }
+
+  .pin {
+    min-height: auto;
+    padding-block: var(--site-section-y);
+  }
+
+  .copy {
+    padding-block-start: 0;
+  }
+}

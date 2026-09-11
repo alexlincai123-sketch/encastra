@@ -74,7 +74,17 @@ export function pinnedTimeline(
     scrollTrigger: {
       trigger: ctx.root,
       start: 'top top',
-      end: `+=${vh}%`,
+      // Viewport heights, resolved at refresh — not `+=180%`.
+      //
+      // A percentage in `end` is a percentage of the *trigger's* height, and the trigger here is
+      // the section this very timeline is about to pin. Pinning inserts a spacer, the section
+      // grows by the scroll distance, and on the next refresh the percentage is taken against
+      // the taller section: the scene then consumes several times the scroll it was written for
+      // and plays at a fraction of the intended pace. Measured on this page before the fix, a
+      // scene asking for 320% of the viewport was given 320% of 3,780px.
+      //
+      // A function is re-evaluated on every refresh, so this also stays correct across a resize.
+      end: () => `+=${Math.round(window.innerHeight * (vh / 100))}`,
       scrub,
       pin: ctx.pin ?? ctx.root,
       pinSpacing: true,

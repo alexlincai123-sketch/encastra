@@ -4,11 +4,10 @@ import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
 import { Cursor } from '@/components/cursor/Cursor';
+import { SceneAssembly } from '@/components/scenes3d/SceneAssembly';
 import { prefersReducedMotion, ScrollTrigger } from '@/lib/motion';
 
 import { Backdrop } from './Backdrop';
-import { Scene01Intro } from './Scene01Intro';
-import { Scene02WhatIf } from './Scene02WhatIf';
 import { Scene03Connect } from './Scene03Connect';
 import { Scene04Build } from './Scene04Build';
 import { Scene05Run } from './Scene05Run';
@@ -42,8 +41,7 @@ export function HomeExperience(): ReactNode {
     <div className={styles.experience}>
       <Backdrop />
       <Cursor />
-      <Scene01Intro />
-      <Scene02WhatIf />
+      <SceneAssembly />
       <Scene03Connect />
       <Scene04Build />
       <Scene05Run />
