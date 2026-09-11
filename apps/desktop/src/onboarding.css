@@ -11,14 +11,24 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  display: grid;
-  place-items: center;
-  padding: var(--space-4);
   background: rgb(0 0 0 / 55%);
 }
 
+/*
+ * Centred by its own offsets rather than by the backdrop's layout.
+ *
+ * Grid centring inside the backdrop put the card visibly off-centre in the packaged
+ * application, and chasing which ancestor was responsible was a worse use of time than removing
+ * the dependency: half the viewport, less half the card, is true whatever the parent is doing.
+ */
 .welcome__card {
-  width: min(560px, 100%);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - var(--space-5)));
+  max-height: calc(100vh - var(--space-5));
+  overflow-y: auto;
   padding: var(--space-5);
   background: var(--ground-1);
   border: var(--border-strong);

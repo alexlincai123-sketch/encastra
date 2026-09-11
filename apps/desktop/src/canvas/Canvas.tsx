@@ -58,17 +58,30 @@ export function Canvas() {
     [manifests],
   );
 
-  /** Selects a step and brings it into view, because selecting something off-screen is a trap. */
+  /**
+   * Selects a step and brings it into view, because selecting something off-screen is a trap.
+   *
+   * The selection has to be made where React Flow keeps it, not only in this application's
+   * store. Calling `select()` alone looked right and did nothing: React Flow still held the old
+   * selection, `onSelectionChange` fired with it, and the store was set straight back — so every
+   * arrow press appeared to be ignored. Going through `onNodesChange` moves the one selection
+   * there is, and the store follows it through `onSelectionChange` as it does for a click.
+   */
   const go = useCallback(
     (node: EditorNode | undefined) => {
       if (!node) return;
-      select(node.id);
+      onNodesChange([
+        ...nodes
+          .filter((n) => n.selected && n.id !== node.id)
+          .map((n) => ({ id: n.id, type: 'select' as const, selected: false })),
+        { id: node.id, type: 'select' as const, selected: true },
+      ]);
       setCenter(node.position.x + 110, node.position.y + 60, {
         zoom: getZoom(),
         duration: 180,
       });
     },
-    [select, setCenter, getZoom],
+    [nodes, onNodesChange, setCenter, getZoom],
   );
 
   /**
@@ -117,14 +130,22 @@ export function Canvas() {
           break;
         }
         case 'Escape':
+          // Cleared where React Flow keeps it, for the same reason `go` selects there: clearing
+          // only this application's store leaves React Flow holding the old selection, which it
+          // then puts straight back.
           event.preventDefault();
+          onNodesChange(
+            nodes
+              .filter((n) => n.selected)
+              .map((n) => ({ id: n.id, type: 'select' as const, selected: false })),
+          );
           select(null);
           break;
         default:
           break;
       }
     },
-    [ordered, selectedNodeId, go, select],
+    [ordered, selectedNodeId, go, select, nodes, onNodesChange],
   );
 
   /**
