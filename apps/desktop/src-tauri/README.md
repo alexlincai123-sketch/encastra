@@ -1,7 +1,7 @@
 # Desktop shell configuration
 
-`tauri.conf.json` is validated strictly and JSON has no comments, so the reasoning behind two
-of its settings lives here.
+`tauri.conf.json` and `capabilities/default.json` are validated strictly and JSON has no
+comments, so the reasoning behind these settings lives here.
 
 ## Content Security Policy
 
@@ -32,6 +32,40 @@ Loosening any of this is a security decision, not a build convenience. If a libr
 The known cost: NSIS installers draw more SmartScreen and antivirus false positives than MSI.
 That is a code-signing problem, not a packaging one, and it is solved by signing rather than by
 switching format.
+
+## Capabilities: what the webview is allowed to ask Tauri for
+
+`capabilities/default.json` grants four permissions and no others:
+
+```
+core:event:allow-listen     core:event:allow-unlisten
+dialog:allow-open           dialog:allow-save
+```
+
+Commands this application defines itself are not gated by capabilities — only Tauri's own and
+its plugins' are. So this file is not the application's permission model; that lives in the
+capability broker, behind those commands. This file is the much smaller question of what the
+webview may ask the *framework* for directly.
+
+The two that matter by their absence:
+
+- **No `fs` permissions.** `tauri-plugin-fs` is present in the dependency tree because the
+  dialog plugin pulls it in, and it is deliberately neither registered nor granted anything.
+  Granting it would hand the webview a second route to the filesystem, one that does not pass
+  through the broker, is not scoped to a folder anybody allowed, and never appears in a run
+  journal. Every property the permission model claims would become untrue at once, and nothing
+  in the application would look any different.
+- **No `core:event:allow-emit`.** Events travel one way, from the runtime to the interface. The
+  interface has no reason to inject them, and a webview able to emit `encastra://run-finished`
+  could fabricate a result the runtime never produced.
+
+This file was missing from the first build, which is worth recording because of how it failed.
+Tauri's default when no capability is declared is to grant nothing — correct, and fail-closed —
+so `listen()` and the file pickers were refused. The application still started and still drew
+every screen. The only visible symptom was the version in Settings reading `unknown`, because
+the version was fetched after the subscription that was failing. A permission model that fails
+closed can still fail quietly; that is an argument for checking the running application, not
+for trusting that a green test suite covers it.
 
 ## Icons
 

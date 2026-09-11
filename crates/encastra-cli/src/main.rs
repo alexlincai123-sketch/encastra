@@ -32,11 +32,21 @@ USAGE:
 OPTIONS:
     --input <node.port>=<file>   Supply a file to an input nothing else produces.
                                  Repeatable. This is how a run gets its starting material.
+    --allow-read <node>=<dir>    Let one node read inside one folder. No built-in component
+                                 needs this from here yet: the only one scoped to a folder is
+                                 Watch Folder, and `run` does not drive triggers.
     --allow-write <node>=<dir>   Let one node write into one folder. Nothing is writable
                                  without this, including first-party components.
+    --allow-http <node>=<host>   Let one node reach one host. Repeatable per node; an
+                                 unlisted host is refused, and there is no wildcard.
+    --allow-clipboard <node>     Let one node read or write the clipboard.
     --allow-notify <node>        Let one node show a desktop notification.
     --json                       Print the run journal as JSON instead of a summary.
     -h, --help                   Show this.
+
+Every --allow flag names a single node. There is deliberately no flag that grants something
+to the whole graph: a permission that is not attached to one step is a permission nobody
+decided to give.
 
 EXAMPLE:
     encastra run pipeline.json \\
@@ -105,7 +115,12 @@ fn command_components(as_json: bool) -> Result<ExitCode, String> {
 struct Options {
     graph_path: PathBuf,
     inputs: Vec<(PortRef, PathBuf)>,
+    readable: Vec<(NodeId, PathBuf)>,
     writable: Vec<(NodeId, PathBuf)>,
+    /// Accumulated per node, because one node may legitimately need two hosts and each
+    /// `--allow-http` names one. Replacing rather than extending would silently drop the first.
+    hosts: BTreeMap<NodeId, Vec<String>>,
+    clipboard: Vec<NodeId>,
     notifiers: Vec<NodeId>,
     json: bool,
 }
@@ -113,7 +128,10 @@ struct Options {
 fn parse_options(args: &[String]) -> Result<Options, String> {
     let mut graph_path: Option<PathBuf> = None;
     let mut inputs = Vec::new();
+    let mut readable = Vec::new();
     let mut writable = Vec::new();
+    let mut hosts: BTreeMap<NodeId, Vec<String>> = BTreeMap::new();
+    let mut clipboard = Vec::new();
     let mut notifiers = Vec::new();
     let mut json = false;
 
@@ -135,10 +153,31 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
                     PathBuf::from(path),
                 ));
             }
+            "--allow-read" => {
+                let value = next(args, &mut i, "--allow-read")?;
+                let (node, dir) = split_once(&value, "--allow-read <node>=<dir>")?;
+                readable.push((NodeId(node.to_owned()), PathBuf::from(dir)));
+            }
             "--allow-write" => {
                 let value = next(args, &mut i, "--allow-write")?;
                 let (node, dir) = split_once(&value, "--allow-write <node>=<dir>")?;
                 writable.push((NodeId(node.to_owned()), PathBuf::from(dir)));
+            }
+            "--allow-http" => {
+                let value = next(args, &mut i, "--allow-http")?;
+                let (node, host) = split_once(&value, "--allow-http <node>=<host>")?;
+                let host = host.trim().to_ascii_lowercase();
+                if host.is_empty() || host.contains('/') {
+                    return Err(format!(
+                        "\"{host}\" is not a host name. Give the host on its own, e.g. \
+                         api.example.com — not a whole address."
+                    ));
+                }
+                hosts.entry(NodeId(node.to_owned())).or_default().push(host);
+            }
+            "--allow-clipboard" => {
+                let value = next(args, &mut i, "--allow-clipboard")?;
+                clipboard.push(NodeId(value));
             }
             "--allow-notify" => {
                 let value = next(args, &mut i, "--allow-notify")?;
@@ -160,7 +199,10 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
     Ok(Options {
         graph_path: graph_path.ok_or("No graph file given. Try `encastra --help`.")?,
         inputs,
+        readable,
         writable,
+        hosts,
+        clipboard,
         notifiers,
         json,
     })
@@ -199,8 +241,19 @@ fn command_run(args: &[String], execute: bool) -> Result<ExitCode, String> {
             grants.allow_declared_input_handles(id, manifest);
         }
     }
+    // Paths are passed through as given: the broker resolves a granted folder itself, and
+    // resolving it twice in two places is how the two copies eventually disagree.
+    for (node, dir) in &options.readable {
+        grants.grant(node, "fs.read", GrantScope::Directory(dir.clone()));
+    }
     for (node, dir) in &options.writable {
         grants.grant(node, "fs.write", GrantScope::Directory(dir.clone()));
+    }
+    for (node, allowed) in &options.hosts {
+        grants.grant(node, "net.http", GrantScope::HttpHosts(allowed.clone()));
+    }
+    for node in &options.clipboard {
+        grants.grant(node, "system.clipboard", GrantScope::Allowed);
     }
     for node in &options.notifiers {
         grants.grant(node, "system.notify", GrantScope::Allowed);

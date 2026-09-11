@@ -33,24 +33,29 @@ and they never see a filesystem path. See [ARCHITECTURE](docs/ARCHITECTURE.md) �
 
 ## Status
 
-Early. What exists today, and what does not:
+**Beta 0.1.0-beta.1.** A desktop application that builds and runs workflows on this machine.
 
 | Piece | State |
 |---|---|
-| Architecture, threat model, roadmap, ten ADRs | written |
+| Component protocol — manifests, validation, canonical form, digest | working |
 | Type system — one rule table, TypeScript + Rust readers, conformance gate | working, cross-checked |
-| Component manifests — validation, canonical form, digest | working |
-| Graph model, validation, execution order | working |
+| Runtime — validation, execution, journal, conversions | working, sequential |
 | Capability broker — handles, grants, refusals, audit trail | working |
-| Runtime — executes a graph, records a journal | working, sequential |
-| Five first-party components + a CLI to run them | working |
-| Design tokens, brand mark, application icons | working |
-| Desktop app: canvas, palette, inspector/debugger, consent UI | working |
-| WebAssembly host, project files, versioning, registry service, website | **not started** |
+| Triggers and sessions — watch a folder, run per event, stop | working |
+| 19 components + 2 triggers | working |
+| Image work — resize, convert, thumbnail, info, with decode limits | working |
+| Desktop application — canvas, palette, debugger, consent, navigation | working |
+| Projects — `.encastra` files, save/open, version history, restore | working |
+| CLI — same runtime, headless | working |
+| **Third-party components (WebAssembly sandbox)** | **not built** — designed and documented only |
+| **Registry, marketplace, accounts, updates, website** | **not built** |
 
-A graph runs end to end today, in the desktop app and from a terminal. Projects cannot yet be
-saved or opened, third-party components cannot yet be executed, and nothing here is production
-software.
+The checkpoint this beta had to pass, and does:
+
+> Watch a folder. Drop an 800×400 PNG into it. A 200×100 copy appears in another folder,
+> and nothing was written anywhere that was not explicitly allowed.
+
+That is a test (`crates/encastra-builtins/tests/image_processor.rs`), not a screenshot.
 
 ```console
 $ cd examples/json-report
@@ -72,8 +77,6 @@ Finished with 1 failure(s). The rest of the graph still ran. in 0ms
 That refusal is the product working, not failing: a first-party component asked to write
 somewhere nobody had allowed, and the broker said no. Add `--allow-write write=./out` and the
 file appears.
-
----
 
 ## Getting started
 

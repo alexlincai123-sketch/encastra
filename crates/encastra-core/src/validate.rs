@@ -164,7 +164,9 @@ pub fn validate_with_supplied(
                     ),
                 )
                 .with_hint(
-                    "A workflow runs forwards. To repeat work, use a Loop node, which has a bound on how many times it runs, rather than wiring an output back to an earlier input.",
+                    // No Loop component exists. Naming one sends somebody hunting through the
+                    // palette for something that is not there, so this says what can be done.
+                    "A workflow runs forwards. Remove the connection that leads back to an earlier step. To do the same work repeatedly, start the workflow from a trigger — Watch Folder or Timer — which runs it once per event.",
                 ),
             );
             Vec::new()

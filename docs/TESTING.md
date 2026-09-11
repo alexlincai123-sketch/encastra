@@ -35,7 +35,7 @@ Build Tools components to install, are in
 
 ## 2. What exists
 
-**Rust: 126 tests across 17 suites.** Twelve of those are test binaries and five are doctest
+**Rust: 127 tests across 17 suites.** Twelve of those are test binaries and five are doctest
 runs; eight report zero — the `encastra-cli` binary, both `encastra-desktop` targets, and every
 doctest run, since nothing in the tree has an executable example. The nine that matter:
 
@@ -49,14 +49,15 @@ doctest run, since nothing in the tree has an executable example. The nine that 
 | `encastra-project` `tests/on_disk.rs` | 7 | real files on a real filesystem (§6) |
 | `encastra-builtins` unit | 8 | the first-party set as a set: manifests, implementations, capability surface |
 | `encastra-builtins` `tests/end_to_end.rs` | 6 | a whole graph through the real runtime |
-| `encastra-builtins` `tests/image_processor.rs` | 5 | the checkpoint (§3) |
+| `encastra-builtins` `tests/image_processor.rs` | 6 | the checkpoint (§3), and that a step wired to a trigger's *name* port cannot reach the file |
 
-**TypeScript: 27 tests across 2 files**, both in `packages/protocol/test` — `type-graph.test.ts`
-(23) and `conformance-matrix.test.ts` (4).
+**TypeScript: 35 tests across 3 files.** `packages/protocol/test` holds `type-graph.test.ts`
+(23) and `conformance-matrix.test.ts` (4); `apps/desktop/test/url.test.ts` holds the other 8,
+covering the address parser the permission prompt uses to decide which host it is asking about.
 
 `vitest.config.ts` includes `packages/*/test`, `apps/*/test` and `services/*/test`. The `apps/*`
-entry was added because a test placed in the desktop app would otherwise never have run; there
-are still none there. Tests time out at 10 seconds, because a hanging test is a failing test and
+entry was added because a test placed in the desktop app would otherwise never have run, and
+there is now one there. Tests time out at 10 seconds, because a hanging test is a failing test and
 should not hold CI open.
 
 ---

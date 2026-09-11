@@ -131,8 +131,9 @@ export function Security() {
           <dd>Never leave this machine unless a workflow you built sends them somewhere.</dd>
           <dt>Run journals</dt>
           <dd>
-            Record sizes and shapes, never file contents. A journal is written to disk and shown on
-            screen, so it is not somewhere your data should end up.
+            Record sizes and shapes, never file contents. A journal is held in memory for as long as
+            the window is open and shown on screen; nothing writes one to disk, and closing the
+            application discards it.
           </dd>
         </dl>
       </section>

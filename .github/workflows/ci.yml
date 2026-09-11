@@ -32,9 +32,13 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Typecheck
+        # Covers the packages *and* the desktop application. The desktop app had its own
+        # typecheck script that nothing called, so a type error in the whole editor passed CI.
         run: npm run typecheck
       - name: Tests
         run: npm run test
+      - name: Frontend production build
+        run: npm run build
       - name: The conformance matrix must be committed up to date
         # Regenerating must produce no diff. If it does, the type rules changed without the
         # fixture being refreshed, and the Rust job below would be checking a stale contract.
@@ -51,12 +55,28 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v5
+
+      - name: Tauri's Linux dependencies
+        # The workspace contains the desktop application, which links against the system
+        # webview. Without these the Linux job fails to build a crate that has nothing wrong
+        # with it.
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           # Kept in step with rust-toolchain.toml; the pin is what makes builds reproducible.
           toolchain: '1.98.1'
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy

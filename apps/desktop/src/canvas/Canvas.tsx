@@ -93,6 +93,12 @@ export function Canvas() {
         isValidConnection={isConnectionLegal}
         onNodeClick={(_, node) => select(node.id)}
         onPaneClick={() => select(null)}
+        // The inspector follows the *selection*, not the click that usually causes one.
+        // Wiring it to clicks alone meant a step selected with the keyboard — Tab to it, Enter
+        // to select — left the inspector showing nothing, so somebody working without a mouse
+        // could reach a step but never configure it.
+        onSelectionChange={({ nodes: selected }) => select(selected[0]?.id ?? null)}
+        nodesFocusable
         // Keeps hundreds of nodes affordable: offscreen ones are not in the DOM at all.
         onlyRenderVisibleElements
         snapToGrid

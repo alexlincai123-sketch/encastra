@@ -298,7 +298,8 @@ impl Broker {
             }
             Err(e) => {
                 // The error carries the OS message but never the path: a journal entry is
-                // rendered in a UI and written to disk.
+                // rendered on screen, and a person showing somebody a failed run should not be
+                // showing them their directory layout.
                 self.allow(node, "fs.read", detail);
                 Err(NodeError::new(
                     "read-failed",

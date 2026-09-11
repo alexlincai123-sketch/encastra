@@ -172,3 +172,76 @@ chokepoint. Two consequences for this build:
 
 The checkpoint in §53 of the directive — watch a folder, resize an image, save it, see
 success — is the gate. Nothing secondary ships before it works.
+
+---
+
+## 8. Second pass — what a documentation review found in the finished build
+
+The build was audited a second time, by reading the shipped documents against the code they
+describe. Six findings were code defects rather than documentation ones. All are fixed; each is
+recorded here with what was actually wrong, because "documentation was out of date" and "the
+product does not work" looked identical from the outside in at least one case.
+
+### 8.1 The consent UI could not grant two of the three scoped capabilities — **blocking**
+
+`Inspector.tsx` built a scoped grant for `fs.write` and nothing else. Every other capability
+fell through to a bare allow, which reaches the broker as `GrantScope::Allowed`. For `net.http`
+the broker reads that as *no permitted hosts*, and for `fs.read` as *no readable folders* —
+because an unconfigured allow-list is never "everything".
+
+Nothing was exposed: it failed closed, which is the right direction. But it meant **Watch Folder
+and HTTP Request could not be used from the editor at all**, and Watch Folder is the first node
+of the checkpoint workflow. The runtime supported it, the command line supported it, and the
+one surface a person would actually use did not.
+
+The panel now renders a control per grant shape: a folder for `fs.read` and `fs.write`, the host
+for `net.http`, taken from the address already typed on the node, and a plain allow for the
+capabilities that have nothing to scope. The Tauri command already mapped `folder` and `hosts`
+onto the right `GrantScope`; only the editor never sent them.
+
+### 8.2 A trigger made its file reachable by every node downstream of it — **narrowed**
+
+A watcher emits the file, its name and its extension from one event. The executor seeded
+reachability for the handle to *every* node the trigger had an edge to, regardless of which port
+that edge came from — so a node wired only to the name was given reach over the file.
+
+Not exploitable today: values travel along edges, so a node wired to the name never receives the
+handle, and every component in the build is first-party. It was still wider than the graph the
+person drew, which is the only thing reachability is supposed to mean. Seeding is now filtered
+by the edge's source port.
+
+`a_step_wired_to_the_name_cannot_read_the_file` pins it. The test was checked by reverting the
+fix and confirming it fails — a gate that passes against the bug it is meant to catch is not a
+gate.
+
+### 8.3 The command line could not express two thirds of the permission model
+
+`--allow-write` and `--allow-notify` existed; `fs.read`, `net.http` and `system.clipboard` had no
+flag. A headless run therefore could not do what the same runtime does under the UI, which
+undermines the reason the CLI exists — being the version of "it works" somebody else can check.
+Added `--allow-read`, `--allow-http` and `--allow-clipboard`, each naming a single node.
+
+### 8.4 Three places claimed the run journal is written to disk. Nothing writes one
+
+`Security.tsx` told people so on the privacy screen, and two source comments and `RUNTIME.md`
+repeated it. The rule those comments justify — summaries, never contents — is right and unchanged.
+The reason was restated honestly: a journal is the obvious thing to persist, export or paste into
+a bug report, and a format holding file contents could not be given those abilities later.
+
+### 8.5 The release manifest looked for a binary that is never produced
+
+`release_manifest.py` hashed `target/release/Encastra.exe`. Cargo names the executable after the
+crate, so the real path is `encastra-desktop.exe`. The script found the installer and silently
+omitted the binary rather than failing, which is the worst shape for a verification tool.
+
+### 8.6 The editor's host parser was stricter than the runtime's
+
+The new consent UI reads the host out of the address to know what to ask permission for, which
+makes it a second parser for a string the runtime already parses. It rejected an upper-case
+scheme that the runtime accepts, leaving the Allow button dead for a working address.
+
+Two parsers for one string is a smell, and the mitigation is the direction it fails in: the grant
+stores exactly what the editor computed and the runtime compares its own reading for equality, so
+a disagreement costs a refused request rather than an unintended reach. `hostOf` now lives in
+`apps/desktop/src/url.ts` with tests covering credentials in the address, a path that tries to
+smuggle a second host, ports, case, and the empty cases.

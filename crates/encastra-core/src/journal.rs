@@ -4,8 +4,11 @@
 //! only record of what a run actually did. Everything the node inspector shows (input, output,
 //! error, duration, capabilities used, logs, timestamp) comes from here.
 //!
-//! It holds **summaries, never contents**. A journal is written to disk and rendered in a UI;
-//! neither is somewhere a user's file contents or a secret should end up by default.
+//! It holds **summaries, never contents**. Today a journal only ever lives in memory and on
+//! screen, but the rule is written for where it is going rather than for where it is: a journal
+//! is the obvious thing to persist, to export, or to paste into a bug report, and a format that
+//! holds file contents cannot be given any of those abilities later without a migration nobody
+//! will notice is needed. Keeping contents out now is what keeps that door open.
 
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};

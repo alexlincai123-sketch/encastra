@@ -232,8 +232,11 @@ error if there was one, and `skipped_because` when the node never ran.
 
 ### It holds summaries, never contents
 
-A journal is written to disk and rendered in a UI; neither is somewhere a user's file contents
-should end up by default. `Value::summary()` describes text by length and structured data by
+A journal is rendered in a UI and is the obvious thing to persist, export or paste into a bug
+report — none of which is somewhere a user's file contents should end up by default. Nothing
+writes one to disk today; the rule is written for where a journal is going, because a format
+that holds file contents cannot safely be given those abilities later. `Value::summary()`
+describes text by length and structured data by
 shape — `text (13 characters)`, `json (1 fields)`, `image #7` — and never quotes either.
 Scalars are shown, because they are what makes a graph debuggable and they carry no bulk.
 

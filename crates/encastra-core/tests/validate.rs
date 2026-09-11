@@ -231,12 +231,20 @@ fn a_cycle_is_reported_as_a_path_with_a_way_out() {
         .errors()
         .find(|i| i.message.contains("loop"))
         .expect("a cycle error");
-    // The path names the nodes involved, and the hint points at the Loop node instead of
-    // just saying "not allowed".
+    // The path names the nodes involved, and the hint says what to do instead of just saying
+    // "not allowed". It used to name a Loop component, which does not exist — a hint that sends
+    // somebody hunting through the palette is worse than no hint, so this asserts the advice is
+    // something they can actually act on.
     for name in ["a", "b", "c"] {
         assert!(issue.message.contains(name), "{}", issue.message);
     }
-    assert!(issue.hint.as_deref().unwrap_or("").contains("Loop"));
+    let hint = issue.hint.as_deref().unwrap_or("");
+    assert!(hint.contains("Remove the connection"), "{hint}");
+    assert!(hint.contains("trigger"), "{hint}");
+    assert!(
+        !hint.contains("Loop"),
+        "the hint names a component that does not exist: {hint}"
+    );
 }
 
 #[test]

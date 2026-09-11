@@ -83,7 +83,7 @@ in the document. **Passing the schema does not mean a manifest will load.**
 | `id` | yes | Reverse-DNS, at least two segments, 1–128 characters. Each segment starts with a lower-case letter and contains only lower-case letters, digits and hyphens. **Immutable for the life of the component** |
 | `version` | yes | Semver, parsed by the `semver` crate. **Immutable once published**: the registry will refuse different bytes under the same `id@version` |
 | `name` | yes | Non-empty after trimming. What a person sees |
-| `runtime` | yes | A semver *range* of host versions this component is known to work on, e.g. `">=0.1.0 <2.0.0"` |
+| `runtime` | yes | A semver *range* of host versions this component is known to work on, e.g. `">=0.1.0 <2.0.0"`. Parsed and required to be well formed; **nothing matches it against the host version yet**, so today it documents an intention rather than gating anything |
 | `kind` | yes | `"core"` (first-party, compiled into the host) or `"wasm"` (everything else) |
 | `description`, `author`, `license`, `category`, `icon`, `documentation`, `changelog` | no | Metadata. `license` is an SPDX identifier |
 | `trigger` | no | A source of events rather than a step. See §2.3 |

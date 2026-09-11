@@ -477,6 +477,16 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   async attachRuntime() {
+    // Asked for first, and on its own. This used to sit after the subscription, which meant a
+    // subscription that failed also cost the version — and the version reading "unknown" was
+    // the only visible symptom of a much larger failure. Two independent things, asked for
+    // independently.
+    try {
+      set({ about: await ipc.about() });
+    } catch {
+      // Not knowing the version is not a reason to fail to start.
+    }
+
     // One subscription for the whole application. The teardown is returned so that a reload in
     // development does not leave a second set of listeners updating the same state.
     const off = await subscribe({
@@ -516,12 +526,6 @@ export const useEditor = create<EditorState>((set, get) => ({
         }));
       },
     });
-
-    try {
-      set({ about: await ipc.about() });
-    } catch {
-      // Not knowing the version is not a reason to fail to start.
-    }
 
     return off;
   },

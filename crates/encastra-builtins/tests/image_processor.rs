@@ -13,6 +13,7 @@ use encastra_core::journal::{NodeStatus, RunStatus};
 use encastra_core::media::{self, OutputFormat};
 use encastra_core::registry::ComponentRegistry;
 use encastra_core::session::Session;
+use encastra_core::value::{Handle, HandleKind};
 
 struct Sandbox(PathBuf);
 
@@ -347,4 +348,122 @@ fn stopping_a_session_ends_it_even_with_work_waiting() {
         "a stopped session runs nothing further"
     );
     assert!(session.is_stopped());
+}
+
+/// Watch Folder → Resize Image → Save File, with a fourth step wired only to the file's *name*.
+///
+/// The watcher emits the file, its name and its extension from one event. A step that asked for
+/// the name has been told nothing about the file, and this graph is what makes that checkable.
+fn image_processor_with_a_name_reader(inbox: &Path, out: &Path) -> Graph {
+    Graph::parse(
+        &serde_json::json!({
+            "nodes": {
+                "watch": {
+                    "component": "encastra.file.watch@1.0.0",
+                    "config": { "folder": inbox.to_string_lossy(), "extensions": "png", "existing": true },
+                    "position": { "x": 0, "y": 0 }
+                },
+                "resize": {
+                    "component": "encastra.image.resize@1.0.0",
+                    "config": { "width": 200, "height": 0, "mode": "contain" },
+                    "position": { "x": 260, "y": 0 }
+                },
+                "save": {
+                    "component": "encastra.file.save@1.0.0",
+                    "config": { "folder": out.to_string_lossy(), "suffix": "-small" },
+                    "position": { "x": 520, "y": 0 }
+                },
+                "label": {
+                    "component": "encastra.data.csv.read@1.0.0",
+                    "config": {},
+                    "position": { "x": 260, "y": 200 }
+                }
+            },
+            "edges": [
+                { "from": { "node": "watch",  "port": "file" },  "to": { "node": "resize", "port": "image" } },
+                { "from": { "node": "resize", "port": "image" }, "to": { "node": "save",   "port": "file" } },
+                { "from": { "node": "watch",  "port": "name" },  "to": { "node": "label",  "port": "text" } }
+            ]
+        })
+        .to_string(),
+    )
+    .expect("the graph must parse")
+}
+
+/// The handle the broker holds for a path, found the only way a test can: by asking it.
+///
+/// The kind has to be right because the broker checks the one it recorded against the one the
+/// caller claims, and a `.png` is imported as an image rather than as a plain file.
+fn handle_for(broker: &Broker, path: &Path, kind: HandleKind) -> Option<Handle> {
+    let wanted = std::fs::canonicalize(path).ok()?;
+    (0..64).find_map(|id| {
+        let handle = Handle { id, kind };
+        let held = std::fs::canonicalize(broker.path_of(handle)?).ok()?;
+        (held == wanted).then_some(handle)
+    })
+}
+
+#[test]
+fn a_step_wired_to_the_name_cannot_read_the_file() {
+    let sandbox = Sandbox::new("scope");
+    std::fs::write(sandbox.inbox().join("photo.png"), png(400, 200)).unwrap();
+
+    let installed = encastra_builtins::install_all();
+    let graph = image_processor_with_a_name_reader(&sandbox.inbox(), &sandbox.out());
+
+    let mut grant_set = grants(&graph, &installed.registry, &sandbox);
+    // Given on purpose, and wider than anything the editor would offer, so that the refusal
+    // below can only be about reach. Without it the read would be refused for not having been
+    // declared, and this test would pass while proving nothing.
+    grant_set.grant(
+        &NodeId("label".into()),
+        "fs.read",
+        GrantScope::Directory(sandbox.inbox()),
+    );
+
+    let mut broker = Broker::new(sandbox.run_dir(), grant_set).unwrap();
+    let mut session = Session::start(
+        graph,
+        &installed.registry,
+        installed.components.clone(),
+        &installed.triggers,
+        "scope",
+    )
+    .unwrap_or_else(|v| panic!("the graph must validate: {:#?}", v.issues));
+
+    let runs = drive(
+        &mut session,
+        &installed.registry,
+        &mut broker,
+        Duration::from_secs(20),
+    );
+    assert_eq!(runs.len(), 1, "one file should produce exactly one run");
+    assert_eq!(
+        runs[0].journal.status,
+        RunStatus::Ok,
+        "{:#?}",
+        runs[0].journal.nodes
+    );
+
+    let handle = handle_for(
+        &broker,
+        &sandbox.inbox().join("photo.png"),
+        HandleKind::Image,
+    )
+    .expect("the watcher must have imported the file it found");
+
+    let refused = broker
+        .open_input(&NodeId("label".into()), handle)
+        .expect_err("a step given only the name must not be able to open the file");
+    assert!(
+        refused.message.contains("nothing in the graph connected"),
+        "refused, but for the wrong reason: {}",
+        refused.message
+    );
+
+    // And the step the file *was* wired to is unaffected, so the rule narrowed rather than
+    // simply denied everything.
+    broker
+        .open_input(&NodeId("resize".into()), handle)
+        .expect("the step the file was wired to must still be able to read it");
 }

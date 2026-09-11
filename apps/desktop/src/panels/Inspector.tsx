@@ -11,6 +11,7 @@ import { Fragment } from 'react';
 import { ipc } from '../ipc';
 import { useEditor } from '../store';
 import type { ComponentManifest, ConfigField, NodeRecord, Snapshot } from '../types';
+import { hostOf } from '../url';
 
 function ConfigControl({
   nodeId,
@@ -167,7 +168,14 @@ function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: Component
   );
 }
 
-/** Capabilities that need an answer before this node can run. */
+/**
+ * Capabilities that need an answer before this node can run.
+ *
+ * Every kind of grant the broker understands has a control here. It used to have one — a
+ * folder for `fs.write` — and everything else fell through to a bare "allow", which the broker
+ * reads as *no* readable folders and *no* permitted hosts. Fail-closed, so nothing was exposed,
+ * but Watch Folder and HTTP Request could not be used from the editor at all.
+ */
 function Permissions({ nodeId, manifest }: { nodeId: string; manifest: ComponentManifest }) {
   const grants = useEditor((s) => s.grants);
   const setGrant = useEditor((s) => s.setGrant);
@@ -176,32 +184,61 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
   const needsAnswer = manifest.capabilities.filter((c) => c.scope !== 'input-handles');
   if (needsAnswer.length === 0) return null;
 
+  const folder = typeof config?.folder === 'string' ? config.folder.trim() : '';
+  // The host is taken from the address on the node, so allowing is about the place the person
+  // actually typed rather than a second field they have to keep in step with it.
+  const host = hostOf(typeof config?.url === 'string' ? config.url : '');
+
   return (
     <section className="panel__section">
       <h3 className="panel__group-label">Permissions</h3>
       {needsAnswer.map((capability) => {
         const granted = grants.find((g) => g.node === nodeId && g.kind === capability.kind);
-        const folder = typeof config?.folder === 'string' ? config.folder : undefined;
+        const wantsFolder = capability.kind === 'fs.read' || capability.kind === 'fs.write';
+        const wantsHost = capability.kind === 'net.http';
 
         return (
           <div className="field" key={capability.kind}>
             <span className="field__label">{capability.kind}</span>
             <p className="field__doc">{capability.reason}</p>
-            {capability.kind === 'fs.write' ? (
+
+            {wantsFolder ? (
               <div className="row" style={{ marginTop: 'var(--space-2)' }}>
                 <button
                   type="button"
                   className={granted ? 'btn' : 'btn btn--primary'}
                   disabled={!folder}
                   onClick={() => {
-                    // The button is disabled without a folder, but the type says the grant
-                    // must name one — a grant with no scope is an unbounded grant.
+                    // The button is disabled without a folder, but the type insists a grant
+                    // names one: a grant with no scope is an unbounded grant.
                     if (folder) setGrant({ node: nodeId, kind: capability.kind, folder });
                   }}
                 >
                   {granted ? 'Allowed' : 'Allow this folder'}
                 </button>
-                {!folder ? <span className="field__doc">Choose a folder first.</span> : null}
+                {folder ? (
+                  <span className="field__doc">{granted?.folder ?? folder}</span>
+                ) : (
+                  <span className="field__doc">Choose a folder first.</span>
+                )}
+              </div>
+            ) : wantsHost ? (
+              <div className="row" style={{ marginTop: 'var(--space-2)' }}>
+                <button
+                  type="button"
+                  className={granted ? 'btn' : 'btn btn--primary'}
+                  disabled={!host}
+                  onClick={() => {
+                    if (host) setGrant({ node: nodeId, kind: capability.kind, hosts: [host] });
+                  }}
+                >
+                  {granted ? 'Allowed' : `Allow ${host || 'this address'}`}
+                </button>
+                {host ? (
+                  <span className="field__doc">{(granted?.hosts ?? [host]).join(', ')}</span>
+                ) : (
+                  <span className="field__doc">Enter an address first.</span>
+                )}
               </div>
             ) : (
               <button

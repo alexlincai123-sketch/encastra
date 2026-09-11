@@ -223,8 +223,8 @@ fn a_component_failure_is_reported_where_it_happened() {
 
 #[test]
 fn the_journal_never_contains_the_file_contents() {
-    // The journal is written to disk and rendered in a UI. It records shapes and sizes, never
-    // the user's data.
+    // A journal is shown on screen and is the obvious thing to export or paste into a bug
+    // report later. It records shapes and sizes, never the user's data.
     let secret = format!(r#"{{"token":"{}"}}"#, "s3cr3t-".repeat(20));
     let (outcome, _sandbox) = run_demo("nosecrets", &secret, true);
 

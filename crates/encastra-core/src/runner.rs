@@ -340,8 +340,15 @@ fn execute(
             .is_some_and(|manifest| manifest.ports.outputs.contains_key(&port.port));
         if is_output {
             if let Value::Handle(handle) = &value {
-                // Anything downstream of the trigger may open what it produced.
-                for consumer in graph.outgoing(&port.node).map(|e| &e.to.node) {
+                // Only what is wired to *this* port. A watcher emits the file alongside its
+                // name and its extension; a node taking only the name has been given no reason
+                // to reach the file, and reading the edge's source port is what keeps the grant
+                // as narrow as the graph the person actually drew.
+                for consumer in graph
+                    .outgoing(&port.node)
+                    .filter(|edge| edge.from.port == port.port)
+                    .map(|edge| &edge.to.node)
+                {
                     broker.make_reachable(consumer, *handle);
                 }
             }

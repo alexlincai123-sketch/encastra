@@ -11,13 +11,13 @@
 |---|---|---|
 | 0 | Research, architecture, threat model, protocol spec | ✅ done |
 | 1 | Monorepo, tooling, CI skeleton | ✅ done |
-| 2 | Design system + visual language | 🔨 tokens, mark and icons exist; no component library yet |
-| 3 | Desktop shell (Tauri) boots and holds a window | 🔨 builds and runs; no SQLite, no migrations, no project storage |
-| 4 | Component engine: manifest → registry → instantiation | 🔨 manifests, validation and a local registry work; installing from a registry service does not exist |
-| 5 | Canvas: place, connect, type-check, save | 🔨 place, connect and type-check work; save does not exist |
-| 6 | Runtime: RUN / STOP, journal, debugger | 🔨 executes a validated graph and writes a journal, sequentially; STOP is cooperative, concurrency and preemptive timeouts are not built |
-| 7 | Projects + native versioning | 🔨 the .encastra container, save/open and version history work; assets, variables UI and branches do not |
-| 8 | Capability broker + consent UI + Security Center | 🔨 the broker enforces and audits, and the inspector grants per run; grants are not remembered and there is no Security Center |
+| 2 | Design system + visual language | ✅ tokens, mark, icons, and the application's own vocabulary |
+| 3 | Desktop shell (Tauri) boots and holds a window | ✅ builds, runs, navigates; project storage is the .encastra file rather than a database |
+| 4 | Component engine: manifest → registry → instantiation | ✅ for the shipped set; installing from a registry service does not exist |
+| 5 | Canvas: place, connect, type-check, save | ✅ including undo, clipboard, duplicate and select-all |
+| 6 | Runtime: RUN / STOP, journal, debugger | ✅ runs, stops, reports live progress; still sequential, and preemptive timeouts wait for the WebAssembly host |
+| 7 | Projects + native versioning | 🔨 container, save/open and history work; assets, a variables UI and branches do not |
+| 8 | Capability broker + consent UI + Security Center | ✅ broker, per-run consent, and a Security section; grants are deliberately not remembered between sessions |
 | 9 | Component SDK + CLI + first Wasm component end-to-end | ⬜ |
 | 10 | Backend: auth, users, projects, registry | ⬜ |
 | 11 | Community | ⬜ |
