@@ -25,6 +25,13 @@ These builds are **not code-signed**, so Windows SmartScreen will warn about an 
 
 <!-- BUILD:END -->
 
+The hash for `encastra-desktop.exe` is the hash of the **built** binary. The copy the installer
+leaves in `%LOCALAPPDATA%\Encastra\` differs from it by exactly three bytes: Tauri's NSIS installer
+rewrites a marker inside the binary (`__TAURI_BUNDLE_TYPE_VAR_UNK` becomes `…_NSS`) so the running
+application knows which kind of package it came from. So an installed copy will not match the hash
+above, and that is expected rather than a sign of tampering. Check the installer's hash, which is
+the artefact that actually travels.
+
 ---
 
 ## Producing a build
