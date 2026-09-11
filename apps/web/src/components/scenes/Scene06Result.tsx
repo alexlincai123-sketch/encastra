@@ -4,16 +4,15 @@ import type { ReactNode } from 'react';
 
 import { Plate, PlateTiles } from '@/components/visual/Plate';
 import { componentNode } from '@/lib/graph-nodes';
+import type { Locale } from '@/lib/i18n/locale';
 import { handoff, handon, merge, morph, settle, split } from '@/lib/motion-system';
-import { RESULT_AFTER, RESULT_BEFORE, RUN_FLOW_IDS, SCENE_COPY } from '@/lib/scenes';
+import { RESULT_AFTER, RESULT_BEFORE, RUN_FLOW_IDS, sceneCopy } from '@/lib/scenes';
 import type { SceneCtx } from '@/lib/scroll';
 import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import { MiniNode } from './MiniNode';
 import local from './Scene06.module.css';
 import styles from './Scenes.module.css';
-
-const COPY = SCENE_COPY.result;
 
 /** The real pipeline this scene shows resizing the picture — never retyped as a literal. */
 const RESIZE_NODE = componentNode(RUN_FLOW_IDS[1]);
@@ -100,7 +99,8 @@ function buildVariant(ctx: SceneCtx, variant: Variant): void {
   handoff(tl, targets(depthGroup), { at: 0.94, duration: 0.06 });
 }
 
-export function Scene06Result(): ReactNode {
+export function Scene06Result({ locale }: { locale: Locale }): ReactNode {
+  const COPY = sceneCopy(locale).result;
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const mm = ctx.gsap.matchMedia();
 

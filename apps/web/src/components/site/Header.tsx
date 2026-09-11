@@ -6,11 +6,14 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 
 import { PRIMARY_NAV } from '@/config/nav';
 import { VERSION } from '@/config/site';
+import type { Locale } from '@/lib/i18n/locale';
+import { t } from '@/lib/i18n/translate';
 import styles from './Header.module.css';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 
-export function Header(): ReactNode {
+export function Header({ locale }: { locale: Locale }): ReactNode {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -57,7 +60,9 @@ export function Header(): ReactNode {
           aria-controls={menuId}
           onClick={() => setOpen((value) => !value)}
         >
-          <span className="visually-hidden">{open ? 'Close menu' : 'Open menu'}</span>
+          <span className="visually-hidden">
+            {open ? t(locale, 'header.closeMenu') : t(locale, 'header.openMenu')}
+          </span>
           <span className={styles.menuIcon} data-open={open} aria-hidden="true">
             <span />
             <span />
@@ -65,7 +70,7 @@ export function Header(): ReactNode {
         </button>
 
         <div ref={panelRef} id={menuId} className={styles.panel} data-open={open}>
-          <nav aria-label="Main">
+          <nav aria-label={t(locale, 'header.navAriaLabel')}>
             <ul className={styles.nav}>
               {PRIMARY_NAV.map((item) => {
                 const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -76,7 +81,7 @@ export function Header(): ReactNode {
                       href={item.href}
                       {...(current ? { 'aria-current': 'page' } : {})}
                     >
-                      {item.label}
+                      {t(locale, `nav.primary.${item.id}`)}
                     </Link>
                   </li>
                 );
@@ -85,9 +90,10 @@ export function Header(): ReactNode {
           </nav>
 
           <div className={styles.actions}>
-            <ThemeToggle />
+            <ThemeToggle locale={locale} />
+            <LanguageSwitcher locale={locale} path={pathname} />
             <Link className={styles.download} href="/download">
-              Download
+              {t(locale, 'header.download')}
             </Link>
           </div>
         </div>

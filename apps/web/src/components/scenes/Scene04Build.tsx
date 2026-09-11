@@ -5,6 +5,7 @@ import { Fragment, type ReactNode } from 'react';
 import type { FlowStep } from '@/components/graph/Graph';
 import { GraphFlow } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
+import type { Locale } from '@/lib/i18n/locale';
 import { assemble, DEPTH, handoff, handon, morph, settle, snap, stack } from '@/lib/motion-system';
 import {
   BUILD_STAGE_3,
@@ -12,7 +13,7 @@ import {
   BUILD_STAGE_20_ADDED,
   CONNECT_ACCEPTED_LABEL,
   RUN_SECOND_WIRE_LABEL,
-  SCENE_COPY,
+  sceneCopy,
 } from '@/lib/scenes';
 import type { SceneCtx } from '@/lib/scroll';
 import { pinnedTimeline, sel, sunflowerLayout, targets, useScrollScene } from '@/lib/scroll';
@@ -20,8 +21,6 @@ import { pinnedTimeline, sel, sunflowerLayout, targets, useScrollScene } from '@
 import { MiniNode } from './MiniNode';
 import local from './Scene04.module.css';
 import styles from './Scenes.module.css';
-
-const COPY = SCENE_COPY.build;
 
 /**
  * Real ids only, from `lib/scenes.ts` — nothing here is invented.
@@ -151,7 +150,8 @@ function buildVariant(ctx: SceneCtx, variant: Variant): void {
   handoff(tl, targets(resolveOuter), { at: 0.97, duration: 0.03 });
 }
 
-export function Scene04Build(): ReactNode {
+export function Scene04Build({ locale }: { locale: Locale }): ReactNode {
+  const COPY = sceneCopy(locale).build;
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const mm = ctx.gsap.matchMedia();
 

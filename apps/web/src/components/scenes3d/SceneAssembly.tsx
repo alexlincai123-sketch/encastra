@@ -5,7 +5,13 @@ import * as THREE from 'three';
 
 import { GraphFlow } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
-import { CONNECT_ACCEPTED_LABEL, RUN_FLOW_IDS, RUN_SECOND_WIRE_LABEL } from '@/lib/scenes';
+import type { Locale } from '@/lib/i18n/locale';
+import {
+  CONNECT_ACCEPTED_LABEL,
+  RUN_FLOW_IDS,
+  RUN_SECOND_WIRE_LABEL,
+  sceneCopy,
+} from '@/lib/scenes';
 import { sel, useScrollScene } from '@/lib/scroll';
 import type { Category, Glyph } from '@/three/face';
 import { createBlock, createConnection, createPulse, setBlockEdge } from '@/three/objects';
@@ -98,7 +104,12 @@ const FIELD_FACES: ReadonlyArray<{ label: string; glyph: Glyph; category: Catego
 const DESKTOP_EXTRAS = 15;
 const MOBILE_EXTRAS = 7;
 
-export function SceneAssembly(): ReactNode {
+export function SceneAssembly({ locale }: { locale: Locale }): ReactNode {
+  // The opening sentence comes from the shared copy table rather than being written here, so the
+  // scene that leads the page is translated by the same table as the nine that follow it.
+  const COPY = sceneCopy(locale).intro;
+  const words = COPY.headline.split(' ');
+
   const stageRef = useStage3D<HTMLDivElement>(
     ({ host, stage, gsap }) => {
       const mm = gsap.matchMedia();
@@ -320,15 +331,19 @@ export function SceneAssembly(): ReactNode {
 
         <div ref={textRef} className={styles.copy}>
           <span className={styles.eyebrow} data-animate>
-            01 — Parts
+            {COPY.index} — {COPY.eyebrow}
           </span>
           <h1 className={styles.headline}>
             {/* The space lives outside the mask: inside an `inline-block` with
                 `overflow: hidden` a trailing space is clipped and the sentence arrives as one
-                word. Keyed by the word itself, which is unique in this sentence and does not
-                need the index. */}
-            {['Software', 'is', 'made', 'of', 'parts.'].map((word) => (
-              <span key={word}>
+                word. Keyed by word *and* position, because a translated sentence is free to
+                repeat a word where the English one does not. */}
+            {words.map((word, i) => (
+              // A fixed sentence from a copy table, never reordered, so the position is a stable
+              // identity — and it has to be part of the key, because a translation is free to
+              // repeat a word where the English does not.
+              // biome-ignore lint/suspicious/noArrayIndexKey: static, ordered copy.
+              <span key={`${word}-${i}`}>
                 <span className={styles.mask}>
                   <span className={styles.word} data-animate>
                     {word}
@@ -338,8 +353,7 @@ export function SceneAssembly(): ReactNode {
             ))}
           </h1>
           <p className={styles.lead} data-animate>
-            Watch Folder, Resize Image, Save File. Three real components, joined by a connection the
-            type system had to agree to — and then something runs through them.
+            {COPY.sub}
           </p>
         </div>
 

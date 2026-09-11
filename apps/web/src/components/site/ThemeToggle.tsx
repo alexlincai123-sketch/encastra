@@ -2,6 +2,8 @@
 
 import { type ReactNode, useEffect, useState } from 'react';
 
+import type { Locale } from '@/lib/i18n/locale';
+import { t } from '@/lib/i18n/translate';
 import styles from './ThemeToggle.module.css';
 
 /**
@@ -17,7 +19,7 @@ type Theme = 'dark' | 'light';
 
 const STORAGE_KEY = 'encastra-theme';
 
-export function ThemeToggle(): ReactNode {
+export function ThemeToggle({ locale }: { locale: Locale }): ReactNode {
   // Rendered as `null` until mounted: the server cannot know the visitor's theme, and
   // announcing the wrong one would be worse than announcing none.
   const [theme, setTheme] = useState<Theme | null>(null);
@@ -46,7 +48,11 @@ export function ThemeToggle(): ReactNode {
       className={styles.toggle}
       onClick={() => apply(next)}
       disabled={theme === null}
-      aria-label={theme === null ? 'Change theme' : `Switch to ${next} theme`}
+      aria-label={
+        theme === null
+          ? t(locale, 'theme.changeTheme')
+          : t(locale, 'theme.switchTo', { theme: t(locale, `theme.${next}`) })
+      }
     >
       <span aria-hidden="true" className={styles.icon}>
         {theme === 'light' ? <MoonIcon /> : <SunIcon />}

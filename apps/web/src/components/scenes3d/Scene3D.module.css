@@ -29,8 +29,20 @@
   z-index: 0;
 }
 
+/*
+ * Anchored to the bottom, so it grows upwards.
+ *
+ * It used to be pushed down from the top by a padding, which works for exactly as long as every
+ * translation of the sentence is the same length as the English one. It is not: the Spanish
+ * headline runs eight words to the English five, wrapped to four lines, and ran off the bottom
+ * of the screen. Anchoring the block to the floor of the scene means a longer sentence takes
+ * room from the composition above it — which has room — instead of from the viewport, which
+ * does not.
+ */
 .copy {
-  position: relative;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 7svh;
   z-index: 1;
   width: min(var(--site-page), 100% - var(--site-gutter) * 2);
   margin-inline: auto;
@@ -38,7 +50,6 @@
   /* The copy sits in the lower third and the composition keeps the optical centre. A headline
      in the middle of a scene full of objects does not sit on top of them, it competes with
      them, and both lose. */
-  padding-block-start: 62svh;
   pointer-events: none;
 }
 
@@ -54,11 +65,13 @@
 }
 
 .headline {
-  font-size: var(--site-step-5);
+  /* A step below the largest: this sentence comes from a copy table and a translation of it can
+     be half as long again, so the size has to survive four lines rather than three. */
+  font-size: var(--site-step-4);
   line-height: var(--site-display-leading);
   text-wrap: balance;
   margin-inline: auto;
-  max-width: 16ch;
+  max-width: 22ch;
 }
 
 /* One mask per word, so a word can rise out of nothing rather than fade into it. Inline-block is
@@ -106,7 +119,7 @@
 
 @media (max-width: 899px) {
   .copy {
-    padding-block-start: 58svh;
+    bottom: 5svh;
   }
 
   .headline {
@@ -115,6 +128,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Nothing is pinned, so the copy goes back into the flow rather than hanging off the bottom of
+     a box that is no longer a screen tall. */
+  .copy {
+    position: relative;
+    bottom: auto;
+    margin-block-start: var(--space-7);
+  }
+
   /* No timeline will ever run, so nothing would lift these off the floor. */
   .eyebrow,
   .lead {

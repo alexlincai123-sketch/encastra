@@ -5,15 +5,13 @@ import type { ReactNode } from 'react';
 import { CTA } from '@/components/ui/Ui';
 import { RELEASE } from '@/config/site';
 import { COMPONENT_COUNT, TRIGGER_COUNT } from '@/lib/components.data';
+import type { Locale } from '@/lib/i18n/locale';
 import { assemble, handon, settle } from '@/lib/motion-system';
-import { SCENE_COPY } from '@/lib/scenes';
+import { sceneCopy } from '@/lib/scenes';
 import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import scene from './Scene10.module.css';
 import styles from './Scenes.module.css';
-
-const COPY = SCENE_COPY.try;
-const WORDS = COPY.headline.split(' ');
 
 /**
  * The last scene never hands off — nine scenes of explanation resolve into one plain interface,
@@ -22,7 +20,9 @@ const WORDS = COPY.headline.split(' ');
  * others do: `settle`, the one verb reserved for a system actually coming to rest rather than
  * moving on to the next thing.
  */
-export function Scene10Try(): ReactNode {
+export function Scene10Try({ locale }: { locale: Locale }): ReactNode {
+  const COPY = sceneCopy(locale).try;
+  const WORDS = COPY.headline.split(' ');
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
     const index = ctx.root.querySelector(sel(styles.index));

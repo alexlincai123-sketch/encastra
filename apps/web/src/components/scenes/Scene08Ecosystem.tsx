@@ -4,16 +4,16 @@ import type { ReactNode } from 'react';
 
 import { GraphNode } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
+import type { Locale } from '@/lib/i18n/locale';
 import { Flip } from '@/lib/motion';
 import { BEAT, DEPTH, EASE, handoff, handon, morph, scatterOrder, snap } from '@/lib/motion-system';
-import { SCENE_COPY } from '@/lib/scenes';
+import { sceneCopy } from '@/lib/scenes';
 import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import { MiniNode } from './MiniNode';
 import eco from './Scene08.module.css';
 import styles from './Scenes.module.css';
 
-const COPY = SCENE_COPY.ecosystem;
 const COMPONENT = componentNode('encastra.image.resize');
 
 /**
@@ -31,7 +31,8 @@ const CATEGORY_GROUPS = [
   { id: 'system', ids: ['encastra.system.notify', 'encastra.system.clipboard'] },
 ].map((group) => ({ id: group.id, nodes: group.ids.map((id) => componentNode(id)) }));
 
-export function Scene08Ecosystem(): ReactNode {
+export function Scene08Ecosystem({ locale }: { locale: Locale }): ReactNode {
+  const COPY = sceneCopy(locale).ecosystem;
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
     const heading = ctx.root.querySelector(sel(styles.headline));

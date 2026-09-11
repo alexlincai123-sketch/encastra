@@ -49,27 +49,44 @@ const mono = JetBrains_Mono({
 import { Footer } from '@/components/site/Footer';
 import { Header } from '@/components/site/Header';
 import { SITE, VERSION } from '@/config/site';
+import { getLocale, t } from '@/lib/i18n';
 
-export const metadata: Metadata = {
-  metadataBase: new URL(SITE.url),
-  title: {
-    default: `${SITE.name} — ${SITE.tagline}`,
-    template: `%s — ${SITE.name}`,
-  },
-  description: SITE.description,
-  applicationName: SITE.name,
-  robots: { index: true, follow: true },
-  openGraph: {
-    type: 'website',
-    siteName: SITE.name,
-    title: `${SITE.name} — ${SITE.tagline}`,
-    description: SITE.description,
-    url: SITE.url,
-  },
-  // No Twitter card image is declared: there is no image to declare, and pointing at one that
-  // does not exist would render as a broken preview.
-  other: { 'encastra:version': VERSION },
-};
+/**
+ * `title`, `description` and the `openGraph` copy are built from `t()` rather than
+ * `SITE.tagline`/`SITE.description` directly, so the tags a crawler or a social-media unfurl
+ * reads follow the same cookie-read locale everything else on the page does — see
+ * `lib/i18n/locale.ts` for why that is a cookie and not `Accept-Language`. `SITE.name` and
+ * `SITE.url` are facts (a brand name, a domain), not copy, and are never run through `t()`.
+ *
+ * This has to be `generateMetadata()` rather than the static `export const metadata` the file
+ * used to have: a static export cannot read the request's cookie. The page was already dynamic
+ * per request for the CSP nonce below, so this adds no new cost to the rendering strategy.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const tagline = t(locale, 'site.tagline');
+  const description = t(locale, 'site.description');
+  return {
+    metadataBase: new URL(SITE.url),
+    title: {
+      default: `${SITE.name} — ${tagline}`,
+      template: `%s — ${SITE.name}`,
+    },
+    description,
+    applicationName: SITE.name,
+    robots: { index: true, follow: true },
+    openGraph: {
+      type: 'website',
+      siteName: SITE.name,
+      title: `${SITE.name} — ${tagline}`,
+      description,
+      url: SITE.url,
+    },
+    // No Twitter card image is declared: there is no image to declare, and pointing at one that
+    // does not exist would render as a broken preview.
+    other: { 'encastra:version': VERSION },
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -92,10 +109,13 @@ export default async function RootLayout({
   children: ReactNode;
 }): Promise<ReactNode> {
   const nonce = (await headers()).get('x-nonce') ?? undefined;
+  // A cookie read, same request that already awaits `headers()` above for the nonce — see
+  // `lib/i18n/locale.ts` for why the locale lives in a cookie rather than a route segment.
+  const locale = await getLocale();
 
   return (
     <html
-      lang="en"
+      lang={locale}
       data-theme="dark"
       className={`${display.variable} ${body.variable} ${mono.variable}`}
       suppressHydrationWarning
@@ -111,13 +131,13 @@ export default async function RootLayout({
       </head>
       <body>
         <a className="skip-link" href="#main">
-          Skip to content
+          {t(locale, 'a11y.skipToContent')}
         </a>
-        <Header />
+        <Header locale={locale} />
         <main id="main" tabIndex={-1}>
           {children}
         </main>
-        <Footer />
+        <Footer locale={locale} />
       </body>
     </html>
   );

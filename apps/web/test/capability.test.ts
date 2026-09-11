@@ -104,7 +104,9 @@ describe('detectCapability', () => {
 
   it('ignores an unreported device memory rather than assuming the worst', () => {
     // `deviceMemory` is not implemented in every browser. Absent is not small.
-    vi.stubGlobal('document', { createElement: () => ({ getContext: () => ({ getExtension: () => null }) }) });
+    vi.stubGlobal('document', {
+      createElement: () => ({ getContext: () => ({ getExtension: () => null }) }),
+    });
     vi.stubGlobal('navigator', { hardwareConcurrency: 8 });
     vi.stubGlobal('window', {
       innerWidth: 1440,

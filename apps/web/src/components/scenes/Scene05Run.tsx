@@ -4,20 +4,19 @@ import type { CSSProperties, ReactNode } from 'react';
 
 import { GraphNode, typeColour, Wire } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
+import type { Locale } from '@/lib/i18n/locale';
 import { execute, flow, handoff, handon } from '@/lib/motion-system';
 import {
   CONNECT_ACCEPTED_LABEL,
   RUN_FLOW_IDS,
   RUN_SECOND_WIRE_LABEL,
-  SCENE_COPY,
+  sceneCopy,
 } from '@/lib/scenes';
 import type { SceneCtx } from '@/lib/scroll';
 import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import local from './Scene05.module.css';
 import styles from './Scenes.module.css';
-
-const COPY = SCENE_COPY.run;
 
 const [WATCH_ID, RESIZE_ID, SAVE_ID] = RUN_FLOW_IDS;
 const WATCH = componentNode(WATCH_ID);
@@ -107,7 +106,8 @@ function buildVariant(ctx: SceneCtx, variant: Variant): void {
   handoff(tl, targets(depthGroup), { at: 0.9, duration: 0.06 });
 }
 
-export function Scene05Run(): ReactNode {
+export function Scene05Run({ locale }: { locale: Locale }): ReactNode {
+  const COPY = sceneCopy(locale).run;
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const mm = ctx.gsap.matchMedia();
 

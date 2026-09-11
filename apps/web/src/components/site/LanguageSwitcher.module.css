@@ -1,0 +1,52 @@
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* `<fieldset>` (used for its native grouping semantics — see the component's own comment on
+     why `role="group"` on a `<div>` was replaced with it) carries a browser-default border,
+     margin and min-width; all three are reset here rather than left to fight the pill styling
+     below. */
+  min-width: 0;
+  margin: 0;
+  padding: 2px;
+  background: var(--ground-2);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+/* Each locale is its own `<form>` (a distinct server action target), but the group should still
+   lay out as one row of buttons — `display: contents` removes the form from the box model so
+   `.switcher`'s flex sees the button directly. */
+.switcher form {
+  display: contents;
+}
+
+.option {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 32px;
+  padding-inline: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--ink-faint);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.option:hover {
+  color: var(--ink);
+  background: var(--ground-3);
+}
+
+.option[data-active="true"] {
+  color: var(--ink);
+  background: var(--ground-0);
+}

@@ -1,10 +1,10 @@
 'use client';
 
 import type { ReactNode } from 'react';
-
 import { componentNode } from '@/lib/graph-nodes';
+import type { Locale } from '@/lib/i18n/locale';
 import { encapsulate, execute, handoff, handon, morph, settle, stack } from '@/lib/motion-system';
-import { RUN_FLOW_IDS, SCENE_COPY } from '@/lib/scenes';
+import { RUN_FLOW_IDS, sceneCopy } from '@/lib/scenes';
 import type { SceneCtx } from '@/lib/scroll';
 import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
@@ -12,7 +12,6 @@ import { MiniNode } from './MiniNode';
 import local from './Scene07.module.css';
 import styles from './Scenes.module.css';
 
-const COPY = SCENE_COPY.reuse;
 const NODES = RUN_FLOW_IDS.map((id) => componentNode(id));
 
 function categoryOf(id: string): string {
@@ -91,7 +90,8 @@ function buildVariant(ctx: SceneCtx, variant: Variant): void {
   handoff(tl, targets(depthGroup), { at: 0.94, duration: 0.06 });
 }
 
-export function Scene07Reuse(): ReactNode {
+export function Scene07Reuse({ locale }: { locale: Locale }): ReactNode {
+  const COPY = sceneCopy(locale).reuse;
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const mm = ctx.gsap.matchMedia();
 

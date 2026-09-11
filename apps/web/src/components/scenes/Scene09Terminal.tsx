@@ -4,14 +4,13 @@ import type { ReactNode } from 'react';
 
 import { TerminalDemo } from '@/components/terminal/Terminal';
 import terminal from '@/components/terminal/Terminal.module.css';
+import type { Locale } from '@/lib/i18n/locale';
 import { BEAT, flow, handoff, handon, merge } from '@/lib/motion-system';
-import { SCENE_COPY } from '@/lib/scenes';
+import { sceneCopy } from '@/lib/scenes';
 import { sel, targets, useScrollScene } from '@/lib/scroll';
 
 import scene from './Scene09.module.css';
 import styles from './Scenes.module.css';
-
-const COPY = SCENE_COPY.terminal;
 
 /**
  * Deliberately not pinned — see the original note this scene shipped with: the transcript in
@@ -28,7 +27,8 @@ const COPY = SCENE_COPY.terminal;
  * need `Terminal.tsx` to expose its `revealCount`/active step outward (a prop callback or a ref),
  * which this brief rules out touching; this scene does not attempt it.
  */
-export function Scene09Terminal(): ReactNode {
+export function Scene09Terminal({ locale }: { locale: Locale }): ReactNode {
+  const COPY = sceneCopy(locale).terminal;
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
     const heading = ctx.root.querySelector(sel(styles.headline));

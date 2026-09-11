@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { GraphNode, Wire } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
+import type { Locale } from '@/lib/i18n/locale';
 import { breakApart, handoff, handon, snap } from '@/lib/motion-system';
 import {
   CONNECT_ACCEPTED_LABEL,
@@ -11,14 +12,12 @@ import {
   CONNECT_REFUSED_SOURCE_ID,
   CONNECT_SOURCE_ID,
   CONNECT_TARGET_ID,
-  SCENE_COPY,
+  sceneCopy,
 } from '@/lib/scenes';
 import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import scene from './Scene03.module.css';
 import styles from './Scenes.module.css';
-
-const COPY = SCENE_COPY.connect;
 
 const SOURCE = componentNode(CONNECT_SOURCE_ID);
 const TARGET = componentNode(CONNECT_TARGET_ID);
@@ -26,7 +25,8 @@ const REFUSED_SOURCE = componentNode(CONNECT_REFUSED_SOURCE_ID);
 /** A second instance of the same target: two independent attempts at the one input. */
 const TARGET_REFUSED: typeof TARGET = { ...TARGET, id: `${TARGET.id}-refused-attempt` };
 
-export function Scene03Connect(): ReactNode {
+export function Scene03Connect({ locale }: { locale: Locale }): ReactNode {
+  const COPY = sceneCopy(locale).connect;
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
     const composition = ctx.root.querySelector(sel(scene.composition));

@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 
 import { Cursor } from '@/components/cursor/Cursor';
 import { SceneAssembly } from '@/components/scenes3d/SceneAssembly';
+import type { Locale } from '@/lib/i18n/locale';
 import { prefersReducedMotion, ScrollTrigger } from '@/lib/motion';
 
 import { Backdrop } from './Backdrop';
@@ -27,8 +28,16 @@ import styles from './Scenes.module.css';
  * component's only added responsibility is one `ScrollTrigger.refresh()` after everything has
  * mounted, so the ten scenes' scroll distances are measured against the page's real final
  * height rather than whatever partial height existed when the first of them registered.
+ *
+ * `locale`, computed server-side in `app/page.tsx` (a plain cookie read — see
+ * `lib/i18n/locale.ts`), is threaded through as a prop to every 2D scene below rather than read
+ * from context: it is one value, known before this component ever mounts, and prop-drilling it
+ * eight levels deep is less machinery than a client-side provider would be for the same fact.
+ * `SceneAssembly` — scenes 1 and 2, the WebGL layer — does not take it: that component is out of
+ * scope for this pass (see `CLAUDE.md`'s note on `components/scenes3d/**`) and does not read
+ * `lib/scenes.ts` copy today regardless.
  */
-export function HomeExperience(): ReactNode {
+export function HomeExperience({ locale }: { locale: Locale }): ReactNode {
   useEffect(() => {
     // Under reduced motion, no scene ever registers the ScrollTrigger plugin at all (every one
     // of them returns before that point) — nothing to refresh, and nothing to call it on.
@@ -41,15 +50,15 @@ export function HomeExperience(): ReactNode {
     <div className={styles.experience}>
       <Backdrop />
       <Cursor />
-      <SceneAssembly />
-      <Scene03Connect />
-      <Scene04Build />
-      <Scene05Run />
-      <Scene06Result />
-      <Scene07Reuse />
-      <Scene08Ecosystem />
-      <Scene09Terminal />
-      <Scene10Try />
+      <SceneAssembly locale={locale} />
+      <Scene03Connect locale={locale} />
+      <Scene04Build locale={locale} />
+      <Scene05Run locale={locale} />
+      <Scene06Result locale={locale} />
+      <Scene07Reuse locale={locale} />
+      <Scene08Ecosystem locale={locale} />
+      <Scene09Terminal locale={locale} />
+      <Scene10Try locale={locale} />
     </div>
   );
 }

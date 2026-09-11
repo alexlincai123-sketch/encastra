@@ -1,3 +1,5 @@
+import type { Locale } from './i18n/locale';
+
 /**
  * Copy and data for the ten homepage scenes.
  *
@@ -103,9 +105,50 @@ export const RESULT_AFTER = { name: 'holiday-small.png', dims: '200×100' } as c
 
 /* -------------------------------------------------------------------------------------------
  * Scene copy. Kept in one place so a claim can be audited without opening ten component files.
+ *
+ * Typed against an explicit `SceneCopy` interface rather than `typeof SCENE_COPY` — the usual
+ * pattern for a single-language constant — because that would have made `SCENE_COPY`'s string
+ * fields literal types (via the `as const` it used to carry), and `SCENE_COPY_ES` below has to
+ * hold different strings in the same shape, not the same strings. The interface is the shape
+ * both languages share; `as const` would have pinned the English words to it too.
  * ---------------------------------------------------------------------------------------- */
 
-export const SCENE_COPY = {
+interface BodyCopy {
+  readonly index: string;
+  readonly eyebrow: string;
+  readonly headline: string;
+  readonly body: string;
+}
+
+interface IntroCopy {
+  readonly index: string;
+  readonly eyebrow: string;
+  readonly headline: string;
+  readonly sub: string;
+}
+
+interface BuildCopy extends BodyCopy {
+  readonly resolve: string;
+}
+
+interface ReuseCopy extends BodyCopy {
+  readonly steps: readonly string[];
+}
+
+interface SceneCopy {
+  readonly intro: IntroCopy;
+  readonly whatIf: BodyCopy;
+  readonly connect: BodyCopy;
+  readonly build: BuildCopy;
+  readonly run: BodyCopy;
+  readonly result: BodyCopy;
+  readonly reuse: ReuseCopy;
+  readonly ecosystem: BodyCopy;
+  readonly terminal: BodyCopy;
+  readonly try: BodyCopy;
+}
+
+export const SCENE_COPY: SceneCopy = {
   intro: {
     index: '01',
     eyebrow: 'Encastra',
@@ -168,4 +211,88 @@ export const SCENE_COPY = {
     headline: 'BUILD SOFTWARE LIKE SYSTEMS.',
     body: `Windows only, for now. Not code-signed — the published SHA-256 is what you have instead of a publisher's signature.`,
   },
-} as const;
+};
+
+/**
+ * Spanish translation of `SCENE_COPY`, same shape, same order, same facts (component names,
+ * filenames, dimensions, the SHA-256 sentence's meaning) — only the sentences around them
+ * change. `test/i18n.test.ts` checks the two objects carry exactly the same keys in both
+ * directions, the same way it checks `dictionaries/en.ts` against `dictionaries/es.ts`.
+ *
+ * `intro` and `whatIf` are translated here for completeness and because a half-translated data
+ * file is worse than a whole one, but neither currently reaches the screen in Spanish: both are
+ * rendered by `components/scenes3d/SceneAssembly.tsx`, which is out of scope for this pass (see
+ * `HomeExperience.tsx`'s own note on why) and does not read `SCENE_COPY` at all today. Scenes 3
+ * through 10, in `components/scenes/Scene0*.tsx`, do read it, via `sceneCopy()` below, and are
+ * the scenes a Spanish visitor actually sees translated.
+ */
+const SCENE_COPY_ES: SceneCopy = {
+  intro: {
+    index: '01',
+    eyebrow: 'Encastra',
+    headline: 'EL SOFTWARE NO SIEMPRE TIENE QUE EMPEZAR DE CERO.',
+    sub: 'Una aplicación de escritorio local-first que ejecuta un grafo tipado de componentes. Desplázate.',
+  },
+  whatIf: {
+    index: '02',
+    eyebrow: '¿Y si…',
+    headline: '¿Y si el software se pudiera ensamblar?',
+    body: 'No es una metáfora de componentes — son los reales. Esta versión incluye diecinueve componentes y dos disparadores, cada uno con una tarea concreta y con sus propias entradas, salidas y tipo.',
+  },
+  connect: {
+    index: '03',
+    eyebrow: 'Conectar',
+    headline: 'Una línea significa algo antes de significar cualquier otra cosa',
+    body: 'Dibuja un cable y el sistema de tipos responde al instante. Un archivo puede convertirse en una imagen — una conversión que estrecha el tipo, y el editor te muestra el paso que podría fallar. Un número no puede: no existe ningún camino de un recuento a una imagen, así que la conexión se rechaza, no se intenta.',
+  },
+  build: {
+    index: '04',
+    eyebrow: 'Construir',
+    headline: 'Estructura, no caos',
+    body: 'Tres pasos. Ocho. Veinte — casi toda la paleta, conectada a la vez. Aléjate lo suficiente y lo que parecía dispersión se lee como un sistema con una sola entrada.',
+    resolve: 'Se resuelve en un flujo de trabajo: Watch Folder → Resize Image → Save File.',
+  },
+  run: {
+    index: '05',
+    eyebrow: 'Ejecutar',
+    headline: 'Nada se ejecuta hasta que pulsas ejecutar',
+    body: 'Cada paso pasa de inactivo a en ejecución y luego a terminado — en orden, visible mientras ocurre, el mismo registro que escribe el runtime de verdad.',
+  },
+  result: {
+    index: '06',
+    eyebrow: 'Resultado',
+    headline: 'Un archivo entra, un archivo sale',
+    body: 'holiday.png a 800×400 se convierte en holiday-small.png a 200×100, guardado en la carpeta que permitiste. Luego el flujo de trabajo que lo hizo se deshace — termina la ejecución, no el grafo.',
+  },
+  reuse: {
+    index: '07',
+    eyebrow: 'Reutilizar',
+    headline: 'Constrúyelo una vez. Consérvalo.',
+    body: 'Los tres pasos se reducen a una sola plantilla — Image Processor, la misma que trae la aplicación. Guárdala. Reutilízala en otro proyecto. Pásale a alguien el archivo .encastra — un archivo plano y determinista, no una cuenta.',
+    steps: ['Construir', 'Guardar', 'Reutilizar', 'Compartir'],
+  },
+  ecosystem: {
+    index: '08',
+    eyebrow: 'Componer',
+    headline:
+      'Un componente vive dentro de un flujo de trabajo. Un flujo de trabajo vive dentro de un proyecto.',
+    body: 'Cada proyecto es un único archivo .encastra — el grafo, su lockfile, sus variables, su historial de versiones. Nada por encima del componente es un sistema aparte con sus propias reglas; es el mismo grafo, una talla más grande, cada vez.',
+  },
+  terminal: {
+    index: '09',
+    eyebrow: 'Lo mismo, pero escrito',
+    headline: 'Todo lo anterior, desde una terminal',
+    body: 'Cada componente que trae la aplicación también existe como comando. Esta transcripción está grabada, no es en directo — la historia continúa, solo que deja de dibujarse a sí misma y empieza a imprimirse.',
+  },
+  try: {
+    index: '10',
+    eyebrow: 'Pruébalo',
+    headline: 'CONSTRUYE SOFTWARE COMO SISTEMAS.',
+    body: 'Solo Windows, por ahora. Sin firmar — el SHA-256 publicado es lo que tienes en lugar de la firma de un editor.',
+  },
+};
+
+/** The scene copy for a given locale — English for anything that is not Spanish. */
+export function sceneCopy(locale: Locale): SceneCopy {
+  return locale === 'es' ? SCENE_COPY_ES : SCENE_COPY;
+}
