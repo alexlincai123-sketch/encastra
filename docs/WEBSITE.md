@@ -24,6 +24,11 @@ spacing and type from one place rather than two that drift.
 The site may be more expressive than the application: the desktop is for working in, the site is
 for finding out. The vocabulary stays the same.
 
+How it moves is a subject of its own, with its own rules and its own vocabulary of eleven verbs:
+[`MOTION.md`](MOTION.md). The short version is that motion here is load-bearing — it is how
+somebody who reads none of the copy still learns that components have types and that a workflow
+can become a component — so a beat that cannot name what it explains does not go on the page.
+
 ## 3. Pages
 
 | Route | What it is |

@@ -1,0 +1,50 @@
+/*
+ * The picture and its tiles.
+ *
+ * Nothing here animates. Every moving part of a split or a merge is a transform applied by a
+ * scene's timeline, so this file only has to describe the two resting states: one whole
+ * picture, and a seamless grid of the same picture.
+ */
+
+.plate {
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  background-size: cover;
+  background-position: center;
+  border-radius: var(--radius-md);
+  /* An inset hairline rather than a border: a border would add to the box and break the tile
+     grid's seam, and the picture is meant to sit *in* the page rather than on it. */
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 8%),
+    var(--shadow-md);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--plate-cols, 4), 1fr);
+  grid-template-rows: repeat(var(--plate-rows, 3), 1fr);
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  /* No gap. The tiles have to be seamless at rest, or the picture arrives pre-broken and the
+     split has nothing left to say. Separation is something the timeline does. */
+  gap: 0;
+  transform-style: preserve-3d;
+}
+
+.tile {
+  /* `will-change` is on the tiles and nowhere else on the page: these are the elements that are
+     definitely going to be transformed, they are few, and they are short-lived on screen.
+     Promoting a layer that never moves costs memory for nothing, which is why this is not a
+     utility applied broadly. */
+  will-change: transform;
+  backface-visibility: hidden;
+  /* A hairline of the ground colour under each tile stops the sub-pixel seams that appear when
+     a tile is scaled a fraction: the gap shows the page, not white. */
+  background-color: var(--ground-0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile {
+    will-change: auto;
+  }
+}

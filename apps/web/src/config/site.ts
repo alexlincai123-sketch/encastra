@@ -8,7 +8,7 @@
  */
 
 /** The release this website documents. Single module, imported everywhere. */
-export const VERSION = '0.3.0-beta.1';
+export const VERSION = '0.3.1-beta.1';
 
 export const SITE = {
   name: 'Encastra',

@@ -1,6 +1,7 @@
 'use client';
 
 import { gsap } from 'gsap';
+import { Flip } from 'gsap/Flip';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 /**
@@ -21,7 +22,11 @@ let registered = false;
 
 function ensureRegistered(): void {
   if (registered) return;
-  gsap.registerPlugin(ScrollTrigger);
+  // Flip is registered alongside ScrollTrigger rather than on demand. It is used by exactly two
+  // scenes — the ones where a set of parts is regrouped into a different arrangement, which is
+  // the one move that cannot be expressed as a transform from a known start state — and
+  // registering a GSAP plugin twice from two call sites is a class of bug worth not having.
+  gsap.registerPlugin(ScrollTrigger, Flip);
   registered = true;
 }
 
@@ -66,4 +71,4 @@ export function createScope(
 }
 
 /** Re-export so callers never import the plugin directly and risk a second registration. */
-export { gsap, ScrollTrigger };
+export { Flip, gsap, ScrollTrigger };

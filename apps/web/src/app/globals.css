@@ -382,3 +382,41 @@ table.data td code {
   }
   /* biome-ignore-end lint/complexity/noImportantStyles: see above. */
 }
+
+/* --- Depth ---------------------------------------------------------------------------------
+ * 2.5D without WebGL.
+ *
+ * `lib/motion-system.ts` animates `z` on the members of a composition; `z` does nothing unless
+ * an ancestor establishes a perspective and the member's parent preserves 3D. These two
+ * utilities are global rather than a CSS module because a scene's script finds its elements by
+ * class, and a module class that `composes` another resolves to *two* class names — which is a
+ * perfectly good `className` and an invalid `querySelector` argument. That mismatch has already
+ * cost this page one crash; global utility classes cannot reproduce it.
+ *
+ * The perspective value is deliberately long. A short one (600-800px) gives the aggressive,
+ * fish-eyed look of a CSS 3D demo; at 1600px the depth reads as a camera with a normal lens,
+ * which is the difference between "cards floating" and "a composition with depth".
+ */
+
+.u-stage {
+  perspective: 1600px;
+  perspective-origin: 50% 45%;
+}
+
+.u-depth {
+  transform-style: preserve-3d;
+}
+
+/* Backface hiding matters on any element that rotates past 90 degrees on X or Y; without it the
+   mirrored face flashes through and the piece reads as a sheet of paper rather than a part. */
+.u-depth > * {
+  backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* A reduced-motion visitor never gets a timeline, so nothing will ever set `z`. Leaving the
+     perspective in place would still skew any element that happens to carry a static rotation. */
+  .u-stage {
+    perspective: none;
+  }
+}
