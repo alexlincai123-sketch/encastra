@@ -94,6 +94,24 @@ CSS 3D demo; a long one reads as a camera with a normal lens, which is the diffe
 "cards floating" and "a composition with depth". Depth is there to reinforce composition. Where
 it would only decorate, it is not used.
 
+**The trap, and it is a silent one:** `translateZ` only renders through a perspective if *every*
+element in the chain between the stage and the animated element preserves 3D. One ordinary
+wrapper in the middle — the default `transform-style: flat` — collapses the whole thing to
+nothing, with no error and no warning. The tween runs, the numbers change, and the screen does
+not move.
+
+So there are only two honest options for a piece that is meant to have depth: put `u-depth` on
+every intermediate wrapper down to it, or give the depth to something that really is a direct
+child of the stage. Building scenes 8, 9 and 10 turned up three places where neither was
+practical — the element sat four levels inside markup the scene did not own — and in each the
+right answer was to **delete the z tween** rather than ship a flourish that does nothing. A
+no-op tween is worse than no tween: it costs the same and it makes the next person believe the
+depth is already there.
+
+Small screens get the same `translateZ` values through a 3000px lens instead of a 1600px one,
+which halves the perceived depth in a single rule rather than by threading a scale factor
+through eleven verbs and eighteen call sites.
+
 ---
 
 ## The picture
