@@ -9,6 +9,15 @@ const en: Messages = {
   common: {
     close: 'Close',
     dismiss: 'Dismiss',
+    // Reused wherever a control opens a file or folder picker, so a change to this one word
+    // does not have to be hunted down across every screen that has a "Choose…" button.
+    choose: 'Choose…',
+    // The heading over a list of what a component or workflow is refused, everywhere that list
+    // appears — the catalogue card, the inspector's permission panel.
+    itCannot: 'It cannot',
+    // The word on the small badge marking a journal as a recording rather than a live result —
+    // the status bar and the run panel both show it, and it must read the same in both places.
+    recordingBadge: 'recording',
   },
 
   sidebar: {
@@ -93,6 +102,407 @@ const en: Messages = {
       'Use the arrow keys to move between steps, Enter to open a step in the inspector, Escape to deselect, and Delete to remove the selected step.',
     a11y: {
       selected: '{name}, step {index} of {total}, selected.',
+    },
+    node: {
+      /** Shown on a node whose `componentRef` this build has no manifest for — the graph
+       * references something that is not part of it. */
+      notInstalled: 'Not installed.',
+    },
+    // The badge a wire shows when the type system inserted a conversion on it. Keyed by the
+    // runtime's own operation id (`Wire.tsx`'s `OP_LABELS`), not by the English phrase, so a
+    // locale can phrase the same operation differently without touching the lookup.
+    wire: {
+      ops: {
+        toText: 'as text',
+        intToFloat: 'as decimal',
+        boolToInt: 'as number',
+        intToBool: 'as yes/no',
+        round: 'rounded',
+        parseInt: 'parse number',
+        parseFloat: 'parse decimal',
+        parseBool: 'parse yes/no',
+        parseJson: 'parse JSON',
+        stringifyJson: 'as text',
+        encodeJson: 'to JSON',
+        decodeJson: 'from JSON',
+        readBytes: 'read',
+        writeTemp: 'to file',
+        unwrapOption: 'may be absent',
+        map: 'each',
+      },
+    },
+  },
+
+  toolbar: {
+    preview: {
+      badge: 'preview',
+      title: 'No runtime is attached to this window.',
+    },
+    new: 'New',
+    open: 'Open',
+    save: 'Save',
+    unsavedChanges: 'Unsaved changes',
+    check: 'Check',
+    stop: 'Stop',
+    run: 'Run',
+    startWatching: 'Start watching',
+    watching: 'Watching',
+    // The two journals bundled with the browser preview, offered as buttons in place of Check
+    // and Run when there is no real runtime to press them against.
+    recordedRuns: {
+      everythingAllowed: 'Recorded: everything allowed',
+      folderNotAllowed: 'Recorded: the folder was not allowed',
+    },
+    notifications: {
+      more: '{count} more',
+    },
+    status: {
+      steps: {
+        one: '{count} step',
+        other: '{count} steps',
+      },
+      running: 'running',
+      runs: {
+        one: '{count} run',
+        other: '{count} runs',
+      },
+      waiting: '{count} waiting',
+      // The count and the word were two separately-concatenated fragments before — exactly the
+      // thing `i18n/index.ts` warns a translation can never safely do — so each is now one
+      // template with `{count}` inside it, even though English itself does not inflect any of
+      // the three.
+      ok: {
+        one: '{count} ok',
+        other: '{count} ok',
+      },
+      failed: {
+        one: '{count} failed',
+        other: '{count} failed',
+      },
+      skipped: {
+        one: '{count} skipped',
+        other: '{count} skipped',
+      },
+    },
+  },
+
+  // The component library (`views/Components.tsx`) — not to be confused with
+  // `settings.components`, the Settings category that lists the same build in summary.
+  components: {
+    header: {
+      title: 'Components',
+      summary: '{count} installed.',
+      summaryWithTriggers:
+        '{count} installed — {triggerCount} of them start a workflow on their own; the rest run as a step inside one.',
+      note: 'Everything here ships with the application; installing others needs the sandbox for third-party code, which is not built yet.',
+    },
+    search: {
+      placeholder: 'Search',
+      ariaLabel: 'Search components',
+    },
+    filters: {
+      categoryLegend: 'Category',
+    },
+    empty: 'Nothing matches that.',
+    card: {
+      triggerBadge: 'starts a workflow',
+      triggerNote:
+        'A source of events, not a step — this begins a run instead of running inside one.',
+      noDescription: 'This component has not documented what it does.',
+      takes: 'Takes',
+      gives: 'Gives',
+      addToCanvas: 'Add to canvas',
+    },
+    reach: {
+      label: 'Can reach',
+      none: 'Reaches nothing outside this workflow',
+      // Capitalised, third-person: "Reads files". `panels/Inspector.tsx` reuses the `cannot`
+      // half of this map for its own permission panel — the two screens describe the same
+      // capabilities and must not drift into describing them differently.
+      verb: {
+        fsRead: 'Reads files',
+        fsWrite: 'Writes files',
+        netHttp: 'Uses the network',
+        systemClipboard: 'Uses the clipboard',
+        systemNotify: 'Shows notifications',
+      },
+      cannot: {
+        fsRead: 'read your files',
+        fsWrite: 'write files',
+        netHttp: 'use the network',
+        systemClipboard: 'use the clipboard',
+        systemNotify: 'show notifications',
+      },
+    },
+  },
+
+  security: {
+    title: 'Security',
+    intro:
+      'Components cannot reach your files, your network or your clipboard unless a manifest declares it and you allow it. Permissions are granted per run, and every request — allowed or refused — is recorded where you can read it.',
+    installed: {
+      title: 'Installed components',
+      headers: {
+        component: 'Component',
+        version: 'Version',
+        origin: 'Origin',
+        canReach: 'Can reach',
+      },
+      builtIn: 'built in',
+      nothing: 'nothing',
+      // `{notBuilt}` is rendered in its own `<strong>`, split out with `splitOnPlaceholder` the
+      // same way `canvas.refusal.bridge` splits around `{bridge}` — see `i18n/index.ts`.
+      thirdPartyNote:
+        'Nothing here came from outside this application. Third-party components would run in a WebAssembly sandbox with no ambient authority; that sandbox is designed and documented but {notBuilt}, so installing them is not possible yet.',
+      thirdPartyNoteEmphasis: 'not built',
+    },
+    grants: {
+      title: 'Allowed in the open workflow',
+      empty: 'Nothing has been allowed. A workflow that needs a folder will ask before it runs.',
+      note: 'These last for this session. Closing the application forgets them, so a workflow you have not looked at in a month cannot still be writing somewhere.',
+    },
+    privacy: {
+      title: 'Privacy',
+      telemetry: { label: 'Telemetry', value: 'None. Nothing is collected and nothing is sent.' },
+      crashReports: { label: 'Crash reports', value: 'None.' },
+      accounts: { label: 'Accounts', value: 'None. There is no sign-in and no server.' },
+      yourFiles: {
+        label: 'Your files',
+        value: 'Never leave this machine unless a workflow you built sends them somewhere.',
+      },
+      // The label reuses `settings.privacy.yourData.runJournals.label` — the Settings screen
+      // already translates this exact word, and this screen means the same thing by it.
+      runJournals: {
+        value:
+          'Record sizes and shapes, never file contents. A journal is held in memory for as long as the window is open and shown on screen; nothing writes one to disk, and closing the application discards it.',
+      },
+    },
+    limits: {
+      title: 'What this does not protect against',
+      misuse:
+        'A component you allow broad access to can misuse it. The dialog can make that informed; it cannot make it impossible.',
+      trustedBase:
+        'Built-in components run as ordinary native code. They are constrained by the permission broker, but a bug in one is a bug in the trusted base.',
+      noAudit:
+        'This build has had no external security audit. That is a prerequisite for distributing components written by other people, not for running your own workflows.',
+      unsigned: 'Nothing here is signed yet, so this build cannot prove it has not been altered.',
+      previewOnly: 'This is a browser preview with no runtime attached.',
+    },
+    footer: 'Runtime {runtime} · protocol schema {protocolSchema} · project schema {projectSchema}',
+  },
+
+  inspector: {
+    problemsTitle: 'Problems',
+    projectTitle: 'Project',
+    selectStep: 'Select a step to configure it, or pick a component to begin.',
+    component: 'Component',
+    switchOn: 'Switch on',
+    switchOff: 'Switch off',
+    settingsTitle: 'Settings',
+    nothingChosen: 'Nothing chosen',
+    entryInputs: {
+      title: 'Starting material',
+      doc: 'Nothing in the graph produces this, so the run needs it from you.',
+    },
+    permissions: {
+      title: 'Permissions',
+      none: 'This component asks for nothing. It works only on what the graph hands it, and it cannot reach your files, the network or the clipboard.',
+      allowed: 'Allowed',
+      allowFolder: 'Allow this folder',
+      allowHost: 'Allow {host}',
+      allowAddress: 'Allow this address',
+      allow: 'Allow',
+      chooseFolderFirst: 'Choose a folder first.',
+      enterAddressFirst: 'Enter an address first.',
+      notASetting:
+        'Not a setting — the component never declared these, so the runtime refuses them whatever you allow here.',
+      // Reuses `components.reach.cannot` — the same capability, described the same way whether
+      // it is read from the catalogue or from a node actually placed on the canvas.
+    },
+    versions: {
+      title: 'Versions',
+      titleWithCount: 'Versions · {count}',
+      empty:
+        'Save this project to start keeping versions. Every save records one, and nothing is ever overwritten.',
+      currentVersionTitle: 'This is the current version.',
+      restoreTitle: 'Restore this. It is added as a new version; nothing is lost.',
+      current: 'Current',
+      versionNumber: 'Version {number}',
+      restore: 'Restore',
+    },
+    runRecord: {
+      title: 'Last run',
+      code: 'Code: {code}',
+      neverRan: 'This step never ran, because {name} did not finish.',
+      status: 'Status',
+      took: 'Took',
+      in: 'in {port}',
+      out: 'out {port}',
+      permissionsUsed: 'Permissions used',
+      refused: ' · {count} refused',
+      logs: 'Logs',
+    },
+  },
+
+  // The execution panel (`panels/RunPanel.tsx`). Its pure formatting functions call `translate`
+  // directly rather than taking a `t` — see the file itself — precisely so `store.ts`'s own
+  // status-bar summary can share these same keys instead of describing the same run differently.
+  runPanel: {
+    ariaLabel: 'Run',
+    title: 'Run',
+    recordingTitle:
+      'This is a recorded run, played back for the debugger. It did not just happen on this machine.',
+    empty:
+      'Nothing has run yet. Press Run above and each step will appear here, in the order the runtime executes them, with its status and how long it took — or, if one fails, what went wrong and what to do about it.',
+    status: {
+      pending: 'Waiting',
+      running: 'Running',
+      ok: 'Finished',
+      failed: 'Failed',
+      skipped: 'Skipped',
+      cancelled: 'Cancelled',
+      disabled: 'Switched off',
+    },
+    outcome: {
+      watching: 'Watching for changes…',
+      running: 'Running…',
+      finished: 'Finished.',
+      finishedIn: 'Finished in {took}.',
+      partial: {
+        one: '{count} step failed. The rest of the graph still ran.',
+        other: '{count} steps failed. The rest of the graph still ran.',
+      },
+      failed: 'Nothing completed.',
+      cancelled: 'Stopped.',
+    },
+    watch: {
+      runsSoFar: {
+        one: '{count} run so far',
+        other: '{count} runs so far',
+      },
+      pendingWaiting: '{count} waiting',
+    },
+    step: {
+      neverRan: 'Never ran — {name} did not finish.',
+    },
+  },
+
+  // The guided first workflow (`onboarding/`). `steps.ts` stores a `titleKey`/`bodyKey` pair per
+  // card rather than the English prose itself — see the file — so `onboarding.test.ts` and
+  // `Welcome.tsx` both go through `translate()` for the words a person actually reads.
+  onboarding: {
+    tour: {
+      stepCount: 'Step {current} of {total}',
+      done: 'Done — carry on when you are ready.',
+      waiting: 'Waiting for you to try it.',
+      finish: 'Finish',
+      next: 'Next',
+      canvas: {
+        title: 'This is your canvas',
+        body: 'A workflow is a few components joined together. Everything runs on this machine, and nothing reaches your files until you allow it.',
+      },
+      addFirst: {
+        title: 'Add the first step',
+        body: 'On the left is every component installed. Find Watch Folder and add it — it starts the workflow whenever a file appears somewhere you choose.',
+      },
+      addSecond: {
+        title: 'Add something to do',
+        body: 'Now add Resize Image. It takes a picture and makes a smaller copy, leaving the original alone.',
+      },
+      connect: {
+        title: 'Join them together',
+        body: 'Drag from the file port on Watch Folder to the image port on Resize Image. A file is not yet a picture, so the editor inserts the step that opens it — and refuses the join outright if the two could never fit.',
+      },
+      configure: {
+        title: 'Tell it which folder',
+        body: 'Select a step to configure it on the right. Watch Folder needs to know which folder to watch, and Save File needs to know where to put the result.',
+      },
+      allow: {
+        title: 'Allow it that folder',
+        body: 'A component cannot touch anything until you say so, and a permission is scoped to the one folder you pick. Press Allow on the step that asked.',
+      },
+      run: {
+        title: 'Run it',
+        body: 'Press Run, or Ctrl+Enter. Each step lights up as it happens, and the panel below records what it did and how long it took.',
+      },
+    },
+    welcome: {
+      title: 'Welcome to Encastra',
+      lead: 'Build software by assembling components. You pick the parts, connect them, and press run — on this machine, with nothing reaching your files until you allow it.',
+      createFirst: {
+        title: 'Create your first workflow',
+        note: 'A short guided run through, about a minute',
+      },
+      exploreSample: {
+        title: 'Explore a sample',
+        note: '{name}, already built — you choose its folders',
+      },
+      skip: {
+        title: 'Skip',
+        note: 'Go straight in. This is in Settings if you want it later.',
+      },
+    },
+  },
+
+  // Status-bar messages `store.ts` sets after an action — saving, running, loading a sample.
+  // `messages.saved`/etc. are looked up with `translate()` from that plain store module, the same
+  // way `canvas/Canvas.tsx` does inside `isConnectionLegal` — see `i18n/index.ts`'s own note on
+  // why: a store action has no React render to call `useTranslation()` from.
+  messages: {
+    untitledProject: 'Untitled',
+    recordingNote: 'This is a recording, not a run on this machine.',
+    problemsToFix: {
+      one: '{count} problem to fix.',
+      other: '{count} problems to fix.',
+    },
+    readyToRun: 'This graph is ready to run.',
+    nothingRanProblems: {
+      one: 'Nothing ran: {count} problem to fix first.',
+      other: 'Nothing ran: {count} problems to fix first.',
+    },
+    saved: {
+      one: 'Saved. {count} version kept.',
+      other: 'Saved. {count} versions kept.',
+    },
+    watchingChanges: 'Watching. It will run whenever something appears.',
+    running: 'Running.',
+    stopping: 'Stopping.',
+    demoLoaded: '{name}: fill in {needs}, then start it.',
+    restored: 'Restored. The version you came from is still in the history.',
+    missingComponents: 'This project needs {missing}, which is not installed.',
+    runtimeSilent: 'Something in the runtime did not answer.',
+  },
+
+  // The three sample workflows `demos.ts` ships (the graph shape itself stays English-only
+  // component config, same as any project — only the name, summary and folder prompts a person
+  // actually reads are here). `Home.tsx` and `onboarding/Welcome.tsx` both read these by key.
+  demos: {
+    imageProcessor: {
+      name: 'Image Processor',
+      summary:
+        'Watches a folder. Whenever an image appears, it makes a smaller copy in another folder.',
+      needs: {
+        watch: 'A folder to watch',
+        save: 'A folder to save into',
+      },
+    },
+    fileOrganiser: {
+      name: 'File Organiser',
+      summary:
+        'Watches a folder and moves what lands in it into one of three others, by file type.',
+      needs: {
+        watch: 'A folder to watch',
+        images: 'A folder for images',
+        documents: 'A folder for documents',
+      },
+    },
+    thumbnails: {
+      name: 'Thumbnails',
+      summary: 'Turns a folder of images into square previews, ready for a gallery or a grid.',
+      needs: {
+        watch: 'A folder to watch',
+        save: 'A folder to save into',
+      },
     },
   },
 

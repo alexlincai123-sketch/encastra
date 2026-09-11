@@ -29,6 +29,10 @@ import {
   type Snapshot,
   undo as undoHistory,
 } from './history';
+// A plain function rather than the `useTranslation()` hook: every action here is a store method,
+// not a render, and `translate()` reads the active locale itself at call time the same way
+// `canvas/Canvas.tsx` does inside `isConnectionLegal` — see `i18n/index.ts`'s own note on why.
+import { selectPlural, translate, useI18n } from './i18n';
 import { ipc } from './ipc';
 import { usePreferences } from './preferences';
 import type {
@@ -154,7 +158,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   busy: false,
   message: null,
   projectPath: null,
-  projectName: 'Untitled',
+  projectName: translate('messages.untitledProject'),
   versions: [],
   dirty: false,
   view: 'home',
@@ -323,7 +327,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({
       journal,
       journalIsRecording: true,
-      message: { tone: 'info', text: `${label}. This is a recording, not a run on this machine.` },
+      message: { tone: 'info', text: `${label}. ${translate('messages.recordingNote')}` },
     });
   },
 
@@ -332,11 +336,17 @@ export const useEditor = create<EditorState>((set, get) => ({
     try {
       const validation = await ipc.validateGraph(get().toGraph(), get().inputs);
       const errors = validation.issues.filter((i) => i.severity === 'error').length;
+      const locale = useI18n.getState().locale;
       set({
         validation,
         message: errors
-          ? { tone: 'error', text: `${errors} problem${errors === 1 ? '' : 's'} to fix.` }
-          : { tone: 'info', text: 'This graph is ready to run.' },
+          ? {
+              tone: 'error',
+              text: translate(`messages.problemsToFix.${selectPlural(locale, errors)}`, {
+                count: errors,
+              }),
+            }
+          : { tone: 'info', text: translate('messages.readyToRun') },
       });
     } catch (error) {
       set({ message: { tone: 'error', text: describe(error) } });
@@ -351,11 +361,14 @@ export const useEditor = create<EditorState>((set, get) => ({
       const result = await ipc.runGraph(get().toGraph(), get().inputs, get().grants);
       if (result.outcome === 'invalid') {
         const errors = result.validation.issues.filter((i) => i.severity === 'error').length;
+        const locale = useI18n.getState().locale;
         set({
           validation: result.validation,
           message: {
             tone: 'error',
-            text: `Nothing ran: ${errors} problem${errors === 1 ? '' : 's'} to fix first.`,
+            text: translate(`messages.nothingRanProblems.${selectPlural(locale, errors)}`, {
+              count: errors,
+            }),
           },
         });
         return;
@@ -424,7 +437,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       inputs: [],
       grants: [],
       projectPath: null,
-      projectName: 'Untitled',
+      projectName: translate('messages.untitledProject'),
       versions: [],
       dirty: false,
       history: emptyHistory,
@@ -476,6 +489,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       const name = fileStem(path) ?? state.projectName;
       const project = await ipc.saveProject(path, name, state.toGraph(), options?.label);
       rememberProject(path);
+      const kept = project.history.snapshots.length;
+      const locale = useI18n.getState().locale;
       set({
         projectPath: project.path,
         projectName: project.name,
@@ -483,7 +498,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         dirty: false,
         message: {
           tone: 'info',
-          text: `Saved. ${project.history.snapshots.length} version(s) kept.`,
+          text: translate(`messages.saved.${selectPlural(locale, kept)}`, { count: kept }),
         },
       });
     } catch (error) {
@@ -562,7 +577,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         view: 'builder',
         message: {
           tone: 'info',
-          text: status.watching ? 'Watching. It will run whenever something appears.' : 'Running.',
+          text: translate(status.watching ? 'messages.watchingChanges' : 'messages.running'),
         },
       });
     } catch (error) {
@@ -575,7 +590,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   async stopWorkflow() {
     try {
       await ipc.stopWorkflow();
-      set({ message: { tone: 'info', text: 'Stopping.' } });
+      set({ message: { tone: 'info', text: translate('messages.stopping') } });
     } catch (error) {
       set({ message: { tone: 'error', text: describe(error) } });
     }
@@ -613,14 +628,20 @@ export const useEditor = create<EditorState>((set, get) => ({
       // A sample is not the person's project until they save it somewhere, so it starts
       // unattached — saving will ask where to put it rather than overwriting anything.
       projectPath: null,
-      projectName: demo.name,
+      projectName: translate(demo.nameKey),
       versions: [],
       dirty: true,
       history: emptyHistory,
       view: 'builder',
       message: {
         tone: 'info',
-        text: `${demo.name}: fill in ${demo.needs.join(', ').toLowerCase()}, then start it.`,
+        // Not lower-cased the way the English joins it inline — a translated need can be a
+        // German noun phrase, and German capitalises nouns everywhere, not only at a sentence's
+        // start, so forcing lower case would misspell it.
+        text: translate('messages.demoLoaded', {
+          name: translate(demo.nameKey),
+          needs: demo.needsKeys.map((key) => translate(key)).join(', '),
+        }),
       },
     });
   },
@@ -700,7 +721,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       set({
         message: {
           tone: 'info',
-          text: 'Restored. The version you came from is still in the history.',
+          text: translate('messages.restored'),
         },
       });
     } catch (error) {
@@ -765,7 +786,7 @@ function applyProject(set: (partial: Partial<EditorState>) => void, project: Ope
     message: project.missing.length
       ? {
           tone: 'error',
-          text: `This project needs ${project.missing.join(', ')}, which is not installed.`,
+          text: translate('messages.missingComponents', { missing: project.missing.join(', ') }),
         }
       : null,
   });
@@ -776,27 +797,34 @@ function fileStem(path: string): string | undefined {
   return name?.replace(/\.encastra$/i, '');
 }
 
+// Shares its wording with `panels/RunPanel.tsx`'s own `outcomeSummary` by reading the exact same
+// `runPanel.outcome.*` keys — see that file's own note on why the status bar and the run panel
+// must never describe the same run differently.
 function summarise(journal: RunJournal): string {
   const failed = Object.values(journal.nodes).filter((n) => n.status === 'failed').length;
   const ms = journal.finished_at_ms ? journal.finished_at_ms - journal.started_at_ms : 0;
   switch (journal.status) {
     case 'ok':
-      return `Finished in ${ms}ms.`;
-    case 'partial':
-      return `${failed} step${failed === 1 ? '' : 's'} failed. The rest of the graph still ran.`;
+      return translate('runPanel.outcome.finishedIn', { took: `${ms}ms` });
+    case 'partial': {
+      const locale = useI18n.getState().locale;
+      return translate(`runPanel.outcome.partial.${selectPlural(locale, failed)}`, {
+        count: failed,
+      });
+    }
     case 'failed':
-      return 'Nothing completed.';
+      return translate('runPanel.outcome.failed');
     case 'cancelled':
-      return 'Stopped.';
+      return translate('runPanel.outcome.cancelled');
     default:
-      return 'Running…';
+      return translate('runPanel.outcome.running');
   }
 }
 
 function describe(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
-  return 'Something in the runtime did not answer.';
+  return translate('messages.runtimeSilent');
 }
 
 /**

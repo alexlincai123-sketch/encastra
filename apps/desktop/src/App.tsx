@@ -6,6 +6,7 @@
  */
 
 import { useEffect } from 'react';
+import { selectPlural, useTranslation } from './i18n';
 import { ipc, recordedRuns } from './ipc';
 import { Welcome } from './onboarding/Welcome';
 import { applyToDocument, usePreferences } from './preferences';
@@ -51,6 +52,7 @@ function Toolbar() {
   const startWorkflow = useEditor((s) => s.startWorkflow);
   const stopWorkflow = useEditor((s) => s.stopWorkflow);
   const showRecording = useEditor((s) => s.showRecording);
+  const { t } = useTranslation();
 
   const triggered = nodes.some((node) => manifests[node.data.componentRef]?.trigger === true);
 
@@ -62,8 +64,8 @@ function Toolbar() {
       </span>
 
       {!ipc.live ? (
-        <span className="preview-badge" title="No runtime is attached to this window.">
-          preview
+        <span className="preview-badge" title={t('toolbar.preview.title')}>
+          {t('toolbar.preview.badge')}
         </span>
       ) : null}
 
@@ -71,10 +73,10 @@ function Toolbar() {
         <>
           <span className="topbar__divider" />
           <button type="button" className="btn" onClick={newProject}>
-            New
+            {t('toolbar.new')}
           </button>
           <button type="button" className="btn" onClick={() => void openProject()} title="Ctrl+O">
-            Open
+            {t('toolbar.open')}
           </button>
           <button
             type="button"
@@ -83,12 +85,12 @@ function Toolbar() {
             disabled={busy}
             title="Ctrl+S"
           >
-            Save
+            {t('toolbar.save')}
           </button>
           <span className="project-name">
             {projectName}
             {dirty ? (
-              <span className="project-name__dirty" title="Unsaved changes">
+              <span className="project-name__dirty" title={t('toolbar.unsavedChanges')}>
                 {' '}
                 •
               </span>
@@ -105,10 +107,10 @@ function Toolbar() {
             <button
               type="button"
               className="btn"
-              key={recorded.label}
-              onClick={() => showRecording(recorded.journal, recorded.label)}
+              key={recorded.labelKey}
+              onClick={() => showRecording(recorded.journal, t(recorded.labelKey))}
             >
-              {recorded.label}
+              {t(recorded.labelKey)}
             </button>
           ))
         ) : (
@@ -119,11 +121,11 @@ function Toolbar() {
               onClick={() => void check()}
               disabled={busy || running}
             >
-              Check
+              {t('toolbar.check')}
             </button>
             {running ? (
               <button type="button" className="btn btn--stop" onClick={() => void stopWorkflow()}>
-                Stop
+                {t('toolbar.stop')}
               </button>
             ) : (
               <button
@@ -133,13 +135,13 @@ function Toolbar() {
                 disabled={busy || nodeCount === 0}
                 title="Ctrl+Enter"
               >
-                {triggered ? 'Start watching' : 'Run'}
+                {triggered ? t('toolbar.startWatching') : t('toolbar.run')}
               </button>
             )}
             {watching && running ? (
               <>
                 <span className="pulse" aria-hidden="true" />
-                <span className="visually-hidden">Watching</span>
+                <span className="visually-hidden">{t('toolbar.watching')}</span>
               </>
             ) : null}
           </>
@@ -158,6 +160,7 @@ function StatusBar() {
   const runs = useEditor((s) => s.runs);
   const pending = useEditor((s) => s.pending);
   const liveNodes = useEditor((s) => s.liveNodes);
+  const { t, locale } = useTranslation();
 
   const counts: Record<string, number> = {};
   const source = Object.keys(liveNodes).length > 0 ? liveNodes : undefined;
@@ -172,27 +175,31 @@ function StatusBar() {
   return (
     <footer className="statusbar">
       <span>
-        {nodeCount} step{nodeCount === 1 ? '' : 's'}
+        {t(`toolbar.status.steps.${selectPlural(locale, nodeCount)}`, { count: nodeCount })}
       </span>
 
       {running ? (
         <span className="row">
-          <span className="dot dot--running" /> running
-          {runs > 0 ? ` · ${runs} run${runs === 1 ? '' : 's'}` : ''}
-          {pending > 0 ? ` · ${pending} waiting` : ''}
+          <span className="dot dot--running" /> {t('toolbar.status.running')}
+          {runs > 0
+            ? ` · ${t(`toolbar.status.runs.${selectPlural(locale, runs)}`, { count: runs })}`
+            : ''}
+          {pending > 0 ? ` · ${t('toolbar.status.waiting', { count: pending })}` : ''}
         </span>
       ) : null}
 
       {Object.keys(counts).length > 0 ? (
         <span className="row">
-          {isRecording ? <span className="preview-badge">recording</span> : null}
-          {(['ok', 'failed', 'skipped'] as const).map((status) =>
-            counts[status] ? (
+          {isRecording ? <span className="preview-badge">{t('common.recordingBadge')}</span> : null}
+          {(['ok', 'failed', 'skipped'] as const).map((status) => {
+            const count = counts[status];
+            return count ? (
               <span className="row" key={status}>
-                <span className={`dot dot--${status}`} /> {counts[status]} {status}
+                <span className={`dot dot--${status}`} />{' '}
+                {t(`toolbar.status.${status}.${selectPlural(locale, count)}`, { count })}
               </span>
-            ) : null,
-          )}
+            ) : null;
+          })}
         </span>
       ) : null}
 
@@ -208,6 +215,7 @@ function StatusBar() {
 function Notifications() {
   const notifications = useEditor((s) => s.notifications);
   const dismiss = useEditor((s) => s.dismissNotifications);
+  const { t } = useTranslation();
 
   if (notifications.length === 0) return null;
 
@@ -220,7 +228,7 @@ function Notifications() {
       ))}
       {notifications.length > 4 ? (
         <button type="button" className="toast toast--more" onClick={dismiss}>
-          {notifications.length - 4} more
+          {t('toolbar.notifications.more', { count: notifications.length - 4 })}
         </button>
       ) : null}
     </aside>

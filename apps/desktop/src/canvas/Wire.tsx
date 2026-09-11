@@ -10,25 +10,28 @@
  */
 
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps, getBezierPath } from '@xyflow/react';
+import { useTranslation } from '../i18n';
 import { useEditor } from '../store';
 
-const OP_LABELS: Record<string, string> = {
-  'to-text': 'as text',
-  'int-to-float': 'as decimal',
-  'bool-to-int': 'as number',
-  'int-to-bool': 'as yes/no',
-  round: 'rounded',
-  'parse-int': 'parse number',
-  'parse-float': 'parse decimal',
-  'parse-bool': 'parse yes/no',
-  'parse-json': 'parse JSON',
-  'stringify-json': 'as text',
-  'encode-json': 'to JSON',
-  'decode-json': 'from JSON',
-  'read-bytes': 'read',
-  'write-temp': 'to file',
-  'unwrap-option': 'may be absent',
-  map: 'each',
+/** The `canvas.wire.ops.*` key for a conversion op id, so a locale can phrase the operation
+ * however it reads best rather than being tied to the runtime's own kebab-case identifier. */
+const OP_LABEL_KEYS: Record<string, string> = {
+  'to-text': 'canvas.wire.ops.toText',
+  'int-to-float': 'canvas.wire.ops.intToFloat',
+  'bool-to-int': 'canvas.wire.ops.boolToInt',
+  'int-to-bool': 'canvas.wire.ops.intToBool',
+  round: 'canvas.wire.ops.round',
+  'parse-int': 'canvas.wire.ops.parseInt',
+  'parse-float': 'canvas.wire.ops.parseFloat',
+  'parse-bool': 'canvas.wire.ops.parseBool',
+  'parse-json': 'canvas.wire.ops.parseJson',
+  'stringify-json': 'canvas.wire.ops.stringifyJson',
+  'encode-json': 'canvas.wire.ops.encodeJson',
+  'decode-json': 'canvas.wire.ops.decodeJson',
+  'read-bytes': 'canvas.wire.ops.readBytes',
+  'write-temp': 'canvas.wire.ops.writeTemp',
+  'unwrap-option': 'canvas.wire.ops.unwrapOption',
+  map: 'canvas.wire.ops.map',
 };
 
 export function Wire({
@@ -46,6 +49,7 @@ export function Wire({
   selected,
 }: EdgeProps) {
   const conversions = useEditor((s) => s.validation?.conversions);
+  const { t } = useTranslation();
 
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
@@ -64,7 +68,12 @@ export function Wire({
       c.to.port === targetHandleId,
   );
 
-  const label = plan?.ops.map((op) => OP_LABELS[op] ?? op).join(' · ');
+  const label = plan?.ops
+    .map((op) => {
+      const key = OP_LABEL_KEYS[op];
+      return key ? t(key) : op;
+    })
+    .join(' · ');
 
   return (
     <>

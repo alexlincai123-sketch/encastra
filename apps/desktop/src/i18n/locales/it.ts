@@ -9,6 +9,9 @@ const it: Messages = {
   common: {
     close: 'Chiudi',
     dismiss: 'Ignora',
+    choose: 'Scegli…',
+    itCannot: 'Non può',
+    recordingBadge: 'registrazione',
   },
 
   sidebar: {
@@ -93,6 +96,377 @@ const it: Messages = {
       'Usa le frecce per spostarti tra i passaggi, Invio per aprire un passaggio nell’ispettore, Esc per deselezionare e Canc per rimuovere il passaggio selezionato.',
     a11y: {
       selected: '{name}, passaggio {index} di {total}, selezionato.',
+    },
+    node: {
+      notInstalled: 'Non installato.',
+    },
+    wire: {
+      ops: {
+        toText: 'come testo',
+        intToFloat: 'come decimale',
+        boolToInt: 'come numero',
+        intToBool: 'come sì/no',
+        round: 'arrotondato',
+        parseInt: 'analizza come numero',
+        parseFloat: 'analizza come decimale',
+        parseBool: 'analizza come sì/no',
+        parseJson: 'analizza JSON',
+        stringifyJson: 'come testo',
+        encodeJson: 'in JSON',
+        decodeJson: 'da JSON',
+        readBytes: 'leggi',
+        writeTemp: 'su file',
+        unwrapOption: 'può essere assente',
+        map: 'ciascuno',
+      },
+    },
+  },
+
+  toolbar: {
+    preview: {
+      badge: 'anteprima',
+      title: 'Nessun runtime è collegato a questa finestra.',
+    },
+    new: 'Nuovo',
+    open: 'Apri',
+    save: 'Salva',
+    unsavedChanges: 'Modifiche non salvate',
+    check: 'Controlla',
+    stop: 'Interrompi',
+    run: 'Esegui',
+    startWatching: 'Inizia a osservare',
+    watching: 'In osservazione',
+    recordedRuns: {
+      everythingAllowed: 'Registrato: tutto consentito',
+      folderNotAllowed: 'Registrato: la cartella non è stata consentita',
+    },
+    notifications: {
+      more: '{count} in più',
+    },
+    status: {
+      steps: {
+        one: '{count} passaggio',
+        other: '{count} passaggi',
+      },
+      running: 'in esecuzione',
+      runs: {
+        one: '{count} esecuzione',
+        other: '{count} esecuzioni',
+      },
+      waiting: '{count} in attesa',
+      ok: {
+        one: '{count} riuscito',
+        other: '{count} riusciti',
+      },
+      failed: {
+        one: '{count} fallito',
+        other: '{count} falliti',
+      },
+      skipped: {
+        one: '{count} saltato',
+        other: '{count} saltati',
+      },
+    },
+  },
+
+  components: {
+    header: {
+      title: 'Componenti',
+      summary: '{count} installati.',
+      summaryWithTriggers:
+        '{count} installati — {triggerCount} di essi avviano un flusso di lavoro per conto proprio; il resto viene eseguito come passaggio all’interno di uno.',
+      note: 'Tutto questo è incluso con l’applicazione; installarne altri richiede la sandbox per il codice di terze parti, che non è ancora costruita.',
+    },
+    search: {
+      placeholder: 'Cerca',
+      ariaLabel: 'Cerca componenti',
+    },
+    filters: {
+      categoryLegend: 'Categoria',
+    },
+    empty: 'Nulla corrisponde.',
+    card: {
+      triggerBadge: 'avvia un flusso di lavoro',
+      triggerNote:
+        'Una fonte di eventi, non un passaggio — questo avvia un’esecuzione invece di essere eseguito all’interno di una.',
+      noDescription: 'Questo componente non ha documentato cosa fa.',
+      takes: 'Prende',
+      gives: 'Restituisce',
+      addToCanvas: 'Aggiungi alla tela',
+    },
+    reach: {
+      label: 'Può raggiungere',
+      none: 'Non raggiunge nulla al di fuori di questo flusso di lavoro',
+      verb: {
+        fsRead: 'Legge i file',
+        fsWrite: 'Scrive i file',
+        netHttp: 'Usa la rete',
+        systemClipboard: 'Usa gli appunti',
+        systemNotify: 'Mostra notifiche',
+      },
+      cannot: {
+        fsRead: 'leggere i tuoi file',
+        fsWrite: 'scrivere file',
+        netHttp: 'usare la rete',
+        systemClipboard: 'usare gli appunti',
+        systemNotify: 'mostrare notifiche',
+      },
+    },
+  },
+
+  security: {
+    title: 'Sicurezza',
+    intro:
+      'I componenti non possono accedere ai tuoi file, alla tua rete o agli appunti a meno che un manifesto non lo dichiari e tu non lo consenta. I permessi vengono concessi per ogni esecuzione, e ogni richiesta — consentita o rifiutata — viene registrata dove puoi leggerla.',
+    installed: {
+      title: 'Componenti installati',
+      headers: {
+        component: 'Componente',
+        version: 'Versione',
+        origin: 'Origine',
+        canReach: 'Può raggiungere',
+      },
+      builtIn: 'incluso di fabbrica',
+      nothing: 'nulla',
+      thirdPartyNote:
+        'Nulla qui proviene dall’esterno di questa applicazione. I componenti di terze parti verrebbero eseguiti in una sandbox WebAssembly senza autorità ambientale; quella sandbox è progettata e documentata, ma {notBuilt}, quindi installarli non è ancora possibile.',
+      thirdPartyNoteEmphasis: 'non è costruita',
+    },
+    grants: {
+      title: 'Consentito nel flusso di lavoro aperto',
+      empty:
+        'Non è stato consentito nulla. Un flusso di lavoro che ha bisogno di una cartella lo chiederà prima di essere eseguito.',
+      note: 'Questi durano solo per questa sessione. Chiudere l’applicazione li fa dimenticare, quindi un flusso di lavoro che non guardi da un mese non può continuare a scrivere da qualche parte.',
+    },
+    privacy: {
+      title: 'Privacy',
+      telemetry: { label: 'Telemetria', value: 'Nessuna. Non viene raccolto né inviato nulla.' },
+      crashReports: { label: 'Segnalazioni di arresto anomalo', value: 'Nessuna.' },
+      accounts: { label: 'Account', value: 'Nessuno. Non c’è né accesso né server.' },
+      yourFiles: {
+        label: 'I tuoi file',
+        value:
+          'Non lasciano mai questo computer, a meno che un flusso di lavoro che hai creato non li invii da qualche parte.',
+      },
+      runJournals: {
+        value:
+          'Registrano dimensioni e forme, mai il contenuto dei file. Un registro viene tenuto in memoria finché la finestra è aperta e visibile; nulla viene scritto su disco, e chiudere l’applicazione lo elimina.',
+      },
+    },
+    limits: {
+      title: 'Da cosa questo non protegge',
+      misuse:
+        'Un componente a cui consenti un accesso ampio può abusarne. La finestra di dialogo può rendere questa scelta informata; non può renderla impossibile.',
+      trustedBase:
+        'I componenti inclusi di fabbrica vengono eseguiti come normale codice nativo. Sono vincolati dal mediatore dei permessi, ma un bug in uno di essi è un bug nella base fidata.',
+      noAudit:
+        'Questa versione non ha avuto alcuna verifica di sicurezza esterna. È un prerequisito per distribuire componenti scritti da altre persone, non per eseguire i tuoi flussi di lavoro.',
+      unsigned:
+        'Nulla qui è ancora firmato, quindi questa versione non può dimostrare di non essere stata alterata.',
+      previewOnly: 'Questa è un’anteprima nel browser, senza alcun runtime collegato.',
+    },
+    footer:
+      'Runtime {runtime} · schema del protocollo {protocolSchema} · schema del progetto {projectSchema}',
+  },
+
+  inspector: {
+    problemsTitle: 'Problemi',
+    projectTitle: 'Progetto',
+    selectStep: 'Seleziona un passaggio per configurarlo, o scegli un componente per iniziare.',
+    component: 'Componente',
+    switchOn: 'Attiva',
+    switchOff: 'Disattiva',
+    settingsTitle: 'Impostazioni',
+    nothingChosen: 'Nulla scelto',
+    entryInputs: {
+      title: 'Materiale di partenza',
+      doc: 'Nulla nel grafo produce questo, quindi l’esecuzione ne ha bisogno da te.',
+    },
+    permissions: {
+      title: 'Permessi',
+      none: 'Questo componente non richiede nulla. Lavora solo con ciò che il grafo gli passa, e non può accedere ai tuoi file, alla rete o agli appunti.',
+      allowed: 'Consentito',
+      allowFolder: 'Consenti questa cartella',
+      allowHost: 'Consenti {host}',
+      allowAddress: 'Consenti questo indirizzo',
+      allow: 'Consenti',
+      chooseFolderFirst: 'Scegli prima una cartella.',
+      enterAddressFirst: 'Inserisci prima un indirizzo.',
+      notASetting:
+        'Non è un’impostazione — il componente non lo ha mai dichiarato, quindi il runtime lo rifiuta qualunque cosa tu consenta qui.',
+    },
+    versions: {
+      title: 'Versioni',
+      titleWithCount: 'Versioni · {count}',
+      empty:
+        'Salva questo progetto per iniziare a conservare versioni. Ogni salvataggio ne registra una, e nulla viene mai sovrascritto.',
+      currentVersionTitle: 'Questa è la versione attuale.',
+      restoreTitle: 'Ripristina questa. Viene aggiunta come nuova versione; nulla va perso.',
+      current: 'Attuale',
+      versionNumber: 'Versione {number}',
+      restore: 'Ripristina',
+    },
+    runRecord: {
+      title: 'Ultima esecuzione',
+      code: 'Codice: {code}',
+      neverRan: 'Questo passaggio non è mai stato eseguito, perché {name} non è terminato.',
+      status: 'Stato',
+      took: 'Durata',
+      in: 'in {port}',
+      out: 'fuori {port}',
+      permissionsUsed: 'Permessi usati',
+      refused: ' · {count} rifiutati',
+      logs: 'Registro',
+    },
+  },
+
+  runPanel: {
+    ariaLabel: 'Esecuzione',
+    title: 'Esecuzione',
+    recordingTitle:
+      'Questa è un’esecuzione registrata, riprodotta per il debugger. Non è appena avvenuta su questo computer.',
+    empty:
+      'Non è ancora stato eseguito nulla. Premi Esegui qui sopra e ogni passaggio apparirà qui, nell’ordine in cui il runtime li esegue, con il suo stato e quanto ha impiegato — oppure, se uno fallisce, cosa è andato storto e cosa fare.',
+    status: {
+      pending: 'In attesa',
+      running: 'In esecuzione',
+      ok: 'Terminato',
+      failed: 'Fallito',
+      skipped: 'Saltato',
+      cancelled: 'Annullato',
+      disabled: 'Disattivato',
+    },
+    outcome: {
+      watching: 'Osservazione dei cambiamenti…',
+      running: 'Esecuzione in corso…',
+      finished: 'Terminato.',
+      finishedIn: 'Terminato in {took}.',
+      partial: {
+        one: '{count} passaggio è fallito. Il resto del grafo è comunque stato eseguito.',
+        other: '{count} passaggi sono falliti. Il resto del grafo è comunque stato eseguito.',
+      },
+      failed: 'Nulla è stato completato.',
+      cancelled: 'Interrotto.',
+    },
+    watch: {
+      runsSoFar: {
+        one: '{count} esecuzione finora',
+        other: '{count} esecuzioni finora',
+      },
+      pendingWaiting: '{count} in attesa',
+    },
+    step: {
+      neverRan: 'Mai eseguito — {name} non è terminato.',
+    },
+  },
+
+  onboarding: {
+    tour: {
+      stepCount: 'Passaggio {current} di {total}',
+      done: 'Fatto — continua quando sei pronto.',
+      waiting: 'In attesa che tu lo provi.',
+      finish: 'Fine',
+      next: 'Avanti',
+      canvas: {
+        title: 'Questa è la tua tela',
+        body: 'Un flusso di lavoro è composto da pochi componenti collegati tra loro. Tutto viene eseguito su questo computer, e nulla accede ai tuoi file finché non lo permetti.',
+      },
+      addFirst: {
+        title: 'Aggiungi il primo passaggio',
+        body: 'A sinistra c’è ogni componente installato. Trova Osserva cartella e aggiungilo — avvia il flusso di lavoro ogni volta che appare un file dove scegli tu.',
+      },
+      addSecond: {
+        title: 'Aggiungi qualcosa da fare',
+        body: 'Ora aggiungi Ridimensiona immagine. Prende un’immagine e ne fa una copia più piccola, lasciando intatta l’originale.',
+      },
+      connect: {
+        title: 'Collegali tra loro',
+        body: 'Trascina dalla porta file di Osserva cartella alla porta immagine di Ridimensiona immagine. Un file non è ancora un’immagine, quindi l’editor inserisce il passaggio che lo apre — e rifiuta subito il collegamento se i due non potrebbero mai combaciare.',
+      },
+      configure: {
+        title: 'Digli quale cartella',
+        body: 'Seleziona un passaggio per configurarlo a destra. Osserva cartella deve sapere quale cartella osservare, e Salva file deve sapere dove mettere il risultato.',
+      },
+      allow: {
+        title: 'Consentigli quella cartella',
+        body: 'Un componente non può toccare nulla finché non glielo dici, e un permesso è limitato all’unica cartella che scegli. Premi Consenti sul passaggio che lo ha chiesto.',
+      },
+      run: {
+        title: 'Eseguilo',
+        body: 'Premi Esegui, oppure Ctrl+Invio. Ogni passaggio si illumina man mano che avviene, e il pannello sotto registra cosa ha fatto e quanto ci ha messo.',
+      },
+    },
+    welcome: {
+      title: 'Benvenuto in Encastra',
+      lead: 'Crea software assemblando componenti. Scegli le parti, le colleghi e premi esegui — su questo computer, senza che nulla acceda ai tuoi file finché non lo permetti.',
+      createFirst: {
+        title: 'Crea il tuo primo flusso di lavoro',
+        note: 'Un breve percorso guidato, circa un minuto',
+      },
+      exploreSample: {
+        title: 'Esplora un esempio',
+        note: '{name}, già costruito — scegli tu le sue cartelle',
+      },
+      skip: {
+        title: 'Salta',
+        note: 'Vai dritto al punto. Lo trovi nelle Impostazioni se lo vuoi più tardi.',
+      },
+    },
+  },
+
+  messages: {
+    untitledProject: 'Senza titolo',
+    recordingNote: 'Questa è una registrazione, non un’esecuzione su questo computer.',
+    problemsToFix: {
+      one: '{count} problema da risolvere.',
+      other: '{count} problemi da risolvere.',
+    },
+    readyToRun: 'Questo grafo è pronto per essere eseguito.',
+    nothingRanProblems: {
+      one: 'Nulla è stato eseguito: {count} problema da risolvere prima.',
+      other: 'Nulla è stato eseguito: {count} problemi da risolvere prima.',
+    },
+    saved: {
+      one: 'Salvato. {count} versione conservata.',
+      other: 'Salvato. {count} versioni conservate.',
+    },
+    watchingChanges: 'In osservazione. Verrà eseguito non appena appare qualcosa.',
+    running: 'In esecuzione.',
+    stopping: 'Interruzione in corso.',
+    demoLoaded: '{name}: compila {needs}, poi avvialo.',
+    restored: 'Ripristinato. La versione da cui provenivi è ancora nella cronologia.',
+    missingComponents: 'Questo progetto ha bisogno di {missing}, che non è installato.',
+    runtimeSilent: 'Qualcosa nel runtime non ha risposto.',
+  },
+
+  demos: {
+    imageProcessor: {
+      name: 'Elaboratore di immagini',
+      summary:
+        'Osserva una cartella. Ogni volta che appare un’immagine, ne crea una copia più piccola in un’altra cartella.',
+      needs: {
+        watch: 'Una cartella da osservare',
+        save: 'Una cartella in cui salvare',
+      },
+    },
+    fileOrganiser: {
+      name: 'Organizzatore di file',
+      summary:
+        'Osserva una cartella e sposta ciò che vi arriva in una di altre tre, in base al tipo di file.',
+      needs: {
+        watch: 'Una cartella da osservare',
+        images: 'Una cartella per le immagini',
+        documents: 'Una cartella per i documenti',
+      },
+    },
+    thumbnails: {
+      name: 'Miniature',
+      summary:
+        'Trasforma una cartella di immagini in anteprime quadrate, pronte per una galleria o una griglia.',
+      needs: {
+        watch: 'Una cartella da osservare',
+        save: 'Una cartella in cui salvare',
+      },
     },
   },
 

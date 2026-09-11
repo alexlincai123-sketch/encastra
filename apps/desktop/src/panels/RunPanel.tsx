@@ -20,6 +20,13 @@
  * touching React or the DOM; see `../../test/run-panel.test.ts`.
  */
 
+// Plain functions rather than `useTranslation()`: everything below `dotModifier` is exported and
+// exercised directly by `../../test/run-panel.test.ts` with no React tree to render, and
+// `store.ts`'s own `summarise` calls `outcomeSummary`'s `runPanel.outcome.*` keys the same way —
+// see that file's note on why the status bar and this panel must never describe a run
+// differently. `translate()` reads the active locale itself at call time, the same pattern
+// `canvas/Canvas.tsx` uses inside `isConnectionLegal`.
+import { selectPlural, splitOnPlaceholder, translate, useI18n, useTranslation } from '../i18n';
 import { usePreferences } from '../preferences';
 import { useEditor } from '../store';
 import type { NodeRecord, NodeStatus, RunJournal } from '../types';
@@ -89,19 +96,20 @@ export function selectSteps(params: {
   return liveSteps(params.liveNodes);
 }
 
-const STATUS_LABEL: Record<NodeStatus, string> = {
-  pending: 'Waiting',
-  running: 'Running',
-  ok: 'Finished',
-  failed: 'Failed',
-  skipped: 'Skipped',
-  cancelled: 'Cancelled',
-  disabled: 'Switched off',
+const STATUS_KEY: Record<NodeStatus, string> = {
+  pending: 'runPanel.status.pending',
+  running: 'runPanel.status.running',
+  ok: 'runPanel.status.ok',
+  failed: 'runPanel.status.failed',
+  skipped: 'runPanel.status.skipped',
+  cancelled: 'runPanel.status.cancelled',
+  disabled: 'runPanel.status.disabled',
 };
 
-/** A status a person can read, in place of the runtime's identifier for it. */
+/** A status a person can read, in place of the runtime's identifier for it. Reused by
+ * `panels/Inspector.tsx`'s own run record, so a step's status reads the same in both places. */
 export function stepStatusLabel(status: NodeStatus): string {
-  return STATUS_LABEL[status];
+  return translate(STATUS_KEY[status]);
 }
 
 /** `128ms`, or `1.2s` once it is long enough that milliseconds stop being the useful unit. */
@@ -129,7 +137,10 @@ export function outcomeSummary(params: {
   readonly watching: boolean;
 }): Outcome | null {
   if (params.running) {
-    return { text: params.watching ? 'Watching for changes…' : 'Running…', tone: 'info' };
+    return {
+      text: translate(params.watching ? 'runPanel.outcome.watching' : 'runPanel.outcome.running'),
+      tone: 'info',
+    };
   }
 
   const { journal } = params;
@@ -140,21 +151,29 @@ export function outcomeSummary(params: {
     journal.finished_at_ms !== undefined
       ? formatDuration(journal.finished_at_ms - journal.started_at_ms)
       : undefined;
+  const locale = useI18n.getState().locale;
 
   switch (journal.status) {
     case 'ok':
-      return { text: took ? `Finished in ${took}.` : 'Finished.', tone: 'info' };
+      return {
+        text: took
+          ? translate('runPanel.outcome.finishedIn', { took })
+          : translate('runPanel.outcome.finished'),
+        tone: 'info',
+      };
     case 'partial':
       return {
-        text: `${failed} step${failed === 1 ? '' : 's'} failed. The rest of the graph still ran.`,
+        text: translate(`runPanel.outcome.partial.${selectPlural(locale, failed)}`, {
+          count: failed,
+        }),
         tone: 'error',
       };
     case 'failed':
-      return { text: 'Nothing completed.', tone: 'error' };
+      return { text: translate('runPanel.outcome.failed'), tone: 'error' };
     case 'cancelled':
-      return { text: 'Stopped.', tone: 'info' };
+      return { text: translate('runPanel.outcome.cancelled'), tone: 'info' };
     default:
-      return { text: 'Running…', tone: 'info' };
+      return { text: translate('runPanel.outcome.running'), tone: 'info' };
   }
 }
 
@@ -165,8 +184,15 @@ export function watchSummary(params: {
   readonly pending: number;
 }): string | null {
   if (!params.watching) return null;
-  const parts = [`${params.runs} run${params.runs === 1 ? '' : 's'} so far`];
-  if (params.pending > 0) parts.push(`${params.pending} waiting`);
+  const locale = useI18n.getState().locale;
+  const parts = [
+    translate(`runPanel.watch.runsSoFar.${selectPlural(locale, params.runs)}`, {
+      count: params.runs,
+    }),
+  ];
+  if (params.pending > 0) {
+    parts.push(translate('runPanel.watch.pendingWaiting', { count: params.pending }));
+  }
   return parts.join(' · ');
 }
 
@@ -201,6 +227,11 @@ export function RunPanel() {
   const selectedNodeId = useEditor((s) => s.selectedNodeId);
   const select = useEditor((s) => s.select);
   const nameOf = useStepName();
+  const { t } = useTranslation();
+
+  // Split around `{name}` once, the same way `canvas/Canvas.tsx` splits its own refusal
+  // sentence — see `i18n/index.ts` — so the skipped step's name can sit in its own `<strong>`.
+  const [neverRanBefore, neverRanAfter] = splitOnPlaceholder(t('runPanel.step.neverRan'), 'name');
 
   /**
    * Whether the panel is present before there is anything to report.
@@ -219,31 +250,24 @@ export function RunPanel() {
   const watchText = watchSummary({ watching, runs, pending });
 
   return (
-    <section className="run-panel" aria-label="Run">
+    <section className="run-panel" aria-label={t('runPanel.ariaLabel')}>
       <header className="run-panel__header">
-        <h2 className="run-panel__title">Run</h2>
+        <h2 className="run-panel__title">{t('runPanel.title')}</h2>
         {outcome ? (
           <span className={`run-panel__outcome run-panel__outcome--${outcome.tone}`}>
             {outcome.text}
           </span>
         ) : null}
         {journalIsRecording ? (
-          <span
-            className="preview-badge"
-            title="This is a recorded run, played back for the debugger. It did not just happen on this machine."
-          >
-            recording
+          <span className="preview-badge" title={t('runPanel.recordingTitle')}>
+            {t('common.recordingBadge')}
           </span>
         ) : null}
         {watchText ? <span className="run-panel__watch">{watchText}</span> : null}
       </header>
 
       {steps.length === 0 ? (
-        <p className="empty">
-          Nothing has run yet. Press Run above and each step will appear here, in the order the
-          runtime executes them, with its status and how long it took — or, if one fails, what went
-          wrong and what to do about it.
-        </p>
+        <p className="empty">{t('runPanel.empty')}</p>
       ) : (
         <ol className="run-panel__steps">
           {steps.map((step, index) => {
@@ -279,8 +303,9 @@ export function RunPanel() {
 
                 {skipped ? (
                   <div className="note note--warn run-panel__step-note">
-                    Never ran — <strong>{nameOf(step.record?.skipped_because ?? '')}</strong> did
-                    not finish.
+                    {neverRanBefore}
+                    <strong>{nameOf(step.record?.skipped_because ?? '')}</strong>
+                    {neverRanAfter}
                   </div>
                 ) : null}
               </li>

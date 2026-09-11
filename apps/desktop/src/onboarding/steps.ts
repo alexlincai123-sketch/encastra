@@ -12,10 +12,13 @@
 import type { View } from '../store';
 
 export interface TourStep {
-  /** Short, and a statement of what the person is about to do. */
-  title: string;
-  /** Two sentences at most. The tour is meant to take a minute, not to be read. */
-  body: string;
+  /** Translation key for a short statement of what the person is about to do — see
+   * `onboarding.tour.*.title` in `i18n/locales/en.ts`. Not the text itself, so this script and
+   * `onboarding.test.ts` can both check it in whatever language is active. */
+  titleKey: string;
+  /** Translation key for at most two sentences. The tour is meant to take a minute, not to be
+   * read — see `onboarding.tour.*.body`. */
+  bodyKey: string;
   /** Where this step happens, so the tour can take them there rather than describing it. */
   view: View;
   /** The part of the screen this step is about, used to highlight it. */
@@ -29,50 +32,50 @@ export interface TourStep {
 
 export const TOUR: TourStep[] = [
   {
-    title: 'This is your canvas',
-    body: 'A workflow is a few components joined together. Everything runs on this machine, and nothing reaches your files until you allow it.',
+    titleKey: 'onboarding.tour.canvas.title',
+    bodyKey: 'onboarding.tour.canvas.body',
     view: 'builder',
     focus: 'canvas',
     done: null,
   },
   {
-    title: 'Add the first step',
-    body: 'On the left is every component installed. Find Watch Folder and add it — it starts the workflow whenever a file appears somewhere you choose.',
+    titleKey: 'onboarding.tour.addFirst.title',
+    bodyKey: 'onboarding.tour.addFirst.body',
     view: 'builder',
     focus: 'palette',
     done: 'node-placed',
   },
   {
-    title: 'Add something to do',
-    body: 'Now add Resize Image. It takes a picture and makes a smaller copy, leaving the original alone.',
+    titleKey: 'onboarding.tour.addSecond.title',
+    bodyKey: 'onboarding.tour.addSecond.body',
     view: 'builder',
     focus: 'palette',
     done: 'two-nodes',
   },
   {
-    title: 'Join them together',
-    body: 'Drag from the file port on Watch Folder to the image port on Resize Image. A file is not yet a picture, so the editor inserts the step that opens it — and refuses the join outright if the two could never fit.',
+    titleKey: 'onboarding.tour.connect.title',
+    bodyKey: 'onboarding.tour.connect.body',
     view: 'builder',
     focus: 'canvas',
     done: 'connected',
   },
   {
-    title: 'Tell it which folder',
-    body: 'Select a step to configure it on the right. Watch Folder needs to know which folder to watch, and Save File needs to know where to put the result.',
+    titleKey: 'onboarding.tour.configure.title',
+    bodyKey: 'onboarding.tour.configure.body',
     view: 'builder',
     focus: 'inspector',
     done: 'configured',
   },
   {
-    title: 'Allow it that folder',
-    body: 'A component cannot touch anything until you say so, and a permission is scoped to the one folder you pick. Press Allow on the step that asked.',
+    titleKey: 'onboarding.tour.allow.title',
+    bodyKey: 'onboarding.tour.allow.body',
     view: 'builder',
     focus: 'inspector',
     done: 'granted',
   },
   {
-    title: 'Run it',
-    body: 'Press Run, or Ctrl+Enter. Each step lights up as it happens, and the panel below records what it did and how long it took.',
+    titleKey: 'onboarding.tour.run.title',
+    bodyKey: 'onboarding.tour.run.body',
     view: 'builder',
     focus: 'toolbar',
     done: 'ran',

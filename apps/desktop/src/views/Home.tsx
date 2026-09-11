@@ -105,10 +105,12 @@ export function Home() {
         <div className="home__grid">
           {DEMOS.map((demo) => (
             <button type="button" className="card" key={demo.id} onClick={() => loadDemo(demo)}>
-              <span className="card__title">{demo.name}</span>
-              <span className="card__detail">{demo.summary}</span>
+              <span className="card__title">{t(demo.nameKey)}</span>
+              <span className="card__detail">{t(demo.summaryKey)}</span>
               <span className="card__needs">
-                {t('home.samples.needs', { list: demo.needs.join(' · ') })}
+                {t('home.samples.needs', {
+                  list: demo.needsKeys.map((key) => t(key)).join(' · '),
+                })}
               </span>
             </button>
           ))}

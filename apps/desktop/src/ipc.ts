@@ -231,14 +231,18 @@ export const ipc: Ipc = inTauri() ? new TauriIpc() : new PreviewIpc();
  *
  * They are labelled as recordings wherever they are shown. Presenting a recording as a live
  * result would be exactly the "demo dressed as a product" this project is meant not to be.
+ *
+ * `labelKey` rather than the label itself: this array is built once, at module load, before
+ * anybody has necessarily chosen a language — see `toolbar.recordedRuns` in `i18n/locales/en.ts`.
+ * `App.tsx` resolves it with `t()` at render time, the same way `demos.ts` resolves its own keys.
  */
-export const recordedRuns: { readonly label: string; readonly journal: RunJournal }[] = [
+export const recordedRuns: { readonly labelKey: string; readonly journal: RunJournal }[] = [
   {
-    label: 'Recorded: everything allowed',
+    labelKey: 'toolbar.recordedRuns.everythingAllowed',
     journal: exampleRunFixture as unknown as RunJournal,
   },
   {
-    label: 'Recorded: the folder was not allowed',
+    labelKey: 'toolbar.recordedRuns.folderNotAllowed',
     journal: deniedRunFixture as unknown as RunJournal,
   },
 ];

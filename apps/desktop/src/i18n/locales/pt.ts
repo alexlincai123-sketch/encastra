@@ -10,6 +10,9 @@ const pt: Messages = {
   common: {
     close: 'Fechar',
     dismiss: 'Dispensar',
+    choose: 'Escolher…',
+    itCannot: 'Não consegue',
+    recordingBadge: 'gravação',
   },
 
   sidebar: {
@@ -94,6 +97,378 @@ const pt: Messages = {
       'Use as setas para se mover entre passos, Enter para abrir um passo no inspector, Escape para desmarcar e Delete para remover o passo seleccionado.',
     a11y: {
       selected: '{name}, passo {index} de {total}, seleccionado.',
+    },
+    node: {
+      notInstalled: 'Não instalado.',
+    },
+    wire: {
+      ops: {
+        toText: 'como texto',
+        intToFloat: 'como decimal',
+        boolToInt: 'como número',
+        intToBool: 'como sim/não',
+        round: 'arredondado',
+        parseInt: 'analisar como número',
+        parseFloat: 'analisar como decimal',
+        parseBool: 'analisar como sim/não',
+        parseJson: 'analisar JSON',
+        stringifyJson: 'como texto',
+        encodeJson: 'para JSON',
+        decodeJson: 'a partir de JSON',
+        readBytes: 'ler',
+        writeTemp: 'para ficheiro',
+        unwrapOption: 'pode estar ausente',
+        map: 'cada um',
+      },
+    },
+  },
+
+  toolbar: {
+    preview: {
+      badge: 'pré-visualização',
+      title: 'Não há nenhum motor de execução associado a esta janela.',
+    },
+    new: 'Novo',
+    open: 'Abrir',
+    save: 'Guardar',
+    unsavedChanges: 'Alterações não guardadas',
+    check: 'Verificar',
+    stop: 'Parar',
+    run: 'Executar',
+    startWatching: 'Começar a vigiar',
+    watching: 'A vigiar',
+    recordedRuns: {
+      everythingAllowed: 'Gravação: tudo permitido',
+      folderNotAllowed: 'Gravação: a pasta não foi permitida',
+    },
+    notifications: {
+      more: '{count} mais',
+    },
+    status: {
+      steps: {
+        one: '{count} passo',
+        other: '{count} passos',
+      },
+      running: 'em execução',
+      runs: {
+        one: '{count} execução',
+        other: '{count} execuções',
+      },
+      waiting: '{count} em espera',
+      ok: {
+        one: '{count} concluído',
+        other: '{count} concluídos',
+      },
+      failed: {
+        one: '{count} falhado',
+        other: '{count} falhados',
+      },
+      skipped: {
+        one: '{count} ignorado',
+        other: '{count} ignorados',
+      },
+    },
+  },
+
+  components: {
+    header: {
+      title: 'Componentes',
+      summary: '{count} instalados.',
+      summaryWithTriggers:
+        '{count} instalados — {triggerCount} deles iniciam um fluxo de trabalho por conta própria; o resto executa-se como um passo dentro de um.',
+      note: 'Tudo isto vem incluído com a aplicação; instalar outros precisa da sandbox para código de terceiros, que ainda não está construída.',
+    },
+    search: {
+      placeholder: 'Pesquisar',
+      ariaLabel: 'Pesquisar componentes',
+    },
+    filters: {
+      categoryLegend: 'Categoria',
+    },
+    empty: 'Nada corresponde a isso.',
+    card: {
+      triggerBadge: 'inicia um fluxo de trabalho',
+      triggerNote:
+        'Uma fonte de eventos, não um passo — isto inicia uma execução em vez de se executar dentro de uma.',
+      noDescription: 'Este componente não documentou o que faz.',
+      takes: 'Recebe',
+      gives: 'Devolve',
+      addToCanvas: 'Adicionar à tela',
+    },
+    reach: {
+      label: 'Consegue alcançar',
+      none: 'Não alcança nada fora deste fluxo de trabalho',
+      verb: {
+        fsRead: 'Lê ficheiros',
+        fsWrite: 'Escreve ficheiros',
+        netHttp: 'Usa a rede',
+        systemClipboard: 'Usa a área de transferência',
+        systemNotify: 'Mostra notificações',
+      },
+      cannot: {
+        fsRead: 'ler os seus ficheiros',
+        fsWrite: 'escrever ficheiros',
+        netHttp: 'usar a rede',
+        systemClipboard: 'usar a área de transferência',
+        systemNotify: 'mostrar notificações',
+      },
+    },
+  },
+
+  security: {
+    title: 'Segurança',
+    intro:
+      'Os componentes não conseguem aceder aos seus ficheiros, à sua rede ou à sua área de transferência a menos que um manifesto o declare e você o permita. As permissões são concedidas por execução, e cada pedido — permitido ou recusado — fica registado onde o pode consultar.',
+    installed: {
+      title: 'Componentes instalados',
+      headers: {
+        component: 'Componente',
+        version: 'Versão',
+        origin: 'Origem',
+        canReach: 'Consegue alcançar',
+      },
+      builtIn: 'incluído de fábrica',
+      nothing: 'nada',
+      thirdPartyNote:
+        'Nada aqui vem de fora desta aplicação. Os componentes de terceiros seriam executados numa sandbox de WebAssembly sem autoridade ambiental; essa sandbox está concebida e documentada, mas {notBuilt}, por isso instalá-los ainda não é possível.',
+      thirdPartyNoteEmphasis: 'não está construída',
+    },
+    grants: {
+      title: 'Permitido no fluxo de trabalho aberto',
+      empty:
+        'Não foi permitido nada. Um fluxo de trabalho que precise de uma pasta vai perguntar antes de ser executado.',
+      note: 'Estes duram apenas para esta sessão. Fechar a aplicação esquece-os, por isso um fluxo de trabalho que não veja há um mês não pode continuar a escrever nalgum sítio.',
+    },
+    privacy: {
+      title: 'Privacidade',
+      telemetry: { label: 'Telemetria', value: 'Nenhuma. Nada é recolhido nem enviado.' },
+      crashReports: { label: 'Relatórios de falha', value: 'Nenhum.' },
+      accounts: { label: 'Contas', value: 'Nenhuma. Não há início de sessão nem servidor.' },
+      yourFiles: {
+        label: 'Os seus ficheiros',
+        value:
+          'Nunca saem deste computador, a menos que um fluxo de trabalho que tenha criado os envie para algum lado.',
+      },
+      runJournals: {
+        value:
+          'Registam tamanhos e formas, nunca o conteúdo dos ficheiros. Um registo é mantido em memória enquanto a janela está aberta e visível; nada é escrito no disco, e fechar a aplicação descarta-o.',
+      },
+    },
+    limits: {
+      title: 'Contra o que isto não protege',
+      misuse:
+        'Um componente a que conceda um acesso amplo pode abusar dele. A caixa de diálogo pode tornar essa decisão informada; não a pode tornar impossível.',
+      trustedBase:
+        'Os componentes incluídos de fábrica executam-se como código nativo comum. Estão limitados pelo intermediário de permissões, mas uma falha num deles é uma falha na base de confiança.',
+      noAudit:
+        'Esta versão não teve nenhuma auditoria de segurança externa. Isso é um pré-requisito para distribuir componentes escritos por outras pessoas, não para executar os seus próprios fluxos de trabalho.',
+      unsigned:
+        'Nada aqui está assinado ainda, por isso esta versão não consegue provar que não foi alterada.',
+      previewOnly:
+        'Isto é uma pré-visualização no navegador, sem qualquer motor de execução associado.',
+    },
+    footer:
+      'Motor de execução {runtime} · esquema de protocolo {protocolSchema} · esquema de projecto {projectSchema}',
+  },
+
+  inspector: {
+    problemsTitle: 'Problemas',
+    projectTitle: 'Projecto',
+    selectStep: 'Seleccione um passo para o configurar, ou escolha um componente para começar.',
+    component: 'Componente',
+    switchOn: 'Ligar',
+    switchOff: 'Desligar',
+    settingsTitle: 'Definições',
+    nothingChosen: 'Nada escolhido',
+    entryInputs: {
+      title: 'Material de partida',
+      doc: 'Nada no grafo produz isto, por isso a execução precisa disto de si.',
+    },
+    permissions: {
+      title: 'Permissões',
+      none: 'Este componente não pede nada. Trabalha apenas com o que o grafo lhe entrega, e não consegue aceder aos seus ficheiros, à rede ou à área de transferência.',
+      allowed: 'Permitido',
+      allowFolder: 'Permitir esta pasta',
+      allowHost: 'Permitir {host}',
+      allowAddress: 'Permitir este endereço',
+      allow: 'Permitir',
+      chooseFolderFirst: 'Escolha primeiro uma pasta.',
+      enterAddressFirst: 'Introduza primeiro um endereço.',
+      notASetting:
+        'Não é uma definição — o componente nunca declarou isto, por isso o motor de execução recusa-o seja o que for que permita aqui.',
+    },
+    versions: {
+      title: 'Versões',
+      titleWithCount: 'Versões · {count}',
+      empty:
+        'Guarde este projecto para começar a conservar versões. Cada vez que guarda regista uma, e nada é alguma vez substituído.',
+      currentVersionTitle: 'Esta é a versão actual.',
+      restoreTitle: 'Restaurar esta. É adicionada como uma nova versão; nada se perde.',
+      current: 'Actual',
+      versionNumber: 'Versão {number}',
+      restore: 'Restaurar',
+    },
+    runRecord: {
+      title: 'Última execução',
+      code: 'Código: {code}',
+      neverRan: 'Este passo nunca foi executado, porque {name} não terminou.',
+      status: 'Estado',
+      took: 'Demorou',
+      in: 'entra {port}',
+      out: 'sai {port}',
+      permissionsUsed: 'Permissões usadas',
+      refused: ' · {count} recusadas',
+      logs: 'Registos',
+    },
+  },
+
+  runPanel: {
+    ariaLabel: 'Execução',
+    title: 'Execução',
+    recordingTitle:
+      'Esta é uma execução gravada, reproduzida para o depurador. Não acabou de acontecer neste computador.',
+    empty:
+      'Ainda não foi executado nada. Prima Executar acima e cada passo vai aparecer aqui, na ordem em que o motor de execução os executa, com o seu estado e quanto tempo demorou — ou, se um falhar, o que correu mal e o que fazer.',
+    status: {
+      pending: 'Em espera',
+      running: 'Em execução',
+      ok: 'Concluído',
+      failed: 'Falhado',
+      skipped: 'Ignorado',
+      cancelled: 'Cancelado',
+      disabled: 'Desligado',
+    },
+    outcome: {
+      watching: 'A vigiar alterações…',
+      running: 'A executar…',
+      finished: 'Concluído.',
+      finishedIn: 'Concluído em {took}.',
+      partial: {
+        one: '{count} passo falhou. O resto do grafo executou-se na mesma.',
+        other: '{count} passos falharam. O resto do grafo executou-se na mesma.',
+      },
+      failed: 'Nada foi concluído.',
+      cancelled: 'Parado.',
+    },
+    watch: {
+      runsSoFar: {
+        one: '{count} execução até agora',
+        other: '{count} execuções até agora',
+      },
+      pendingWaiting: '{count} em espera',
+    },
+    step: {
+      neverRan: 'Nunca foi executado — {name} não terminou.',
+    },
+  },
+
+  onboarding: {
+    tour: {
+      stepCount: 'Passo {current} de {total}',
+      done: 'Concluído — continue quando estiver pronto.',
+      waiting: 'À espera que o experimente.',
+      finish: 'Terminar',
+      next: 'Seguinte',
+      canvas: {
+        title: 'Esta é a sua tela',
+        body: 'Um fluxo de trabalho é composto por alguns componentes ligados entre si. Tudo corre neste computador, e nada acede aos seus ficheiros até que o permita.',
+      },
+      addFirst: {
+        title: 'Adicione o primeiro passo',
+        body: 'À esquerda está cada componente instalado. Encontre Vigiar pasta e adicione-o — inicia o fluxo de trabalho sempre que aparece um ficheiro onde escolher.',
+      },
+      addSecond: {
+        title: 'Adicione algo para fazer',
+        body: 'Agora adicione Redimensionar imagem. Recebe uma imagem e faz uma cópia mais pequena, deixando a original intacta.',
+      },
+      connect: {
+        title: 'Ligue-os entre si',
+        body: 'Arraste da porta de ficheiro de Vigiar pasta até à porta de imagem de Redimensionar imagem. Um ficheiro ainda não é uma imagem, por isso o editor insere o passo que o abre — e recusa a ligação de imediato se os dois nunca pudessem encaixar.',
+      },
+      configure: {
+        title: 'Diga-lhe qual a pasta',
+        body: 'Seleccione um passo para o configurar à direita. Vigiar pasta precisa de saber qual a pasta a vigiar, e Guardar ficheiro precisa de saber onde colocar o resultado.',
+      },
+      allow: {
+        title: 'Permita-lhe essa pasta',
+        body: 'Um componente não consegue tocar em nada até que lho diga, e uma permissão está limitada à única pasta que escolher. Prima Permitir no passo que o pediu.',
+      },
+      run: {
+        title: 'Execute-o',
+        body: 'Prima Executar, ou Ctrl+Enter. Cada passo acende-se à medida que acontece, e o painel abaixo regista o que fez e quanto tempo demorou.',
+      },
+    },
+    welcome: {
+      title: 'Bem-vindo ao Encastra',
+      lead: 'Crie software montando componentes. Escolha as peças, ligue-as e prima executar — neste computador, sem que nada aceda aos seus ficheiros até que o permita.',
+      createFirst: {
+        title: 'Crie o seu primeiro fluxo de trabalho',
+        note: 'Um breve percurso guiado, cerca de um minuto',
+      },
+      exploreSample: {
+        title: 'Explore um exemplo',
+        note: '{name}, já construído — escolha as suas pastas',
+      },
+      skip: {
+        title: 'Ignorar',
+        note: 'Avance directamente. Isto está nas Definições, caso o queira mais tarde.',
+      },
+    },
+  },
+
+  messages: {
+    untitledProject: 'Sem título',
+    recordingNote: 'Isto é uma gravação, não uma execução neste computador.',
+    problemsToFix: {
+      one: '{count} problema a resolver.',
+      other: '{count} problemas a resolver.',
+    },
+    readyToRun: 'Este grafo está pronto a ser executado.',
+    nothingRanProblems: {
+      one: 'Nada foi executado: {count} problema a resolver primeiro.',
+      other: 'Nada foi executado: {count} problemas a resolver primeiro.',
+    },
+    saved: {
+      one: 'Guardado. {count} versão conservada.',
+      other: 'Guardado. {count} versões conservadas.',
+    },
+    watchingChanges: 'A vigiar. Vai executar-se assim que algo aparecer.',
+    running: 'Em execução.',
+    stopping: 'A parar.',
+    demoLoaded: '{name}: preencha {needs}, depois inicie-o.',
+    restored: 'Restaurado. A versão de onde veio continua no histórico.',
+    missingComponents: 'Este projecto precisa de {missing}, que não está instalado.',
+    runtimeSilent: 'Algo no motor de execução não respondeu.',
+  },
+
+  demos: {
+    imageProcessor: {
+      name: 'Processador de imagens',
+      summary:
+        'Vigia uma pasta. Sempre que aparece uma imagem, faz uma cópia mais pequena noutra pasta.',
+      needs: {
+        watch: 'Uma pasta a vigiar',
+        save: 'Uma pasta onde guardar',
+      },
+    },
+    fileOrganiser: {
+      name: 'Organizador de ficheiros',
+      summary:
+        'Vigia uma pasta e move o que lá chega para uma de outras três, consoante o tipo de ficheiro.',
+      needs: {
+        watch: 'Uma pasta a vigiar',
+        images: 'Uma pasta para imagens',
+        documents: 'Uma pasta para documentos',
+      },
+    },
+    thumbnails: {
+      name: 'Miniaturas',
+      summary:
+        'Transforma uma pasta de imagens em pré-visualizações quadradas, prontas para uma galeria ou uma grelha.',
+      needs: {
+        watch: 'Uma pasta a vigiar',
+        save: 'Uma pasta onde guardar',
+      },
     },
   },
 

@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { useI18n } from '../src/i18n';
+import en from '../src/i18n/locales/en';
 import type { NodeRecord, NodeStatus, RunJournal } from '../src/types';
 
 /**
@@ -13,6 +15,13 @@ import type { NodeRecord, NodeStatus, RunJournal } from '../src/types';
  * that line throws the moment the module loads. A dynamic import, after stubbing `window` as an
  * empty object, sidesteps it without touching `store.ts` — which nothing here is allowed to
  * edit anyway — and without adding another source file outside the three this task owns.
+ *
+ * `stepStatusLabel`, `outcomeSummary` and `watchSummary` now go through `translate()` (see
+ * `RunPanel.tsx`'s own note on why), which resolves against whatever locale `useI18n` holds.
+ * Importing the module registers English and picks a starting locale from the machine's own
+ * language, exactly as a real launch does — so this suite pins the locale to English explicitly,
+ * the same way `i18n.test.ts` and `settings-i18n.test.ts` do, rather than depending on English
+ * merely being whatever this particular machine happens to be set to.
  */
 
 vi.stubGlobal('window', {});
@@ -21,6 +30,7 @@ let RunPanel: typeof import('../src/panels/RunPanel');
 
 beforeAll(async () => {
   RunPanel = await import('../src/panels/RunPanel');
+  useI18n.setState({ locale: 'en', messages: { en } });
 });
 
 function record(status: NodeStatus, extra: Partial<NodeRecord> = {}): NodeRecord {

@@ -12,16 +12,18 @@
 import { namedTypesIn, tryParseType, typeDef } from '@encastra/protocol';
 import { useMemo, useState } from 'react';
 import '../components-view.css';
+import { useTranslation } from '../i18n';
 import { useEditor } from '../store';
 import type { Capability, ComponentManifest } from '../types';
 
-/** Plain-language verb for a capability this component actually declares. */
-const REACH_VERB: Record<string, string> = {
-  'fs.read': 'Reads files',
-  'fs.write': 'Writes files',
-  'net.http': 'Uses the network',
-  'system.clipboard': 'Uses the clipboard',
-  'system.notify': 'Shows notifications',
+/** The `components.reach.verb.*` key for a capability this component actually declares —
+ * capitalised, third-person: "Reads files". */
+const REACH_VERB_KEYS: Record<string, string> = {
+  'fs.read': 'components.reach.verb.fsRead',
+  'fs.write': 'components.reach.verb.fsWrite',
+  'net.http': 'components.reach.verb.netHttp',
+  'system.clipboard': 'components.reach.verb.systemClipboard',
+  'system.notify': 'components.reach.verb.systemNotify',
 };
 
 /**
@@ -34,13 +36,14 @@ const REACH_VERB: Record<string, string> = {
  */
 const REACH_ORDER = ['fs.read', 'fs.write', 'net.http', 'system.clipboard', 'system.notify'];
 
-/** The same wording the inspector's permission dialog uses for "it cannot" — see Inspector.tsx. */
-const REACH_CANNOT: Record<string, string> = {
-  'fs.read': 'read your files',
-  'fs.write': 'write files',
-  'net.http': 'use the network',
-  'system.clipboard': 'use the clipboard',
-  'system.notify': 'show notifications',
+/** The same `components.reach.cannot.*` keys the inspector's permission panel reads for "it
+ * cannot" — see Inspector.tsx. */
+const REACH_CANNOT_KEYS: Record<string, string> = {
+  'fs.read': 'components.reach.cannot.fsRead',
+  'fs.write': 'components.reach.cannot.fsWrite',
+  'net.http': 'components.reach.cannot.netHttp',
+  'system.clipboard': 'components.reach.cannot.systemClipboard',
+  'system.notify': 'components.reach.cannot.systemNotify',
 };
 
 /** A type's colour always comes from the shared type table, never from a palette of its own. */
@@ -76,13 +79,14 @@ function PortList({
 
 /** What this component can reach, and — the more trustworthy half — what it cannot. */
 function Reach({ capabilities }: { capabilities: Capability[] }) {
+  const { t } = useTranslation();
   const reach = capabilities.filter((c) => c.scope !== 'input-handles');
 
   if (reach.length === 0) {
     return (
       <p className="catalogue__safe">
         <span className="catalogue__safe-mark" aria-hidden="true" />
-        Reaches nothing outside this workflow
+        {t('components.reach.none')}
       </p>
     );
   }
@@ -92,25 +96,27 @@ function Reach({ capabilities }: { capabilities: Capability[] }) {
 
   return (
     <div className="catalogue__reach">
-      <span className="catalogue__reach-label">Can reach</span>
+      <span className="catalogue__reach-label">{t('components.reach.label')}</span>
       <ul className="catalogue__reach-list">
-        {reach.map((capability) => (
-          <li key={capability.kind}>
-            <span className="catalogue__reach-kind">
-              {REACH_VERB[capability.kind] ?? capability.kind}
-            </span>
-            <span className="catalogue__reach-reason">{capability.reason}</span>
-          </li>
-        ))}
+        {reach.map((capability) => {
+          const key = REACH_VERB_KEYS[capability.kind];
+          return (
+            <li key={capability.kind}>
+              <span className="catalogue__reach-kind">{key ? t(key) : capability.kind}</span>
+              <span className="catalogue__reach-reason">{capability.reason}</span>
+            </li>
+          );
+        })}
       </ul>
 
       {cannot.length > 0 ? (
         <div className="cannot">
-          <span className="cannot__label">It cannot</span>
+          <span className="cannot__label">{t('common.itCannot')}</span>
           <ul className="cannot__list">
-            {cannot.map((kind) => (
-              <li key={kind}>{REACH_CANNOT[kind] ?? kind}</li>
-            ))}
+            {cannot.map((kind) => {
+              const key = REACH_CANNOT_KEYS[kind];
+              return <li key={kind}>{key ? t(key) : kind}</li>;
+            })}
           </ul>
         </div>
       ) : null}
@@ -121,6 +127,7 @@ function Reach({ capabilities }: { capabilities: Capability[] }) {
 function Card({ manifest }: { manifest: ComponentManifest }) {
   const addNode = useEditor((s) => s.addNode);
   const setView = useEditor((s) => s.setView);
+  const { t } = useTranslation();
   const reference = `${manifest.id}@${manifest.version}`;
   const inputs = Object.entries(manifest.ports.inputs);
   const outputs = Object.entries(manifest.ports.outputs);
@@ -134,19 +141,19 @@ function Card({ manifest }: { manifest: ComponentManifest }) {
 
       {manifest.trigger ? (
         <p className="catalogue__trigger-note">
-          <span className="badge">starts a workflow</span> A source of events, not a step — this
-          begins a run instead of running inside one.
+          <span className="badge">{t('components.card.triggerBadge')}</span>{' '}
+          {t('components.card.triggerNote')}
         </p>
       ) : null}
 
       <p className="catalogue__description">
-        {manifest.description ?? 'This component has not documented what it does.'}
+        {manifest.description ?? t('components.card.noDescription')}
       </p>
 
       {inputs.length > 0 || outputs.length > 0 ? (
         <div className="catalogue__ports">
-          <PortList title="Takes" ports={inputs} />
-          <PortList title="Gives" ports={outputs} />
+          <PortList title={t('components.card.takes')} ports={inputs} />
+          <PortList title={t('components.card.gives')} ports={outputs} />
         </div>
       ) : null}
 
@@ -162,7 +169,7 @@ function Card({ manifest }: { manifest: ComponentManifest }) {
             setView('builder');
           }}
         >
-          Add to canvas
+          {t('components.card.addToCanvas')}
         </button>
       </footer>
     </article>
@@ -173,6 +180,7 @@ export function Components() {
   const manifests = useEditor((s) => s.manifests);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('all');
+  const { t } = useTranslation();
 
   const all = useMemo(() => Object.values(manifests), [manifests]);
   // Derived from what is actually installed, never stated as a fixed number: the count is a
@@ -201,14 +209,12 @@ export function Components() {
   return (
     <main className="view view--library">
       <header className="view__header">
-        <h1>Components</h1>
+        <h1>{t('components.header.title')}</h1>
         <p>
-          {all.length} installed
           {triggerCount > 0
-            ? ` — ${triggerCount} of them start a workflow on their own; the rest run as a step inside one.`
-            : '.'}{' '}
-          Everything here ships with the application; installing others needs the sandbox for
-          third-party code, which is not built yet.
+            ? t('components.header.summaryWithTriggers', { count: all.length, triggerCount })
+            : t('components.header.summary', { count: all.length })}{' '}
+          {t('components.header.note')}
         </p>
       </header>
 
@@ -216,13 +222,13 @@ export function Components() {
         <input
           className="input"
           type="search"
-          placeholder="Search"
+          placeholder={t('components.search.placeholder')}
           value={query}
-          aria-label="Search components"
+          aria-label={t('components.search.ariaLabel')}
           onChange={(e) => setQuery(e.target.value)}
         />
         <fieldset className="catalogue__categories">
-          <legend className="visually-hidden">Category</legend>
+          <legend className="visually-hidden">{t('components.filters.categoryLegend')}</legend>
           {categories.map((name) => (
             <button
               type="button"
@@ -238,7 +244,7 @@ export function Components() {
       </div>
 
       {shown.length === 0 ? (
-        <p className="empty">Nothing matches that.</p>
+        <p className="empty">{t('components.empty')}</p>
       ) : (
         <div className="catalogue__grid">
           {shown.map((manifest) => (

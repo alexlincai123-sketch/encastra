@@ -14,20 +14,22 @@ import type { EncastraGraph } from './types';
 
 export interface Demo {
   readonly id: string;
-  readonly name: string;
-  readonly summary: string;
-  /** What the person has to fill in before it can run. */
-  readonly needs: readonly string[];
+  /** Translation key for the name shown on its card — see `i18n.demos.<id>.name`. Not the name
+   * itself, so `Home.tsx` and `onboarding/Welcome.tsx` can both show it in whatever language is
+   * active, the same way `onboarding/steps.ts` keys its own cards rather than storing English. */
+  readonly nameKey: string;
+  readonly summaryKey: string;
+  /** What the person has to fill in before it can run, as translation keys in display order. */
+  readonly needsKeys: readonly string[];
   readonly graph: EncastraGraph;
 }
 
 export const DEMOS: readonly Demo[] = [
   {
     id: 'image-processor',
-    name: 'Image Processor',
-    summary:
-      'Watches a folder. Whenever an image appears, it makes a smaller copy in another folder.',
-    needs: ['A folder to watch', 'A folder to save into'],
+    nameKey: 'demos.imageProcessor.name',
+    summaryKey: 'demos.imageProcessor.summary',
+    needsKeys: ['demos.imageProcessor.needs.watch', 'demos.imageProcessor.needs.save'],
     graph: {
       nodes: {
         watch: {
@@ -54,9 +56,13 @@ export const DEMOS: readonly Demo[] = [
   },
   {
     id: 'file-organiser',
-    name: 'File Organiser',
-    summary: 'Watches a folder and moves what lands in it into one of three others, by file type.',
-    needs: ['A folder to watch', 'A folder for images', 'A folder for documents'],
+    nameKey: 'demos.fileOrganiser.name',
+    summaryKey: 'demos.fileOrganiser.summary',
+    needsKeys: [
+      'demos.fileOrganiser.needs.watch',
+      'demos.fileOrganiser.needs.images',
+      'demos.fileOrganiser.needs.documents',
+    ],
     graph: {
       nodes: {
         watch: {
@@ -95,9 +101,9 @@ export const DEMOS: readonly Demo[] = [
   },
   {
     id: 'thumbnail-sheet',
-    name: 'Thumbnails',
-    summary: 'Turns a folder of images into square previews, ready for a gallery or a grid.',
-    needs: ['A folder to watch', 'A folder to save into'],
+    nameKey: 'demos.thumbnails.name',
+    summaryKey: 'demos.thumbnails.summary',
+    needsKeys: ['demos.thumbnails.needs.watch', 'demos.thumbnails.needs.save'],
     graph: {
       nodes: {
         watch: {

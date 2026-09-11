@@ -8,10 +8,12 @@
  */
 
 import { Fragment } from 'react';
+import { splitOnPlaceholder, useTranslation } from '../i18n';
 import { ipc } from '../ipc';
 import { useEditor } from '../store';
 import type { ComponentManifest, ConfigField, NodeRecord, Snapshot } from '../types';
 import { hostOf } from '../url';
+import { stepStatusLabel } from './RunPanel';
 
 function ConfigControl({
   nodeId,
@@ -25,6 +27,7 @@ function ConfigControl({
   value: unknown;
 }) {
   const setConfig = useEditor((s) => s.setConfig);
+  const { t } = useTranslation();
   const label = field.label ?? name;
   const id = `${nodeId}-${name}`;
 
@@ -37,7 +40,7 @@ function ConfigControl({
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => setConfig(nodeId, name, e.target.value)}
         >
-          <option value="">Choose…</option>
+          <option value="">{t('common.choose')}</option>
           {field.choices.map((choice) => (
             <option key={choice} value={choice}>
               {choice}
@@ -94,7 +97,7 @@ function ConfigControl({
               if (chosen) setConfig(nodeId, name, chosen);
             }}
           >
-            Choose…
+            {t('common.choose')}
           </button>
         ) : null}
       </div>
@@ -118,6 +121,7 @@ function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: Component
   const edges = useEditor((s) => s.edges);
   const inputs = useEditor((s) => s.inputs);
   const setInput = useEditor((s) => s.setInput);
+  const { t } = useTranslation();
 
   const unconnected = Object.entries(manifest.ports.inputs).filter(
     ([port]) => !edges.some((e) => e.target === nodeId && e.targetHandle === port),
@@ -130,7 +134,7 @@ function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: Component
 
   return (
     <section className="panel__section">
-      <h3 className="panel__group-label">Starting material</h3>
+      <h3 className="panel__group-label">{t('inspector.entryInputs.title')}</h3>
       {needingAFile.map(([port, definition]) => {
         const current = inputs.find((i) => i.node === nodeId && i.port === port);
         return (
@@ -144,7 +148,7 @@ function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: Component
                 type="text"
                 readOnly
                 value={current?.path ?? ''}
-                placeholder="Nothing chosen"
+                placeholder={t('inspector.nothingChosen')}
               />
               <button
                 type="button"
@@ -155,12 +159,10 @@ function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: Component
                   if (chosen) setInput(nodeId, port, chosen);
                 }}
               >
-                Choose…
+                {t('common.choose')}
               </button>
             </div>
-            <p className="field__doc">
-              Nothing in the graph produces this, so the run needs it from you.
-            </p>
+            <p className="field__doc">{t('inspector.entryInputs.doc')}</p>
           </div>
         );
       })}
@@ -177,12 +179,14 @@ function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: Component
  */
 const REACH_ORDER = ['fs.read', 'fs.write', 'net.http', 'system.clipboard', 'system.notify'];
 
-const REACH_LABEL: Record<string, string> = {
-  'fs.read': 'read your files',
-  'fs.write': 'write files',
-  'net.http': 'use the network',
-  'system.clipboard': 'use the clipboard',
-  'system.notify': 'show notifications',
+/** The same `components.reach.cannot.*` keys the catalogue card reads for "it cannot" — see
+ * `views/Components.tsx`. */
+const REACH_LABEL_KEYS: Record<string, string> = {
+  'fs.read': 'components.reach.cannot.fsRead',
+  'fs.write': 'components.reach.cannot.fsWrite',
+  'net.http': 'components.reach.cannot.netHttp',
+  'system.clipboard': 'components.reach.cannot.systemClipboard',
+  'system.notify': 'components.reach.cannot.systemNotify',
 };
 
 /**
@@ -197,6 +201,7 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
   const grants = useEditor((s) => s.grants);
   const setGrant = useEditor((s) => s.setGrant);
   const config = useEditor((s) => s.nodes.find((n) => n.id === nodeId)?.data.config);
+  const { t } = useTranslation();
 
   const needsAnswer = manifest.capabilities.filter((c) => c.scope !== 'input-handles');
 
@@ -211,11 +216,8 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
   if (needsAnswer.length === 0) {
     return (
       <section className="panel__section">
-        <h3 className="panel__group-label">Permissions</h3>
-        <p className="field__doc">
-          This component asks for nothing. It works only on what the graph hands it, and it cannot
-          reach your files, the network or the clipboard.
-        </p>
+        <h3 className="panel__group-label">{t('inspector.permissions.title')}</h3>
+        <p className="field__doc">{t('inspector.permissions.none')}</p>
       </section>
     );
   }
@@ -227,7 +229,7 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
 
   return (
     <section className="panel__section">
-      <h3 className="panel__group-label">Permissions</h3>
+      <h3 className="panel__group-label">{t('inspector.permissions.title')}</h3>
       {needsAnswer.map((capability) => {
         const granted = grants.find((g) => g.node === nodeId && g.kind === capability.kind);
         const wantsFolder = capability.kind === 'fs.read' || capability.kind === 'fs.write';
@@ -250,12 +252,14 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
                     if (folder) setGrant({ node: nodeId, kind: capability.kind, folder });
                   }}
                 >
-                  {granted ? 'Allowed' : 'Allow this folder'}
+                  {granted
+                    ? t('inspector.permissions.allowed')
+                    : t('inspector.permissions.allowFolder')}
                 </button>
                 {folder ? (
                   <span className="field__doc">{granted?.folder ?? folder}</span>
                 ) : (
-                  <span className="field__doc">Choose a folder first.</span>
+                  <span className="field__doc">{t('inspector.permissions.chooseFolderFirst')}</span>
                 )}
               </div>
             ) : wantsHost ? (
@@ -268,12 +272,16 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
                     if (host) setGrant({ node: nodeId, kind: capability.kind, hosts: [host] });
                   }}
                 >
-                  {granted ? 'Allowed' : `Allow ${host || 'this address'}`}
+                  {granted
+                    ? t('inspector.permissions.allowed')
+                    : host
+                      ? t('inspector.permissions.allowHost', { host })
+                      : t('inspector.permissions.allowAddress')}
                 </button>
                 {host ? (
                   <span className="field__doc">{(granted?.hosts ?? [host]).join(', ')}</span>
                 ) : (
-                  <span className="field__doc">Enter an address first.</span>
+                  <span className="field__doc">{t('inspector.permissions.enterAddressFirst')}</span>
                 )}
               </div>
             ) : (
@@ -283,7 +291,7 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
                 style={{ marginTop: 'var(--space-2)' }}
                 onClick={() => setGrant({ node: nodeId, kind: capability.kind })}
               >
-                {granted ? 'Allowed' : 'Allow'}
+                {granted ? t('inspector.permissions.allowed') : t('inspector.permissions.allow')}
               </button>
             )}
           </div>
@@ -292,16 +300,14 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
 
       {cannot.length > 0 ? (
         <div className="cannot">
-          <span className="cannot__label">It cannot</span>
+          <span className="cannot__label">{t('common.itCannot')}</span>
           <ul className="cannot__list">
-            {cannot.map((kind) => (
-              <li key={kind}>{REACH_LABEL[kind] ?? kind}</li>
-            ))}
+            {cannot.map((kind) => {
+              const key = REACH_LABEL_KEYS[kind];
+              return <li key={kind}>{key ? t(key) : kind}</li>;
+            })}
           </ul>
-          <p className="field__doc">
-            Not a setting — the component never declared these, so the runtime refuses them whatever
-            you allow here.
-          </p>
+          <p className="field__doc">{t('inspector.permissions.notASetting')}</p>
         </div>
       ) : null}
     </section>
@@ -318,15 +324,13 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
 function Versions({ versions }: { versions: Snapshot[] }) {
   const restoreVersion = useEditor((s) => s.restoreVersion);
   const projectPath = useEditor((s) => s.projectPath);
+  const { t } = useTranslation();
 
   if (!projectPath) {
     return (
       <section className="panel__section">
-        <h3 className="panel__group-label">Versions</h3>
-        <p className="field__doc">
-          Save this project to start keeping versions. Every save records one, and nothing is ever
-          overwritten.
-        </p>
+        <h3 className="panel__group-label">{t('inspector.versions.title')}</h3>
+        <p className="field__doc">{t('inspector.versions.empty')}</p>
       </section>
     );
   }
@@ -335,7 +339,9 @@ function Versions({ versions }: { versions: Snapshot[] }) {
 
   return (
     <section className="panel__section">
-      <h3 className="panel__group-label">Versions · {versions.length}</h3>
+      <h3 className="panel__group-label">
+        {t('inspector.versions.titleWithCount', { count: versions.length })}
+      </h3>
       {[...versions].reverse().map((snapshot, index) => (
         <button
           type="button"
@@ -344,15 +350,20 @@ function Versions({ versions }: { versions: Snapshot[] }) {
           onClick={() => void restoreVersion(snapshot.id)}
           title={
             index === 0
-              ? 'This is the current version.'
-              : 'Restore this. It is added as a new version; nothing is lost.'
+              ? t('inspector.versions.currentVersionTitle')
+              : t('inspector.versions.restoreTitle')
           }
         >
           <span className="version__label">
-            {snapshot.label ?? (index === 0 ? 'Current' : `Version ${versions.length - index}`)}
+            {snapshot.label ??
+              (index === 0
+                ? t('inspector.versions.current')
+                : t('inspector.versions.versionNumber', { number: versions.length - index }))}
           </span>
           <span className="version__when">{new Date(snapshot.created_at_ms).toLocaleString()}</span>
-          {index === 0 ? null : <span className="version__action">Restore</span>}
+          {index === 0 ? null : (
+            <span className="version__action">{t('inspector.versions.restore')}</span>
+          )}
         </button>
       ))}
     </section>
@@ -362,43 +373,56 @@ function Versions({ versions }: { versions: Snapshot[] }) {
 /** What actually happened, from the run journal. */
 function RunRecord({ record }: { record: NodeRecord }) {
   const denied = record.capability_calls.filter((c) => !c.allowed);
+  const { t } = useTranslation();
+
+  // Split around `{name}` once, the same way `canvas/Canvas.tsx` splits its own refusal sentence
+  // — see `i18n/index.ts` — so the skipped step's name can sit in its own `<strong>`. Called
+  // with no `vars`, `t()` leaves `{name}` untouched for `splitOnPlaceholder` to find.
+  const [neverRanBefore, neverRanAfter] = splitOnPlaceholder(
+    t('inspector.runRecord.neverRan'),
+    'name',
+  );
 
   return (
     <section className="panel__section">
-      <h3 className="panel__group-label">Last run</h3>
+      <h3 className="panel__group-label">{t('inspector.runRecord.title')}</h3>
 
       {record.error ? (
         <div className="note note--error">
           <strong>{record.error.message}</strong>
           {record.error.hint ? <span className="note__hint">{record.error.hint}</span> : null}
-          <span className="note__hint">Code: {record.error.code}</span>
+          <span className="note__hint">
+            {t('inspector.runRecord.code', { code: record.error.code })}
+          </span>
         </div>
       ) : null}
 
       {record.status === 'skipped' && record.skipped_because ? (
         <div className="note note--warn">
-          This step never ran, because <strong>{record.skipped_because}</strong> did not finish.
+          {neverRanBefore}
+          <strong>{record.skipped_because}</strong>
+          {neverRanAfter}
         </div>
       ) : null}
 
       <dl className="kv">
-        <dt>Status</dt>
-        <dd>{record.status}</dd>
+        <dt>{t('inspector.runRecord.status')}</dt>
+        <dd>{stepStatusLabel(record.status)}</dd>
         {record.duration_ms !== undefined ? (
           <>
-            <dt>Took</dt>
+            <dt>{t('inspector.runRecord.took')}</dt>
             <dd>{record.duration_ms}ms</dd>
           </>
         ) : null}
         {Object.entries(record.inputs).map(([port, summary]) => (
           <Fragment key={`in-${port}`}>
-            <dt>in {port}</dt>
+            <dt>{t('inspector.runRecord.in', { port })}</dt>
             <dd>{summary}</dd>
           </Fragment>
         ))}
         {Object.entries(record.outputs).map(([port, summary]) => (
           <Fragment key={`out-${port}`}>
-            <dt>out {port}</dt>
+            <dt>{t('inspector.runRecord.out', { port })}</dt>
             <dd>{summary}</dd>
           </Fragment>
         ))}
@@ -407,7 +431,8 @@ function RunRecord({ record }: { record: NodeRecord }) {
       {record.capability_calls.length > 0 ? (
         <>
           <h3 className="panel__group-label">
-            Permissions used{denied.length > 0 ? ` · ${denied.length} refused` : ''}
+            {t('inspector.runRecord.permissionsUsed')}
+            {denied.length > 0 ? t('inspector.runRecord.refused', { count: denied.length }) : ''}
           </h3>
           <div className="trace">
             {record.capability_calls.map((call) => (
@@ -425,7 +450,7 @@ function RunRecord({ record }: { record: NodeRecord }) {
 
       {record.logs.length > 0 ? (
         <>
-          <h3 className="panel__group-label">Logs</h3>
+          <h3 className="panel__group-label">{t('inspector.runRecord.logs')}</h3>
           <div className="trace">
             {record.logs.map((line) => (
               <div className="trace__line" key={`${line.at_ms}-${line.level}-${line.message}`}>
@@ -448,12 +473,15 @@ export function Inspector() {
   const validation = useEditor((s) => s.validation);
   const toggleDisabled = useEditor((s) => s.toggleDisabled);
   const versions = useEditor((s) => s.versions);
+  const { t } = useTranslation();
 
   if (!node || !manifest || !selectedNodeId) {
     const issues = validation?.issues ?? [];
     return (
       <aside className="panel panel--inspector">
-        <h2 className="panel__title">{issues.length > 0 ? 'Problems' : 'Project'}</h2>
+        <h2 className="panel__title">
+          {issues.length > 0 ? t('inspector.problemsTitle') : t('inspector.projectTitle')}
+        </h2>
         <div className="panel__section">
           {issues.length > 0 ? (
             issues.map((issue) => (
@@ -466,7 +494,7 @@ export function Inspector() {
               </div>
             ))
           ) : (
-            <p className="empty">Select a step to configure it, or pick a component to begin.</p>
+            <p className="empty">{t('inspector.selectStep')}</p>
           )}
         </div>
         <Versions versions={versions} />
@@ -482,7 +510,7 @@ export function Inspector() {
 
       <div className="panel__section">
         <dl className="kv">
-          <dt>Component</dt>
+          <dt>{t('inspector.component')}</dt>
           <dd>{node.data.componentRef}</dd>
         </dl>
         {manifest.description ? <p className="field__doc">{manifest.description}</p> : null}
@@ -492,7 +520,7 @@ export function Inspector() {
           style={{ marginTop: 'var(--space-3)' }}
           onClick={() => toggleDisabled(selectedNodeId)}
         >
-          {node.data.disabled ? 'Switch on' : 'Switch off'}
+          {node.data.disabled ? t('inspector.switchOn') : t('inspector.switchOff')}
         </button>
       </div>
 
@@ -500,7 +528,7 @@ export function Inspector() {
 
       {configFields.length > 0 ? (
         <section className="panel__section">
-          <h3 className="panel__group-label">Settings</h3>
+          <h3 className="panel__group-label">{t('inspector.settingsTitle')}</h3>
           {configFields.map(([name, field]) => (
             <ConfigControl
               key={name}

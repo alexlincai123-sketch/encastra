@@ -9,6 +9,9 @@ const fr: Messages = {
   common: {
     close: 'Fermer',
     dismiss: 'Ignorer',
+    choose: 'Choisir…',
+    itCannot: 'Il ne peut pas',
+    recordingBadge: 'enregistrement',
   },
 
   sidebar: {
@@ -93,6 +96,379 @@ const fr: Messages = {
       'Utilisez les flèches pour vous déplacer entre les étapes, Entrée pour ouvrir une étape dans l’inspecteur, Échap pour désélectionner, et Suppr pour retirer l’étape sélectionnée.',
     a11y: {
       selected: '{name}, étape {index} sur {total}, sélectionnée.',
+    },
+    node: {
+      notInstalled: 'Non installé.',
+    },
+    wire: {
+      ops: {
+        toText: 'en texte',
+        intToFloat: 'en décimal',
+        boolToInt: 'en nombre',
+        intToBool: 'en oui/non',
+        round: 'arrondi',
+        parseInt: 'analyser en nombre',
+        parseFloat: 'analyser en décimal',
+        parseBool: 'analyser en oui/non',
+        parseJson: 'analyser le JSON',
+        stringifyJson: 'en texte',
+        encodeJson: 'en JSON',
+        decodeJson: 'depuis JSON',
+        readBytes: 'lire',
+        writeTemp: 'vers un fichier',
+        unwrapOption: 'peut être absent',
+        map: 'chacun',
+      },
+    },
+  },
+
+  toolbar: {
+    preview: {
+      badge: 'aperçu',
+      title: 'Aucun moteur d’exécution n’est rattaché à cette fenêtre.',
+    },
+    new: 'Nouveau',
+    open: 'Ouvrir',
+    save: 'Enregistrer',
+    unsavedChanges: 'Modifications non enregistrées',
+    check: 'Vérifier',
+    stop: 'Arrêter',
+    run: 'Exécuter',
+    startWatching: 'Commencer à surveiller',
+    watching: 'Surveillance en cours',
+    recordedRuns: {
+      everythingAllowed: 'Enregistré : tout autorisé',
+      folderNotAllowed: 'Enregistré : le dossier n’a pas été autorisé',
+    },
+    notifications: {
+      more: '{count} de plus',
+    },
+    status: {
+      steps: {
+        one: '{count} étape',
+        other: '{count} étapes',
+      },
+      running: 'en cours',
+      runs: {
+        one: '{count} exécution',
+        other: '{count} exécutions',
+      },
+      waiting: '{count} en attente',
+      ok: {
+        one: '{count} réussie',
+        other: '{count} réussies',
+      },
+      failed: {
+        one: '{count} échouée',
+        other: '{count} échouées',
+      },
+      skipped: {
+        one: '{count} ignorée',
+        other: '{count} ignorées',
+      },
+    },
+  },
+
+  components: {
+    header: {
+      title: 'Composants',
+      summary: '{count} installés.',
+      summaryWithTriggers:
+        '{count} installés — {triggerCount} d’entre eux démarrent un flux de travail par eux-mêmes ; le reste s’exécute comme une étape à l’intérieur d’un autre.',
+      note: 'Tout ceci est fourni avec l’application ; en installer d’autres nécessite le bac à sable pour le code tiers, qui n’est pas encore construit.',
+    },
+    search: {
+      placeholder: 'Rechercher',
+      ariaLabel: 'Rechercher des composants',
+    },
+    filters: {
+      categoryLegend: 'Catégorie',
+    },
+    empty: 'Rien ne correspond à cela.',
+    card: {
+      triggerBadge: 'démarre un flux de travail',
+      triggerNote:
+        'Une source d’événements, pas une étape — ceci démarre une exécution au lieu de s’exécuter à l’intérieur d’une autre.',
+      noDescription: 'Ce composant n’a pas documenté ce qu’il fait.',
+      takes: 'Prend',
+      gives: 'Donne',
+      addToCanvas: 'Ajouter au canevas',
+    },
+    reach: {
+      label: 'Peut atteindre',
+      none: 'N’atteint rien en dehors de ce flux de travail',
+      verb: {
+        fsRead: 'Lit des fichiers',
+        fsWrite: 'Écrit des fichiers',
+        netHttp: 'Utilise le réseau',
+        systemClipboard: 'Utilise le presse-papiers',
+        systemNotify: 'Affiche des notifications',
+      },
+      cannot: {
+        fsRead: 'lire vos fichiers',
+        fsWrite: 'écrire des fichiers',
+        netHttp: 'utiliser le réseau',
+        systemClipboard: 'utiliser le presse-papiers',
+        systemNotify: 'afficher des notifications',
+      },
+    },
+  },
+
+  security: {
+    title: 'Sécurité',
+    intro:
+      'Les composants ne peuvent pas accéder à vos fichiers, à votre réseau ou à votre presse-papiers, sauf si un manifeste le déclare et que vous l’autorisez. Les permissions sont accordées par exécution, et chaque demande — autorisée ou refusée — est enregistrée là où vous pouvez la consulter.',
+    installed: {
+      title: 'Composants installés',
+      headers: {
+        component: 'Composant',
+        version: 'Version',
+        origin: 'Origine',
+        canReach: 'Peut atteindre',
+      },
+      builtIn: 'intégré',
+      nothing: 'rien',
+      thirdPartyNote:
+        'Rien ici ne vient de l’extérieur de cette application. Les composants tiers s’exécuteraient dans un bac à sable WebAssembly sans autorité ambiante ; ce bac à sable est conçu et documenté, mais {notBuilt}, donc les installer n’est pas encore possible.',
+      thirdPartyNoteEmphasis: 'pas construit',
+    },
+    grants: {
+      title: 'Autorisé dans le flux de travail ouvert',
+      empty:
+        'Rien n’a été autorisé. Un flux de travail qui a besoin d’un dossier le demandera avant de s’exécuter.',
+      note: 'Cela ne dure que pour cette session. Fermer l’application les oublie, donc un flux de travail que vous n’avez pas consulté depuis un mois ne peut pas continuer à écrire quelque part.',
+    },
+    privacy: {
+      title: 'Confidentialité',
+      telemetry: { label: 'Télémétrie', value: 'Aucune. Rien n’est collecté ni envoyé.' },
+      crashReports: { label: 'Rapports de plantage', value: 'Aucun.' },
+      accounts: { label: 'Comptes', value: 'Aucun. Il n’y a ni connexion ni serveur.' },
+      yourFiles: {
+        label: 'Vos fichiers',
+        value:
+          'Ne quittent jamais cette machine, sauf si un flux de travail que vous avez créé les envoie quelque part.',
+      },
+      runJournals: {
+        value:
+          'Enregistrent des tailles et des formes, jamais le contenu des fichiers. Un journal est conservé en mémoire tant que la fenêtre est ouverte et affichée ; rien n’est écrit sur le disque, et fermer l’application le supprime.',
+      },
+    },
+    limits: {
+      title: 'Contre quoi cela ne protège pas',
+      misuse:
+        'Un composant auquel vous accordez un large accès peut en abuser. La boîte de dialogue peut rendre cela informé ; elle ne peut pas le rendre impossible.',
+      trustedBase:
+        'Les composants intégrés s’exécutent comme du code natif ordinaire. Ils sont contraints par le courtier de permissions, mais un bug dans l’un d’eux est un bug dans la base de confiance.',
+      noAudit:
+        'Cette version n’a fait l’objet d’aucun audit de sécurité externe. C’est un prérequis pour distribuer des composants écrits par d’autres personnes, pas pour exécuter vos propres flux de travail.',
+      unsigned:
+        'Rien ici n’est encore signé, donc cette version ne peut pas prouver qu’elle n’a pas été altérée.',
+      previewOnly: 'Ceci est un aperçu dans le navigateur, sans aucun moteur d’exécution rattaché.',
+    },
+    footer:
+      'Moteur {runtime} · schéma de protocole {protocolSchema} · schéma de projet {projectSchema}',
+  },
+
+  inspector: {
+    problemsTitle: 'Problèmes',
+    projectTitle: 'Projet',
+    selectStep:
+      'Sélectionnez une étape pour la configurer, ou choisissez un composant pour commencer.',
+    component: 'Composant',
+    switchOn: 'Activer',
+    switchOff: 'Désactiver',
+    settingsTitle: 'Réglages',
+    nothingChosen: 'Rien de choisi',
+    entryInputs: {
+      title: 'Matériau de départ',
+      doc: 'Rien dans le graphe ne produit cela, donc l’exécution en a besoin de votre part.',
+    },
+    permissions: {
+      title: 'Permissions',
+      none: 'Ce composant ne demande rien. Il ne travaille qu’avec ce que le graphe lui fournit, et ne peut accéder ni à vos fichiers, ni au réseau, ni au presse-papiers.',
+      allowed: 'Autorisé',
+      allowFolder: 'Autoriser ce dossier',
+      allowHost: 'Autoriser {host}',
+      allowAddress: 'Autoriser cette adresse',
+      allow: 'Autoriser',
+      chooseFolderFirst: 'Choisissez d’abord un dossier.',
+      enterAddressFirst: 'Saisissez d’abord une adresse.',
+      notASetting:
+        'Ce n’est pas un réglage — le composant ne l’a jamais déclaré, donc le moteur le refuse quoi que vous autorisiez ici.',
+    },
+    versions: {
+      title: 'Versions',
+      titleWithCount: 'Versions · {count}',
+      empty:
+        'Enregistrez ce projet pour commencer à conserver des versions. Chaque enregistrement en garde une, et rien n’est jamais écrasé.',
+      currentVersionTitle: 'Ceci est la version actuelle.',
+      restoreTitle:
+        'Restaurer celle-ci. Elle est ajoutée comme une nouvelle version ; rien n’est perdu.',
+      current: 'Actuelle',
+      versionNumber: 'Version {number}',
+      restore: 'Restaurer',
+    },
+    runRecord: {
+      title: 'Dernière exécution',
+      code: 'Code : {code}',
+      neverRan: 'Cette étape ne s’est jamais exécutée, car {name} ne s’est pas terminée.',
+      status: 'État',
+      took: 'Durée',
+      in: 'entrée {port}',
+      out: 'sortie {port}',
+      permissionsUsed: 'Permissions utilisées',
+      refused: ' · {count} refusées',
+      logs: 'Journaux',
+    },
+  },
+
+  runPanel: {
+    ariaLabel: 'Exécution',
+    title: 'Exécution',
+    recordingTitle:
+      'Ceci est une exécution enregistrée, rejouée pour le débogueur. Elle ne vient pas de se produire sur cette machine.',
+    empty:
+      'Rien ne s’est encore exécuté. Appuyez sur Exécuter ci-dessus et chaque étape apparaîtra ici, dans l’ordre où le moteur les exécute, avec son état et sa durée — ou, en cas d’échec, ce qui s’est mal passé et quoi faire.',
+    status: {
+      pending: 'En attente',
+      running: 'En cours',
+      ok: 'Terminée',
+      failed: 'Échouée',
+      skipped: 'Ignorée',
+      cancelled: 'Annulée',
+      disabled: 'Désactivée',
+    },
+    outcome: {
+      watching: 'Surveillance des changements…',
+      running: 'Exécution…',
+      finished: 'Terminé.',
+      finishedIn: 'Terminé en {took}.',
+      partial: {
+        one: '{count} étape a échoué. Le reste du graphe s’est tout de même exécuté.',
+        other: '{count} étapes ont échoué. Le reste du graphe s’est tout de même exécuté.',
+      },
+      failed: 'Rien ne s’est terminé.',
+      cancelled: 'Arrêté.',
+    },
+    watch: {
+      runsSoFar: {
+        one: '{count} exécution jusqu’ici',
+        other: '{count} exécutions jusqu’ici',
+      },
+      pendingWaiting: '{count} en attente',
+    },
+    step: {
+      neverRan: 'Jamais exécutée — {name} ne s’est pas terminée.',
+    },
+  },
+
+  onboarding: {
+    tour: {
+      stepCount: 'Étape {current} sur {total}',
+      done: 'Terminé — continuez quand vous êtes prêt.',
+      waiting: 'En attente que vous essayiez.',
+      finish: 'Terminer',
+      next: 'Suivant',
+      canvas: {
+        title: 'Voici votre canevas',
+        body: 'Un flux de travail est composé de quelques composants reliés entre eux. Tout s’exécute sur cette machine, et rien n’accède à vos fichiers tant que vous ne l’avez pas autorisé.',
+      },
+      addFirst: {
+        title: 'Ajoutez la première étape',
+        body: 'À gauche se trouve chaque composant installé. Trouvez Surveiller un dossier et ajoutez-le — il démarre le flux de travail dès qu’un fichier apparaît là où vous le choisissez.',
+      },
+      addSecond: {
+        title: 'Ajoutez quelque chose à faire',
+        body: 'Ajoutez maintenant Redimensionner l’image. Il prend une image et en fait une copie plus petite, sans toucher à l’originale.',
+      },
+      connect: {
+        title: 'Reliez-les entre elles',
+        body: 'Faites glisser depuis le port de fichier de Surveiller un dossier jusqu’au port d’image de Redimensionner l’image. Un fichier n’est pas encore une image, donc l’éditeur insère l’étape qui l’ouvre — et refuse carrément la liaison si les deux ne pouvaient jamais correspondre.',
+      },
+      configure: {
+        title: 'Indiquez-lui quel dossier',
+        body: 'Sélectionnez une étape pour la configurer à droite. Surveiller un dossier a besoin de savoir quel dossier surveiller, et Enregistrer un fichier a besoin de savoir où mettre le résultat.',
+      },
+      allow: {
+        title: 'Autorisez-lui ce dossier',
+        body: 'Un composant ne peut toucher à rien tant que vous ne le lui dites pas, et une permission est limitée au seul dossier que vous choisissez. Appuyez sur Autoriser sur l’étape qui l’a demandé.',
+      },
+      run: {
+        title: 'Exécutez-le',
+        body: 'Appuyez sur Exécuter, ou Ctrl+Entrée. Chaque étape s’allume au fur et à mesure, et le panneau ci-dessous enregistre ce qu’elle a fait et combien de temps cela a pris.',
+      },
+    },
+    welcome: {
+      title: 'Bienvenue dans Encastra',
+      lead: 'Construisez des logiciels en assemblant des composants. Vous choisissez les pièces, vous les reliez, puis vous appuyez sur exécuter — sur cette machine, sans que rien n’accède à vos fichiers tant que vous ne l’avez pas autorisé.',
+      createFirst: {
+        title: 'Créez votre premier flux de travail',
+        note: 'Un court parcours guidé, environ une minute',
+      },
+      exploreSample: {
+        title: 'Explorez un exemple',
+        note: '{name}, déjà construit — vous choisissez ses dossiers',
+      },
+      skip: {
+        title: 'Ignorer',
+        note: 'Allez-y directement. C’est dans Réglages si vous le voulez plus tard.',
+      },
+    },
+  },
+
+  messages: {
+    untitledProject: 'Sans titre',
+    recordingNote: 'Ceci est un enregistrement, pas une exécution sur cette machine.',
+    problemsToFix: {
+      one: '{count} problème à résoudre.',
+      other: '{count} problèmes à résoudre.',
+    },
+    readyToRun: 'Ce graphe est prêt à être exécuté.',
+    nothingRanProblems: {
+      one: 'Rien ne s’est exécuté : {count} problème à résoudre d’abord.',
+      other: 'Rien ne s’est exécuté : {count} problèmes à résoudre d’abord.',
+    },
+    saved: {
+      one: 'Enregistré. {count} version conservée.',
+      other: 'Enregistré. {count} versions conservées.',
+    },
+    watchingChanges: 'Surveillance en cours. Cela s’exécutera dès que quelque chose apparaît.',
+    running: 'En cours d’exécution.',
+    stopping: 'Arrêt en cours.',
+    demoLoaded: '{name} : renseignez {needs}, puis démarrez-le.',
+    restored: 'Restauré. La version depuis laquelle vous veniez est toujours dans l’historique.',
+    missingComponents: 'Ce projet a besoin de {missing}, qui n’est pas installé.',
+    runtimeSilent: 'Quelque chose dans le moteur n’a pas répondu.',
+  },
+
+  demos: {
+    imageProcessor: {
+      name: 'Processeur d’images',
+      summary:
+        'Surveille un dossier. Dès qu’une image apparaît, il en fait une copie plus petite dans un autre dossier.',
+      needs: {
+        watch: 'Un dossier à surveiller',
+        save: 'Un dossier où enregistrer',
+      },
+    },
+    fileOrganiser: {
+      name: 'Organisateur de fichiers',
+      summary:
+        'Surveille un dossier et déplace ce qui y arrive vers l’un de trois autres, selon le type de fichier.',
+      needs: {
+        watch: 'Un dossier à surveiller',
+        images: 'Un dossier pour les images',
+        documents: 'Un dossier pour les documents',
+      },
+    },
+    thumbnails: {
+      name: 'Miniatures',
+      summary:
+        'Transforme un dossier d’images en aperçus carrés, prêts pour une galerie ou une grille.',
+      needs: {
+        watch: 'Un dossier à surveiller',
+        save: 'Un dossier où enregistrer',
+      },
     },
   },
 

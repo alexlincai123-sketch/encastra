@@ -10,6 +10,9 @@ const de: Messages = {
   common: {
     close: 'Schließen',
     dismiss: 'Verwerfen',
+    choose: 'Auswählen…',
+    itCannot: 'Sie kann nicht',
+    recordingBadge: 'Aufzeichnung',
   },
 
   sidebar: {
@@ -94,6 +97,382 @@ const de: Messages = {
       'Mit den Pfeiltasten zwischen Schritten bewegen, mit Eingabe einen Schritt im Inspektor öffnen, mit Escape die Auswahl aufheben und mit Entf den ausgewählten Schritt entfernen.',
     a11y: {
       selected: '{name}, Schritt {index} von {total}, ausgewählt.',
+    },
+    node: {
+      notInstalled: 'Nicht installiert.',
+    },
+    wire: {
+      ops: {
+        toText: 'als Text',
+        intToFloat: 'als Dezimalzahl',
+        boolToInt: 'als Zahl',
+        intToBool: 'als Ja/Nein',
+        round: 'gerundet',
+        parseInt: 'Zahl einlesen',
+        parseFloat: 'Dezimalzahl einlesen',
+        parseBool: 'Ja/Nein einlesen',
+        parseJson: 'JSON einlesen',
+        stringifyJson: 'als Text',
+        encodeJson: 'zu JSON',
+        decodeJson: 'aus JSON',
+        readBytes: 'lesen',
+        writeTemp: 'in Datei',
+        unwrapOption: 'kann fehlen',
+        map: 'jeweils',
+      },
+    },
+  },
+
+  toolbar: {
+    preview: {
+      badge: 'Vorschau',
+      title: 'Mit diesem Fenster ist keine Laufzeitumgebung verbunden.',
+    },
+    new: 'Neu',
+    open: 'Öffnen',
+    save: 'Speichern',
+    unsavedChanges: 'Nicht gespeicherte Änderungen',
+    check: 'Prüfen',
+    stop: 'Stoppen',
+    run: 'Ausführen',
+    startWatching: 'Überwachung starten',
+    watching: 'Überwacht',
+    recordedRuns: {
+      everythingAllowed: 'Aufgezeichnet: alles erlaubt',
+      folderNotAllowed: 'Aufgezeichnet: der Ordner wurde nicht erlaubt',
+    },
+    notifications: {
+      more: '{count} weitere',
+    },
+    status: {
+      steps: {
+        one: '{count} Schritt',
+        other: '{count} Schritte',
+      },
+      running: 'wird ausgeführt',
+      runs: {
+        one: '{count} Ausführung',
+        other: '{count} Ausführungen',
+      },
+      waiting: '{count} wartend',
+      ok: {
+        one: '{count} erfolgreich',
+        other: '{count} erfolgreich',
+      },
+      failed: {
+        one: '{count} fehlgeschlagen',
+        other: '{count} fehlgeschlagen',
+      },
+      skipped: {
+        one: '{count} übersprungen',
+        other: '{count} übersprungen',
+      },
+    },
+  },
+
+  components: {
+    header: {
+      title: 'Komponenten',
+      summary: '{count} installiert.',
+      summaryWithTriggers:
+        '{count} installiert — {triggerCount} davon starten selbst einen Workflow; der Rest läuft als Schritt innerhalb eines Workflows.',
+      note: 'Alles hier ist Teil der Anwendung; um andere zu installieren, wird die Sandbox für Drittanbieter-Code benötigt, die noch nicht gebaut ist.',
+    },
+    search: {
+      placeholder: 'Suchen',
+      ariaLabel: 'Komponenten durchsuchen',
+    },
+    filters: {
+      categoryLegend: 'Kategorie',
+    },
+    empty: 'Nichts passt dazu.',
+    card: {
+      triggerBadge: 'startet einen Workflow',
+      triggerNote:
+        'Eine Ereignisquelle, kein Schritt — dies startet eine Ausführung, statt innerhalb einer zu laufen.',
+      noDescription: 'Diese Komponente hat nicht dokumentiert, was sie tut.',
+      takes: 'Nimmt',
+      gives: 'Gibt',
+      addToCanvas: 'Zur Fläche hinzufügen',
+    },
+    reach: {
+      label: 'Zugriff auf',
+      none: 'Greift auf nichts außerhalb dieses Workflows zu',
+      verb: {
+        fsRead: 'Liest Dateien',
+        fsWrite: 'Schreibt Dateien',
+        netHttp: 'Nutzt das Netzwerk',
+        systemClipboard: 'Nutzt die Zwischenablage',
+        systemNotify: 'Zeigt Benachrichtigungen',
+      },
+      cannot: {
+        fsRead: 'Ihre Dateien lesen',
+        fsWrite: 'Dateien schreiben',
+        netHttp: 'das Netzwerk nutzen',
+        systemClipboard: 'die Zwischenablage nutzen',
+        systemNotify: 'Benachrichtigungen anzeigen',
+      },
+    },
+  },
+
+  security: {
+    title: 'Sicherheit',
+    intro:
+      'Komponenten können nicht auf Ihre Dateien, Ihr Netzwerk oder Ihre Zwischenablage zugreifen, sofern ein Manifest es nicht deklariert und Sie es nicht erlauben. Berechtigungen werden pro Ausführung erteilt, und jede Anfrage — erlaubt oder abgelehnt — wird protokolliert und ist einsehbar.',
+    installed: {
+      title: 'Installierte Komponenten',
+      headers: {
+        component: 'Komponente',
+        version: 'Version',
+        origin: 'Herkunft',
+        canReach: 'Zugriff auf',
+      },
+      builtIn: 'eingebaut',
+      nothing: 'nichts',
+      thirdPartyNote:
+        'Nichts hier stammt von außerhalb dieser Anwendung. Drittanbieter-Komponenten würden in einer WebAssembly-Sandbox ohne Umgebungsrechte laufen; diese Sandbox ist entworfen und dokumentiert, aber {notBuilt}, daher ist es noch nicht möglich, sie zu installieren.',
+      thirdPartyNoteEmphasis: 'nicht gebaut',
+    },
+    grants: {
+      title: 'Im geöffneten Workflow erlaubt',
+      empty:
+        'Nichts wurde erlaubt. Ein Workflow, der einen Ordner braucht, fragt danach, bevor er läuft.',
+      note: 'Diese gelten nur für diese Sitzung. Beim Schließen der Anwendung werden sie vergessen, sodass ein Workflow, den Sie seit einem Monat nicht angesehen haben, nicht mehr irgendwo schreiben kann.',
+    },
+    privacy: {
+      title: 'Datenschutz',
+      telemetry: {
+        label: 'Telemetrie',
+        value: 'Keine. Nichts wird gesammelt und nichts wird gesendet.',
+      },
+      crashReports: { label: 'Absturzberichte', value: 'Keine.' },
+      accounts: { label: 'Konten', value: 'Keine. Es gibt weder Anmeldung noch Server.' },
+      yourFiles: {
+        label: 'Ihre Dateien',
+        value:
+          'Verlassen diesen Rechner nie, außer ein von Ihnen erstellter Workflow sendet sie irgendwohin.',
+      },
+      runJournals: {
+        value:
+          'Zeichnen Größen und Formen auf, niemals Dateiinhalte. Ein Protokoll wird im Speicher gehalten, solange das Fenster geöffnet und sichtbar ist; nichts wird auf die Festplatte geschrieben, und beim Schließen der Anwendung wird es verworfen.',
+      },
+    },
+    limits: {
+      title: 'Wovor dies nicht schützt',
+      misuse:
+        'Eine Komponente, der Sie weitreichenden Zugriff erlauben, kann ihn missbrauchen. Der Dialog kann das informiert machen; unmöglich machen kann er es nicht.',
+      trustedBase:
+        'Eingebaute Komponenten laufen als gewöhnlicher nativer Code. Sie werden vom Berechtigungs-Broker eingeschränkt, aber ein Fehler in einer davon ist ein Fehler in der vertrauenswürdigen Basis.',
+      noAudit:
+        'Diese Version wurde keinem externen Sicherheitsaudit unterzogen. Das ist Voraussetzung für die Verteilung von Komponenten, die andere geschrieben haben, nicht für die Ausführung Ihrer eigenen Workflows.',
+      unsigned:
+        'Nichts hier ist bisher signiert, daher kann diese Version nicht beweisen, dass sie nicht verändert wurde.',
+      previewOnly: 'Dies ist eine Vorschau im Browser, ohne verbundene Laufzeitumgebung.',
+    },
+    footer:
+      'Laufzeitumgebung {runtime} · Protokollschema {protocolSchema} · Projektschema {projectSchema}',
+  },
+
+  inspector: {
+    problemsTitle: 'Probleme',
+    projectTitle: 'Projekt',
+    selectStep: 'Wählen Sie einen Schritt zum Konfigurieren, oder eine Komponente, um zu beginnen.',
+    component: 'Komponente',
+    switchOn: 'Einschalten',
+    switchOff: 'Ausschalten',
+    settingsTitle: 'Einstellungen',
+    nothingChosen: 'Nichts ausgewählt',
+    entryInputs: {
+      title: 'Ausgangsmaterial',
+      doc: 'Nichts im Graphen erzeugt dies, daher braucht die Ausführung es von Ihnen.',
+    },
+    permissions: {
+      title: 'Berechtigungen',
+      none: 'Diese Komponente verlangt nichts. Sie arbeitet nur mit dem, was der Graph ihr gibt, und kann weder auf Ihre Dateien noch auf das Netzwerk noch auf die Zwischenablage zugreifen.',
+      allowed: 'Erlaubt',
+      allowFolder: 'Diesen Ordner erlauben',
+      allowHost: '{host} erlauben',
+      allowAddress: 'Diese Adresse erlauben',
+      allow: 'Erlauben',
+      chooseFolderFirst: 'Wählen Sie zuerst einen Ordner.',
+      enterAddressFirst: 'Geben Sie zuerst eine Adresse ein.',
+      notASetting:
+        'Keine Einstellung — die Komponente hat dies nie deklariert, daher lehnt die Laufzeitumgebung es ab, was auch immer Sie hier erlauben.',
+    },
+    versions: {
+      title: 'Versionen',
+      titleWithCount: 'Versionen · {count}',
+      empty:
+        'Speichern Sie dieses Projekt, um Versionen aufzubewahren. Jedes Speichern zeichnet eine auf, und nichts wird jemals überschrieben.',
+      currentVersionTitle: 'Dies ist die aktuelle Version.',
+      restoreTitle:
+        'Diese wiederherstellen. Sie wird als neue Version hinzugefügt; nichts geht verloren.',
+      current: 'Aktuell',
+      versionNumber: 'Version {number}',
+      restore: 'Wiederherstellen',
+    },
+    runRecord: {
+      title: 'Letzte Ausführung',
+      code: 'Code: {code}',
+      neverRan: 'Dieser Schritt wurde nie ausgeführt, weil {name} nicht abgeschlossen wurde.',
+      status: 'Status',
+      took: 'Dauer',
+      in: 'ein {port}',
+      out: 'aus {port}',
+      permissionsUsed: 'Verwendete Berechtigungen',
+      refused: ' · {count} abgelehnt',
+      logs: 'Protokoll',
+    },
+  },
+
+  runPanel: {
+    ariaLabel: 'Ausführung',
+    title: 'Ausführung',
+    recordingTitle:
+      'Dies ist eine aufgezeichnete Ausführung, für den Debugger wiedergegeben. Sie ist nicht gerade eben auf diesem Rechner passiert.',
+    empty:
+      'Es wurde noch nichts ausgeführt. Drücken Sie oben auf Ausführen, dann erscheint hier jeder Schritt in der Reihenfolge, in der die Laufzeitumgebung ihn ausführt, mit Status und Dauer — oder, falls einer fehlschlägt, was schiefgegangen ist und was zu tun ist.',
+    status: {
+      pending: 'Wartend',
+      running: 'Läuft',
+      ok: 'Fertig',
+      failed: 'Fehlgeschlagen',
+      skipped: 'Übersprungen',
+      cancelled: 'Abgebrochen',
+      disabled: 'Ausgeschaltet',
+    },
+    outcome: {
+      watching: 'Überwacht auf Änderungen …',
+      running: 'Wird ausgeführt …',
+      finished: 'Fertig.',
+      finishedIn: 'Fertig in {took}.',
+      partial: {
+        one: '{count} Schritt ist fehlgeschlagen. Der Rest des Graphen wurde trotzdem ausgeführt.',
+        other:
+          '{count} Schritte sind fehlgeschlagen. Der Rest des Graphen wurde trotzdem ausgeführt.',
+      },
+      failed: 'Nichts wurde abgeschlossen.',
+      cancelled: 'Angehalten.',
+    },
+    watch: {
+      runsSoFar: {
+        one: '{count} Ausführung bisher',
+        other: '{count} Ausführungen bisher',
+      },
+      pendingWaiting: '{count} wartend',
+    },
+    step: {
+      neverRan: 'Nie ausgeführt — {name} wurde nicht abgeschlossen.',
+    },
+  },
+
+  onboarding: {
+    tour: {
+      stepCount: 'Schritt {current} von {total}',
+      done: 'Fertig — machen Sie weiter, wenn Sie bereit sind.',
+      waiting: 'Wartet darauf, dass Sie es ausprobieren.',
+      finish: 'Fertigstellen',
+      next: 'Weiter',
+      canvas: {
+        title: 'Dies ist Ihre Fläche',
+        body: 'Ein Workflow besteht aus wenigen miteinander verbundenen Komponenten. Alles läuft auf diesem Rechner, und nichts greift auf Ihre Dateien zu, bevor Sie es erlauben.',
+      },
+      addFirst: {
+        title: 'Fügen Sie den ersten Schritt hinzu',
+        body: 'Links ist jede installierte Komponente. Finden Sie Ordner überwachen und fügen Sie sie hinzu — sie startet den Workflow, sobald irgendwo, wo Sie es wählen, eine Datei erscheint.',
+      },
+      addSecond: {
+        title: 'Fügen Sie etwas zu tun hinzu',
+        body: 'Fügen Sie nun Bild verkleinern hinzu. Es nimmt ein Bild und erstellt eine kleinere Kopie, ohne das Original zu verändern.',
+      },
+      connect: {
+        title: 'Verbinden Sie sie miteinander',
+        body: 'Ziehen Sie vom Datei-Port von Ordner überwachen zum Bild-Port von Bild verkleinern. Eine Datei ist noch kein Bild, daher fügt der Editor den Schritt ein, der sie öffnet — und verweigert die Verbindung von vornherein, wenn die beiden niemals zusammenpassen könnten.',
+      },
+      configure: {
+        title: 'Sagen Sie ihm, welchen Ordner',
+        body: 'Wählen Sie einen Schritt aus, um ihn rechts zu konfigurieren. Ordner überwachen muss wissen, welchen Ordner es überwachen soll, und Datei speichern muss wissen, wo das Ergebnis abgelegt werden soll.',
+      },
+      allow: {
+        title: 'Erlauben Sie ihm diesen Ordner',
+        body: 'Eine Komponente kann nichts anfassen, bis Sie es erlauben, und eine Berechtigung ist auf den einen Ordner beschränkt, den Sie wählen. Drücken Sie Erlauben bei dem Schritt, der danach gefragt hat.',
+      },
+      run: {
+        title: 'Führen Sie es aus',
+        body: 'Drücken Sie Ausführen, oder Strg+Eingabe. Jeder Schritt leuchtet auf, sobald er geschieht, und das Panel darunter zeichnet auf, was er getan hat und wie lange es gedauert hat.',
+      },
+    },
+    welcome: {
+      title: 'Willkommen bei Encastra',
+      lead: 'Bauen Sie Software, indem Sie Komponenten zusammensetzen. Sie wählen die Teile, verbinden sie und drücken auf Ausführen — auf diesem Rechner, ohne dass etwas auf Ihre Dateien zugreift, bevor Sie es erlauben.',
+      createFirst: {
+        title: 'Erstellen Sie Ihren ersten Workflow',
+        note: 'Ein kurzer geführter Durchlauf, etwa eine Minute',
+      },
+      exploreSample: {
+        title: 'Ein Beispiel erkunden',
+        note: '{name}, schon fertig gebaut — Sie wählen seine Ordner',
+      },
+      skip: {
+        title: 'Überspringen',
+        note: 'Direkt loslegen. Das finden Sie später in den Einstellungen, falls Sie es dann möchten.',
+      },
+    },
+  },
+
+  messages: {
+    untitledProject: 'Unbenannt',
+    recordingNote: 'Dies ist eine Aufzeichnung, keine Ausführung auf diesem Rechner.',
+    problemsToFix: {
+      one: '{count} zu behebendes Problem.',
+      other: '{count} zu behebende Probleme.',
+    },
+    readyToRun: 'Dieser Graph ist bereit zur Ausführung.',
+    nothingRanProblems: {
+      one: 'Nichts wurde ausgeführt: {count} Problem zuerst zu beheben.',
+      other: 'Nichts wurde ausgeführt: {count} Probleme zuerst zu beheben.',
+    },
+    saved: {
+      one: 'Gespeichert. {count} Version aufbewahrt.',
+      other: 'Gespeichert. {count} Versionen aufbewahrt.',
+    },
+    watchingChanges: 'Überwachung läuft. Dies wird ausgeführt, sobald etwas erscheint.',
+    running: 'Wird ausgeführt.',
+    stopping: 'Wird angehalten.',
+    demoLoaded: '{name}: {needs} ausfüllen, dann starten.',
+    restored: 'Wiederhergestellt. Die Version, von der Sie kamen, ist weiterhin im Verlauf.',
+    missingComponents: 'Dieses Projekt braucht {missing}, was nicht installiert ist.',
+    runtimeSilent: 'Etwas in der Laufzeitumgebung hat nicht geantwortet.',
+  },
+
+  demos: {
+    imageProcessor: {
+      name: 'Bildprozessor',
+      summary:
+        'Überwacht einen Ordner. Sobald ein Bild erscheint, wird eine kleinere Kopie in einem anderen Ordner erstellt.',
+      needs: {
+        watch: 'Ein zu überwachender Ordner',
+        save: 'Ein Ordner zum Speichern',
+      },
+    },
+    fileOrganiser: {
+      name: 'Dateiorganisator',
+      summary:
+        'Überwacht einen Ordner und verschiebt, was dort ankommt, je nach Dateityp in einen von drei anderen.',
+      needs: {
+        watch: 'Ein zu überwachender Ordner',
+        images: 'Ein Ordner für Bilder',
+        documents: 'Ein Ordner für Dokumente',
+      },
+    },
+    thumbnails: {
+      name: 'Miniaturansichten',
+      summary:
+        'Verwandelt einen Ordner voller Bilder in quadratische Vorschauen, bereit für eine Galerie oder ein Raster.',
+      needs: {
+        watch: 'Ein zu überwachender Ordner',
+        save: 'Ein Ordner zum Speichern',
+      },
     },
   },
 

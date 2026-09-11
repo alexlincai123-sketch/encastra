@@ -6,46 +6,45 @@
  * workflow that is open, and what the product does **not** protect against.
  */
 
+import { splitOnPlaceholder, useTranslation } from '../i18n';
 import { ipc } from '../ipc';
+import { capabilityLabel } from '../settings/categories';
 import { useEditor } from '../store';
-
-const REACH: Record<string, string> = {
-  'fs.read': 'Read files',
-  'fs.write': 'Write files',
-  'net.http': 'Use the network',
-  'system.notify': 'Show notifications',
-  'system.clipboard': 'Use the clipboard',
-};
 
 export function Security() {
   const manifests = useEditor((s) => s.manifests);
   const nodes = useEditor((s) => s.nodes);
   const grants = useEditor((s) => s.grants);
   const about = useEditor((s) => s.about);
+  const { t } = useTranslation();
 
   const all = Object.values(manifests);
   const thirdParty = all.filter((m) => m.kind !== 'core');
 
+  // Split around `{notBuilt}` once, the same way `canvas/Canvas.tsx` splits its own bridge
+  // sentence — see `i18n/index.ts` — so the emphasised word can sit in its own `<strong>` no
+  // matter where a translation puts it in the sentence.
+  const [thirdPartyBefore, thirdPartyAfter] = splitOnPlaceholder(
+    t('security.installed.thirdPartyNote'),
+    'notBuilt',
+  );
+
   return (
     <main className="view view--security">
       <header className="view__header">
-        <h1>Security</h1>
-        <p>
-          Components cannot reach your files, your network or your clipboard unless a manifest
-          declares it and you allow it. Permissions are granted per run, and every request — allowed
-          or refused — is recorded where you can read it.
-        </p>
+        <h1>{t('security.title')}</h1>
+        <p>{t('security.intro')}</p>
       </header>
 
       <section className="panel-block">
-        <h2>Installed components</h2>
+        <h2>{t('security.installed.title')}</h2>
         <table className="table">
           <thead>
             <tr>
-              <th>Component</th>
-              <th>Version</th>
-              <th>Origin</th>
-              <th>Can reach</th>
+              <th>{t('security.installed.headers.component')}</th>
+              <th>{t('security.installed.headers.version')}</th>
+              <th>{t('security.installed.headers.origin')}</th>
+              <th>{t('security.installed.headers.canReach')}</th>
             </tr>
           </thead>
           <tbody>
@@ -62,15 +61,15 @@ export function Security() {
                     </td>
                     <td>{manifest.version}</td>
                     <td>
-                      <span className="badge badge--ok">built in</span>
+                      <span className="badge badge--ok">{t('security.installed.builtIn')}</span>
                     </td>
                     <td>
                       {reach.length === 0 ? (
-                        <span className="table__none">nothing</span>
+                        <span className="table__none">{t('security.installed.nothing')}</span>
                       ) : (
                         reach.map((c) => (
                           <span className="table__reach" key={c.kind} title={c.reason}>
-                            {REACH[c.kind] ?? c.kind}
+                            {capabilityLabel(c.kind, t)}
                           </span>
                         ))
                       )}
@@ -83,19 +82,17 @@ export function Security() {
 
         {thirdParty.length === 0 ? (
           <p className="home__note">
-            Nothing here came from outside this application. Third-party components would run in a
-            WebAssembly sandbox with no ambient authority; that sandbox is designed and documented
-            but <strong>not built</strong>, so installing them is not possible yet.
+            {thirdPartyBefore}
+            <strong>{t('security.installed.thirdPartyNoteEmphasis')}</strong>
+            {thirdPartyAfter}
           </p>
         ) : null}
       </section>
 
       <section className="panel-block">
-        <h2>Allowed in the open workflow</h2>
+        <h2>{t('security.grants.title')}</h2>
         {grants.length === 0 ? (
-          <p className="empty">
-            Nothing has been allowed. A workflow that needs a folder will ask before it runs.
-          </p>
+          <p className="empty">{t('security.grants.empty')}</p>
         ) : (
           <ul className="grants">
             {grants.map((grant) => {
@@ -104,7 +101,7 @@ export function Security() {
               return (
                 <li key={`${grant.node}-${grant.kind}`}>
                   <strong>{manifest?.name ?? grant.node}</strong>
-                  <span className="grants__what">{REACH[grant.kind] ?? grant.kind}</span>
+                  <span className="grants__what">{capabilityLabel(grant.kind, t)}</span>
                   {grant.folder ? <code>{grant.folder}</code> : null}
                   {grant.hosts?.length ? <code>{grant.hosts.join(', ')}</code> : null}
                 </li>
@@ -112,59 +109,44 @@ export function Security() {
             })}
           </ul>
         )}
-        <p className="home__note">
-          These last for this session. Closing the application forgets them, so a workflow you have
-          not looked at in a month cannot still be writing somewhere.
-        </p>
+        <p className="home__note">{t('security.grants.note')}</p>
       </section>
 
       <section className="panel-block">
-        <h2>Privacy</h2>
+        <h2>{t('security.privacy.title')}</h2>
         <dl className="kv kv--wide">
-          <dt>Telemetry</dt>
-          <dd>None. Nothing is collected and nothing is sent.</dd>
-          <dt>Crash reports</dt>
-          <dd>None.</dd>
-          <dt>Accounts</dt>
-          <dd>None. There is no sign-in and no server.</dd>
-          <dt>Your files</dt>
-          <dd>Never leave this machine unless a workflow you built sends them somewhere.</dd>
-          <dt>Run journals</dt>
-          <dd>
-            Record sizes and shapes, never file contents. A journal is held in memory for as long as
-            the window is open and shown on screen; nothing writes one to disk, and closing the
-            application discards it.
-          </dd>
+          <dt>{t('security.privacy.telemetry.label')}</dt>
+          <dd>{t('security.privacy.telemetry.value')}</dd>
+          <dt>{t('security.privacy.crashReports.label')}</dt>
+          <dd>{t('security.privacy.crashReports.value')}</dd>
+          <dt>{t('security.privacy.accounts.label')}</dt>
+          <dd>{t('security.privacy.accounts.value')}</dd>
+          <dt>{t('security.privacy.yourFiles.label')}</dt>
+          <dd>{t('security.privacy.yourFiles.value')}</dd>
+          {/* The label reuses the Settings screen's own translation of this exact word — see
+              `security.privacy.runJournals` in `i18n/locales/en.ts`. */}
+          <dt>{t('settings.privacy.yourData.runJournals.label')}</dt>
+          <dd>{t('security.privacy.runJournals.value')}</dd>
         </dl>
       </section>
 
       <section className="panel-block">
-        <h2>What this does not protect against</h2>
+        <h2>{t('security.limits.title')}</h2>
         <ul className="limits">
-          <li>
-            A component you allow broad access to can misuse it. The dialog can make that informed;
-            it cannot make it impossible.
-          </li>
-          <li>
-            Built-in components run as ordinary native code. They are constrained by the permission
-            broker, but a bug in one is a bug in the trusted base.
-          </li>
-          <li>
-            This build has had no external security audit. That is a prerequisite for distributing
-            components written by other people, not for running your own workflows.
-          </li>
-          <li>
-            {ipc.live
-              ? 'Nothing here is signed yet, so this build cannot prove it has not been altered.'
-              : 'This is a browser preview with no runtime attached.'}
-          </li>
+          <li>{t('security.limits.misuse')}</li>
+          <li>{t('security.limits.trustedBase')}</li>
+          <li>{t('security.limits.noAudit')}</li>
+          <li>{ipc.live ? t('security.limits.unsigned') : t('security.limits.previewOnly')}</li>
         </ul>
       </section>
 
       {about ? (
         <p className="home__note">
-          Runtime {about.runtime} · protocol schema {about.protocolSchema} · project schema{' '}
-          {about.projectSchema}
+          {t('security.footer', {
+            runtime: about.runtime,
+            protocolSchema: about.protocolSchema,
+            projectSchema: about.projectSchema,
+          })}
         </p>
       ) : null}
     </main>

@@ -10,6 +10,7 @@
 import { namedTypesIn, tryParseType, typeDef } from '@encastra/protocol';
 import { Handle, type NodeProps, Position } from '@xyflow/react';
 import type React from 'react';
+import { useTranslation } from '../i18n';
 import { type EditorNode, useEditor } from '../store';
 import type { Port } from '../types';
 
@@ -58,6 +59,7 @@ export function ComponentNode({ id, data, selected }: NodeProps<EditorNode>) {
   // While something is running, the live state is what matters; the journal is the record of
   // what already finished. Preferring the live value is what makes a node show as running.
   const live = useEditor((s) => s.liveNodes[id]);
+  const { t } = useTranslation();
 
   if (!manifest) {
     // The graph references something this build does not have. Saying so on the canvas beats
@@ -68,7 +70,7 @@ export function ComponentNode({ id, data, selected }: NodeProps<EditorNode>) {
         <div className="node__header">
           <span className="node__name">{data.componentRef}</span>
         </div>
-        <div className="empty">Not installed.</div>
+        <div className="empty">{t('canvas.node.notInstalled')}</div>
       </div>
     );
   }

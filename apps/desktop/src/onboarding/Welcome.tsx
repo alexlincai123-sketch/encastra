@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DEMOS } from '../demos';
+import { useTranslation } from '../i18n';
 import { usePreferences } from '../preferences';
 import { useEditor } from '../store';
 import { advance, isStepSatisfied, TOUR } from './steps';
@@ -25,6 +26,7 @@ import { advance, isStepSatisfied, TOUR } from './steps';
 export function Welcome() {
   const welcomeSeen = usePreferences((p) => p.welcomeSeen);
   const setPreference = usePreferences((p) => p.set);
+  const { t } = useTranslation();
 
   const setView = useEditor((s) => s.setView);
   const loadDemo = useEditor((s) => s.loadDemo);
@@ -94,29 +96,29 @@ export function Welcome() {
         data-focus={card.focus}
       >
         <p className="tour__count">
-          Step {step + 1} of {TOUR.length}
+          {t('onboarding.tour.stepCount', { current: step + 1, total: TOUR.length })}
         </p>
         <h2 id="tour-title" className="tour__title">
-          {card.title}
+          {t(card.titleKey)}
         </h2>
-        <p className="tour__body">{card.body}</p>
+        <p className="tour__body">{t(card.bodyKey)}</p>
 
         {card.done !== null ? (
           <p className={satisfied ? 'tour__state is-done' : 'tour__state'}>
-            {satisfied ? 'Done — carry on when you are ready.' : 'Waiting for you to try it.'}
+            {satisfied ? t('onboarding.tour.done') : t('onboarding.tour.waiting')}
           </p>
         ) : null}
 
         <div className="tour__actions">
           <button type="button" className="btn" onClick={finish}>
-            Close
+            {t('common.close')}
           </button>
           <button
             type="button"
             className="btn btn--primary"
             onClick={() => (next === null ? finish() : setStep(next))}
           >
-            {next === null ? 'Finish' : 'Next'}
+            {next === null ? t('onboarding.tour.finish') : t('onboarding.tour.next')}
           </button>
         </div>
       </aside>,
@@ -136,12 +138,9 @@ export function Welcome() {
     <div className="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
       <div className="welcome__card">
         <h1 id="welcome-title" className="welcome__title">
-          Welcome to Encastra
+          {t('onboarding.welcome.title')}
         </h1>
-        <p className="welcome__lead">
-          Build software by assembling components. You pick the parts, connect them, and press run —
-          on this machine, with nothing reaching your files until you allow it.
-        </p>
+        <p className="welcome__lead">{t('onboarding.welcome.lead')}</p>
 
         <div className="welcome__choices">
           <button
@@ -153,8 +152,10 @@ export function Welcome() {
               setStep(0);
             }}
           >
-            <span className="welcome__choice-title">Create your first workflow</span>
-            <span className="welcome__choice-note">A short guided run through, about a minute</span>
+            <span className="welcome__choice-title">
+              {t('onboarding.welcome.createFirst.title')}
+            </span>
+            <span className="welcome__choice-note">{t('onboarding.welcome.createFirst.note')}</span>
           </button>
 
           {firstDemo ? (
@@ -167,18 +168,18 @@ export function Welcome() {
                 setView('builder');
               }}
             >
-              <span className="welcome__choice-title">Explore a sample</span>
+              <span className="welcome__choice-title">
+                {t('onboarding.welcome.exploreSample.title')}
+              </span>
               <span className="welcome__choice-note">
-                {firstDemo.name}, already built — you choose its folders
+                {t('onboarding.welcome.exploreSample.note', { name: t(firstDemo.nameKey) })}
               </span>
             </button>
           ) : null}
 
           <button type="button" className="welcome__choice" onClick={finish}>
-            <span className="welcome__choice-title">Skip</span>
-            <span className="welcome__choice-note">
-              Go straight in. This is in Settings if you want it later.
-            </span>
+            <span className="welcome__choice-title">{t('onboarding.welcome.skip.title')}</span>
+            <span className="welcome__choice-note">{t('onboarding.welcome.skip.note')}</span>
           </button>
         </div>
       </div>

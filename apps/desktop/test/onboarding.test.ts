@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { translate, useI18n } from '../src/i18n';
+import en from '../src/i18n/locales/en';
 import { advance, isStepSatisfied, TOUR, type TourProgress } from '../src/onboarding/steps';
 
 /**
@@ -7,7 +9,17 @@ import { advance, isStepSatisfied, TOUR, type TourProgress } from '../src/onboar
  * The behaviour worth protecting is that the tour *watches* rather than drives: it waits for
  * something real to become true in the editor, and it never asks somebody to do a thing they
  * have already done. Both are easy to break by editing the script, so both are pinned here.
+ *
+ * `TOUR` stores a `titleKey`/`bodyKey` pair per card rather than English prose — see
+ * `onboarding/steps.ts` — so "brief enough to read" is checked against the actual English text
+ * the person sees, resolved through `translate()`. Locale is pinned to English explicitly (the
+ * same reason `run-panel.test.ts` does) rather than trusting whatever language this machine
+ * happens to be set to.
  */
+
+beforeAll(() => {
+  useI18n.setState({ locale: 'en', messages: { en } });
+});
 
 const nothing: TourProgress = {
   nodes: 0,
@@ -42,8 +54,10 @@ describe('the script', () => {
 
   it('keeps every card brief', () => {
     for (const card of TOUR) {
-      expect(card.title.length, card.title).toBeLessThanOrEqual(40);
-      expect(card.body.length, card.title).toBeLessThanOrEqual(220);
+      const title = translate(card.titleKey);
+      const body = translate(card.bodyKey);
+      expect(title.length, title).toBeLessThanOrEqual(40);
+      expect(body.length, title).toBeLessThanOrEqual(220);
     }
   });
 });
@@ -51,13 +65,13 @@ describe('the script', () => {
 describe('isStepSatisfied', () => {
   it('is unsatisfied at the start for every step that waits on something', () => {
     for (const card of TOUR.filter((c) => c.done !== null)) {
-      expect(isStepSatisfied(card, nothing), card.title).toBe(false);
+      expect(isStepSatisfied(card, nothing), card.titleKey).toBe(false);
     }
   });
 
   it('is satisfied for every step once the work is done', () => {
     for (const card of TOUR) {
-      expect(isStepSatisfied(card, finished), card.title).toBe(true);
+      expect(isStepSatisfied(card, finished), card.titleKey).toBe(true);
     }
   });
 
