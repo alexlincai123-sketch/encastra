@@ -30,6 +30,7 @@ import {
   undo as undoHistory,
 } from './history';
 import { ipc } from './ipc';
+import { usePreferences } from './preferences';
 import type {
   About,
   ComponentManifest,
@@ -111,6 +112,8 @@ interface EditorState {
   toGraph: () => EncastraGraph;
   newProject: () => void;
   openProject: () => Promise<void>;
+  /** Opens a known path without asking, for reopening what was open last time. */
+  reopenProject: (path: string) => Promise<void>;
   saveProject: (options?: { as?: boolean; label?: string }) => Promise<void>;
   restoreVersion: (snapshot: string) => Promise<void>;
 
@@ -436,10 +439,27 @@ export const useEditor = create<EditorState>((set, get) => ({
       const path = await ipc.pickProjectToOpen();
       if (!path) return;
       applyProject(set, await ipc.openProject(path));
+      rememberProject(path);
     } catch (error) {
       set({ message: { tone: 'error', text: describe(error) } });
     } finally {
       set({ busy: false });
+    }
+  },
+
+  /**
+   * Reopens a path that was open last time, if the preference asks for it.
+   *
+   * Failure here is deliberately quiet: a project that has since been moved, renamed or deleted
+   * is an ordinary thing to find at start-up, and greeting somebody with an error about a file
+   * they did not ask for would be worse than simply showing them Home. The path is forgotten so
+   * the same failure does not repeat every launch.
+   */
+  async reopenProject(path) {
+    try {
+      applyProject(set, await ipc.openProject(path));
+    } catch {
+      rememberProject('');
     }
   },
 
@@ -455,6 +475,7 @@ export const useEditor = create<EditorState>((set, get) => ({
 
       const name = fileStem(path) ?? state.projectName;
       const project = await ipc.saveProject(path, name, state.toGraph(), options?.label);
+      rememberProject(path);
       set({
         projectPath: project.path,
         projectName: project.name,
@@ -691,6 +712,16 @@ export const useEditor = create<EditorState>((set, get) => ({
 }));
 
 /** Replaces the canvas with what a project file contains. */
+/**
+ * Records which project was last open, for the "reopen last project" preference.
+ *
+ * Kept in the preference store rather than in this one: it outlives a session, and the editor
+ * state is rebuilt from scratch every launch.
+ */
+function rememberProject(path: string): void {
+  usePreferences.getState().set('lastProjectPath', path);
+}
+
 function applyProject(set: (partial: Partial<EditorState>) => void, project: OpenProject): void {
   const nodes: EditorNode[] = Object.entries(project.graph.nodes).map(([id, node]) => ({
     id,

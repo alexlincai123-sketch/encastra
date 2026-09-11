@@ -27,6 +27,8 @@ export interface Preferences {
   /** Where the save dialog starts. Empty means "wherever the system last was". */
   projectFolder: string;
   startup: StartupChoice;
+  /** The project open when the application last closed, for `startup: 'last-project'`. */
+  lastProjectPath: string;
 
   // --- Editor ---------------------------------------------------------------------------
   showGrid: boolean;
@@ -51,6 +53,7 @@ export const DEFAULTS: Preferences = {
   motion: 'system',
   projectFolder: '',
   startup: 'home',
+  lastProjectPath: '',
   showGrid: true,
   snapToGrid: true,
   showMinimap: true,
@@ -129,6 +132,7 @@ function current(s: PreferencesStore): Preferences {
     motion: s.motion,
     projectFolder: s.projectFolder,
     startup: s.startup,
+    lastProjectPath: s.lastProjectPath,
     showGrid: s.showGrid,
     snapToGrid: s.snapToGrid,
     showMinimap: s.showMinimap,

@@ -249,6 +249,16 @@ export function App() {
     void loadComponents();
   }, [loadComponents]);
 
+  // Reopen what was open last time, if that is what was asked for. Read once, from the store
+  // rather than through a subscription: this is a start-up decision, and re-running it whenever
+  // the preference changed would reopen a project under somebody who had just closed it.
+  useEffect(() => {
+    const { startup, lastProjectPath } = usePreferences.getState();
+    if (startup === 'last-project' && lastProjectPath) {
+      void useEditor.getState().reopenProject(lastProjectPath);
+    }
+  }, []);
+
   useEffect(() => {
     // Subscribing returns a teardown. Keeping it means a hot reload in development does not
     // leave a second set of listeners writing into the same state.
