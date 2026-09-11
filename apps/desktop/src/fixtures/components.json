@@ -1,6 +1,130 @@
 [
   {
     "schema": 1,
+    "id": "encastra.data.csv.read",
+    "version": "1.0.0",
+    "name": "Read CSV",
+    "description": "Turns comma-separated text into a list of rows.",
+    "author": null,
+    "license": null,
+    "category": "data",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "text": {
+          "type": "string",
+          "required": true,
+          "label": null,
+          "doc": null
+        }
+      },
+      "outputs": {
+        "count": {
+          "type": "i64",
+          "required": false,
+          "label": "How many",
+          "doc": null
+        },
+        "rows": {
+          "type": "json",
+          "required": false,
+          "label": "Rows",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "header": {
+        "type": "bool",
+        "label": "First row is a header",
+        "doc": null,
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": true
+      },
+      "separator": {
+        "type": "string",
+        "label": "Separator",
+        "doc": "One character. Defaults to a comma; use a semicolon or a tab if that is what the file has.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.data.csv.write",
+    "version": "1.0.0",
+    "name": "Write CSV",
+    "description": "Turns a list of rows into comma-separated text.",
+    "author": null,
+    "license": null,
+    "category": "data",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "rows": {
+          "type": "json",
+          "required": true,
+          "label": "Rows",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "text": {
+          "type": "string",
+          "required": false,
+          "label": null,
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "header": {
+        "type": "bool",
+        "label": "Write a header row",
+        "doc": null,
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": true
+      },
+      "separator": {
+        "type": "string",
+        "label": "Separator",
+        "doc": null,
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
     "id": "encastra.data.json",
     "version": "1.0.0",
     "name": "Parse JSON",
@@ -11,6 +135,7 @@
     "icon": null,
     "runtime": ">=0.1.0",
     "kind": "core",
+    "trigger": false,
     "ports": {
       "inputs": {
         "text": {
@@ -38,16 +163,66 @@
   },
   {
     "schema": 1,
-    "id": "encastra.file.read",
+    "id": "encastra.data.json.write",
     "version": "1.0.0",
-    "name": "Read File",
-    "description": "Reads the text content of the file connected to it.",
+    "name": "Write JSON",
+    "description": "Turns structured data back into text.",
+    "author": null,
+    "license": null,
+    "category": "data",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "json": {
+          "type": "json",
+          "required": true,
+          "label": null,
+          "doc": null
+        }
+      },
+      "outputs": {
+        "text": {
+          "type": "string",
+          "required": false,
+          "label": null,
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "indent": {
+        "type": "bool",
+        "label": "Readable",
+        "doc": "Lay it out over several lines instead of one.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": true
+      }
+    },
+    "capabilities": [],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.file.move",
+    "version": "1.0.0",
+    "name": "Move File",
+    "description": "Moves a file into another folder. The original is removed.",
     "author": null,
     "license": null,
     "category": "file",
     "icon": null,
     "runtime": ">=0.1.0",
     "kind": "core",
+    "trigger": false,
     "ports": {
       "inputs": {
         "file": {
@@ -58,6 +233,77 @@
         }
       },
       "outputs": {
+        "file": {
+          "type": "file",
+          "required": false,
+          "label": "Moved file",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "filename": {
+        "type": "string",
+        "label": "New name",
+        "doc": "Leave empty to keep the name it already has.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "folder": {
+        "type": "string",
+        "label": "Move into",
+        "doc": "Both this folder and the one the file comes from must be allowed, because a move deletes the original.",
+        "required": true,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "fs.write",
+        "scope": "chosen-folder",
+        "reason": "Moves the file, which means writing it to the new folder and deleting it from the old one."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.file.read",
+    "version": "1.0.0",
+    "name": "Read File",
+    "description": "Reads the text content of the file connected to it.",
+    "author": null,
+    "license": null,
+    "category": "file",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "file": {
+          "type": "file",
+          "required": true,
+          "label": "File",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "name": {
+          "type": "string",
+          "required": false,
+          "label": "File name",
+          "doc": null
+        },
         "text": {
           "type": "string",
           "required": false,
@@ -81,6 +327,232 @@
   },
   {
     "schema": 1,
+    "id": "encastra.file.rename",
+    "version": "1.0.0",
+    "name": "Rename File",
+    "description": "Gives a file a new name, leaving it where it is.",
+    "author": null,
+    "license": null,
+    "category": "file",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "file": {
+          "type": "file",
+          "required": true,
+          "label": "File",
+          "doc": null
+        },
+        "name": {
+          "type": "string",
+          "required": false,
+          "label": "New name",
+          "doc": "Overrides the pattern below when connected."
+        }
+      },
+      "outputs": {
+        "file": {
+          "type": "file",
+          "required": false,
+          "label": "Renamed file",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "folder": {
+        "type": "string",
+        "label": "Folder",
+        "doc": "The folder the file is in. It must be allowed, because renaming removes the old name.",
+        "required": true,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "pattern": {
+        "type": "string",
+        "label": "Name pattern",
+        "doc": "Use {name} for the current name without its extension and {ext} for the extension.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "fs.write",
+        "scope": "chosen-folder",
+        "reason": "Renames a file in the folder you pick, which means writing the new name and removing the old one."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.file.save",
+    "version": "1.0.0",
+    "name": "Save File",
+    "description": "Puts a file into a folder you choose. Keeps the original name unless you give one.",
+    "author": null,
+    "license": null,
+    "category": "file",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "file": {
+          "type": "file",
+          "required": true,
+          "label": "File",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "file": {
+          "type": "file",
+          "required": false,
+          "label": "Saved file",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "filename": {
+        "type": "string",
+        "label": "File name",
+        "doc": "Leave empty to keep the name the file already has.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "folder": {
+        "type": "string",
+        "label": "Folder",
+        "doc": "Where to save. You are asked to allow this folder before the first run.",
+        "required": true,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "suffix": {
+        "type": "string",
+        "label": "Add to the name",
+        "doc": "Appended before the extension, so photo.png becomes photo-small.png.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "fs.write",
+        "scope": "chosen-folder",
+        "reason": "Saves the file into the folder you pick. It cannot write anywhere else."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.file.watch",
+    "version": "1.0.0",
+    "name": "Watch Folder",
+    "description": "Starts the workflow whenever a file appears in a folder.",
+    "author": null,
+    "license": null,
+    "category": "file",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": true,
+    "ports": {
+      "inputs": {},
+      "outputs": {
+        "extension": {
+          "type": "string",
+          "required": false,
+          "label": "Its extension",
+          "doc": null
+        },
+        "file": {
+          "type": "file",
+          "required": false,
+          "label": "The new file",
+          "doc": null
+        },
+        "name": {
+          "type": "string",
+          "required": false,
+          "label": "Its name",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "existing": {
+        "type": "bool",
+        "label": "Include files already there",
+        "doc": "Off by default, so starting a workflow does not immediately process a folder full of old files.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": false
+      },
+      "extensions": {
+        "type": "string",
+        "label": "Only these kinds",
+        "doc": "A list separated by commas, for example: png, jpg, jpeg. Leave empty for every file.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "folder": {
+        "type": "string",
+        "label": "Watch this folder",
+        "doc": "Only this folder, not the ones inside it.",
+        "required": true,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "fs.read",
+        "scope": "watched-folder",
+        "reason": "Watches the folder you pick and reads the files that appear in it."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
     "id": "encastra.file.write",
     "version": "1.0.0",
     "name": "Write File",
@@ -91,6 +563,7 @@
     "icon": null,
     "runtime": ">=0.1.0",
     "kind": "core",
+    "trigger": false,
     "ports": {
       "inputs": {
         "content": {
@@ -101,10 +574,16 @@
         }
       },
       "outputs": {
+        "file": {
+          "type": "file",
+          "required": false,
+          "label": "Saved file",
+          "doc": null
+        },
         "saved": {
           "type": "bool",
           "required": false,
-          "label": null,
+          "label": "Saved",
           "doc": null
         }
       }
@@ -123,7 +602,7 @@
       "folder": {
         "type": "string",
         "label": "Folder",
-        "doc": "Where to save. You will be asked to allow this folder before the first run.",
+        "doc": "Where to save. You are asked to allow this folder before the first run.",
         "required": true,
         "min": null,
         "max": null,
@@ -145,6 +624,55 @@
   },
   {
     "schema": 1,
+    "id": "encastra.flow.delay",
+    "version": "1.0.0",
+    "name": "Delay",
+    "description": "Waits, then passes the value on unchanged.",
+    "author": null,
+    "license": null,
+    "category": "flow",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "value": {
+          "type": "json",
+          "required": true,
+          "label": null,
+          "doc": null
+        }
+      },
+      "outputs": {
+        "value": {
+          "type": "json",
+          "required": false,
+          "label": null,
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "seconds": {
+        "type": "i64",
+        "label": "Wait for",
+        "doc": "In seconds. Stopping the run interrupts the wait.",
+        "required": true,
+        "min": 0,
+        "max": 3600,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
     "id": "encastra.flow.if",
     "version": "1.0.0",
     "name": "If",
@@ -155,6 +683,7 @@
     "icon": null,
     "runtime": ">=0.1.0",
     "kind": "core",
+    "trigger": false,
     "ports": {
       "inputs": {
         "condition": {
@@ -194,16 +723,540 @@
   },
   {
     "schema": 1,
-    "id": "encastra.system.notify",
+    "id": "encastra.flow.switch",
     "version": "1.0.0",
-    "name": "Notify",
-    "description": "Shows a desktop notification.",
+    "name": "Switch",
+    "description": "Sends the value down one of several routes depending on a word.",
+    "author": null,
+    "license": null,
+    "category": "flow",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "match": {
+          "type": "string",
+          "required": true,
+          "label": "Compare this",
+          "doc": "Matched against each route's list, ignoring capitals."
+        },
+        "value": {
+          "type": "json",
+          "required": true,
+          "label": "Send this",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "a": {
+          "type": "option<json>",
+          "required": false,
+          "label": "Route A",
+          "doc": null
+        },
+        "b": {
+          "type": "option<json>",
+          "required": false,
+          "label": "Route B",
+          "doc": null
+        },
+        "c": {
+          "type": "option<json>",
+          "required": false,
+          "label": "Route C",
+          "doc": null
+        },
+        "other": {
+          "type": "option<json>",
+          "required": false,
+          "label": "Anything else",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "case_a": {
+        "type": "string",
+        "label": "Route A matches",
+        "doc": "A list separated by commas, for example: png, jpg, jpeg, webp",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "case_b": {
+        "type": "string",
+        "label": "Route B matches",
+        "doc": null,
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "case_c": {
+        "type": "string",
+        "label": "Route C matches",
+        "doc": null,
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.image.convert",
+    "version": "1.0.0",
+    "name": "Convert Image",
+    "description": "Writes an image in a different format.",
+    "author": null,
+    "license": null,
+    "category": "media",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "image": {
+          "type": "image",
+          "required": true,
+          "label": "Image",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "image": {
+          "type": "image",
+          "required": false,
+          "label": "Converted",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "format": {
+        "type": "string",
+        "label": "Format",
+        "doc": null,
+        "required": true,
+        "min": null,
+        "max": null,
+        "choices": ["png", "jpeg", "webp"],
+        "default": null
+      },
+      "quality": {
+        "type": "i64",
+        "label": "JPEG quality",
+        "doc": "Ignored by PNG and WebP, which are written without loss here.",
+        "required": false,
+        "min": 1,
+        "max": 100,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "fs.read",
+        "scope": "input-handles",
+        "reason": "Reads the image you connect to this node, and nothing else."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.image.info",
+    "version": "1.0.0",
+    "name": "Image Info",
+    "description": "Reports an image's size and format without changing it.",
+    "author": null,
+    "license": null,
+    "category": "media",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "image": {
+          "type": "image",
+          "required": true,
+          "label": "Image",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "format": {
+          "type": "string",
+          "required": false,
+          "label": "Format",
+          "doc": null
+        },
+        "height": {
+          "type": "i64",
+          "required": false,
+          "label": "Height",
+          "doc": null
+        },
+        "info": {
+          "type": "json",
+          "required": false,
+          "label": "All of it",
+          "doc": null
+        },
+        "width": {
+          "type": "i64",
+          "required": false,
+          "label": "Width",
+          "doc": null
+        }
+      }
+    },
+    "config": {},
+    "capabilities": [
+      {
+        "kind": "fs.read",
+        "scope": "input-handles",
+        "reason": "Reads the image you connect to this node, and nothing else."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.image.resize",
+    "version": "1.0.0",
+    "name": "Resize Image",
+    "description": "Changes an image's size. Leave one side empty to keep the proportions.",
+    "author": null,
+    "license": null,
+    "category": "media",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "image": {
+          "type": "image",
+          "required": true,
+          "label": "Image",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "height": {
+          "type": "i64",
+          "required": false,
+          "label": "Height",
+          "doc": null
+        },
+        "image": {
+          "type": "image",
+          "required": false,
+          "label": "Resized",
+          "doc": null
+        },
+        "width": {
+          "type": "i64",
+          "required": false,
+          "label": "Width",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "height": {
+        "type": "i64",
+        "label": "Height",
+        "doc": "Leave at 0 to work it out from the width.",
+        "required": false,
+        "min": 0,
+        "max": 20000,
+        "choices": null,
+        "default": null
+      },
+      "mode": {
+        "type": "string",
+        "label": "Fit",
+        "doc": "Contain fits inside the box. Cover fills it and crops. Stretch distorts.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": ["contain", "cover", "stretch"],
+        "default": null
+      },
+      "quality": {
+        "type": "i64",
+        "label": "JPEG quality",
+        "doc": null,
+        "required": false,
+        "min": 1,
+        "max": 100,
+        "choices": null,
+        "default": null
+      },
+      "width": {
+        "type": "i64",
+        "label": "Width",
+        "doc": "Leave at 0 to work it out from the height.",
+        "required": false,
+        "min": 0,
+        "max": 20000,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "fs.read",
+        "scope": "input-handles",
+        "reason": "Reads the image you connect to this node, and nothing else."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.image.thumbnail",
+    "version": "1.0.0",
+    "name": "Thumbnail",
+    "description": "Makes a small square preview of an image.",
+    "author": null,
+    "license": null,
+    "category": "media",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "image": {
+          "type": "image",
+          "required": true,
+          "label": "Image",
+          "doc": null
+        }
+      },
+      "outputs": {
+        "image": {
+          "type": "image",
+          "required": false,
+          "label": "Thumbnail",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "quality": {
+        "type": "i64",
+        "label": "JPEG quality",
+        "doc": null,
+        "required": false,
+        "min": 1,
+        "max": 100,
+        "choices": null,
+        "default": null
+      },
+      "size": {
+        "type": "i64",
+        "label": "Size",
+        "doc": "The width and height of the square, in pixels.",
+        "required": false,
+        "min": 16,
+        "max": 2048,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "fs.read",
+        "scope": "input-handles",
+        "reason": "Reads the image you connect to this node, and nothing else."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": true,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.net.http",
+    "version": "1.0.0",
+    "name": "HTTP Request",
+    "description": "Fetches a web address, or sends data to one.",
+    "author": null,
+    "license": null,
+    "category": "network",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "body": {
+          "type": "string",
+          "required": false,
+          "label": "Body",
+          "doc": "Sent with POST, PUT and PATCH. Ignored by GET."
+        }
+      },
+      "outputs": {
+        "body": {
+          "type": "string",
+          "required": false,
+          "label": "Response",
+          "doc": null
+        },
+        "ok": {
+          "type": "bool",
+          "required": false,
+          "label": "Succeeded",
+          "doc": null
+        },
+        "status": {
+          "type": "i64",
+          "required": false,
+          "label": "Status code",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "allow_http": {
+        "type": "bool",
+        "label": "Allow plain http",
+        "doc": "Off by default. Plain http can be read and changed in transit.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "content_type": {
+        "type": "string",
+        "label": "Content type",
+        "doc": "For example application/json.",
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      },
+      "method": {
+        "type": "string",
+        "label": "Method",
+        "doc": null,
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+        "default": null
+      },
+      "url": {
+        "type": "string",
+        "label": "Address",
+        "doc": "Must be https unless you allow plain http below.",
+        "required": true,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [
+      {
+        "kind": "net.http",
+        "scope": "allowed-hosts",
+        "reason": "Contacts the specific web addresses you allow, and no others."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.system.clipboard",
+    "version": "1.0.0",
+    "name": "Copy to Clipboard",
+    "description": "Puts text on the clipboard, ready to paste.",
     "author": null,
     "license": null,
     "category": "system",
     "icon": null,
     "runtime": ">=0.1.0",
     "kind": "core",
+    "trigger": false,
+    "ports": {
+      "inputs": {
+        "text": {
+          "type": "string",
+          "required": true,
+          "label": null,
+          "doc": null
+        }
+      },
+      "outputs": {
+        "text": {
+          "type": "string",
+          "required": false,
+          "label": "What was copied",
+          "doc": null
+        }
+      }
+    },
+    "config": {},
+    "capabilities": [
+      {
+        "kind": "system.clipboard",
+        "scope": "write",
+        "reason": "Replaces whatever is currently on your clipboard with this text."
+      }
+    ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.system.notify",
+    "version": "1.0.0",
+    "name": "Notify",
+    "description": "Shows a message when this step runs.",
+    "author": null,
+    "license": null,
+    "category": "system",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": false,
     "ports": {
       "inputs": {
         "message": {
@@ -214,22 +1267,75 @@
         }
       },
       "outputs": {
-        "shown": {
-          "type": "bool",
+        "message": {
+          "type": "string",
           "required": false,
-          "label": null,
+          "label": "What was shown",
           "doc": null
         }
       }
     },
-    "config": {},
+    "config": {
+      "title": {
+        "type": "string",
+        "label": "Title",
+        "doc": null,
+        "required": false,
+        "min": null,
+        "max": null,
+        "choices": null,
+        "default": null
+      }
+    },
     "capabilities": [
       {
         "kind": "system.notify",
         "scope": "notifications",
-        "reason": "Shows a notification when this step runs."
+        "reason": "Shows a notification on your desktop when this step runs."
       }
     ],
+    "platforms": ["windows", "macos", "linux"],
+    "retryable": false,
+    "documentation": null,
+    "changelog": null
+  },
+  {
+    "schema": 1,
+    "id": "encastra.system.timer",
+    "version": "1.0.0",
+    "name": "Timer",
+    "description": "Starts the workflow again and again, on a schedule.",
+    "author": null,
+    "license": null,
+    "category": "system",
+    "icon": null,
+    "runtime": ">=0.1.0",
+    "kind": "core",
+    "trigger": true,
+    "ports": {
+      "inputs": {},
+      "outputs": {
+        "count": {
+          "type": "i64",
+          "required": false,
+          "label": "How many times so far",
+          "doc": null
+        }
+      }
+    },
+    "config": {
+      "seconds": {
+        "type": "i64",
+        "label": "Every",
+        "doc": "In seconds. The first run happens straight away.",
+        "required": true,
+        "min": 1,
+        "max": 86400,
+        "choices": null,
+        "default": null
+      }
+    },
+    "capabilities": [],
     "platforms": ["windows", "macos", "linux"],
     "retryable": false,
     "documentation": null,

@@ -11,10 +11,12 @@
  * drift: it would look right, and it would be lying about the one thing this product sells.
  */
 
+import type { WorkflowStatus } from './events';
 import componentsFixture from './fixtures/components.json';
 import exampleRunFixture from './fixtures/example-run.json';
 import deniedRunFixture from './fixtures/example-run-denied.json';
 import type {
+  About,
   ComponentManifest,
   EncastraGraph,
   GrantSpec,
@@ -44,6 +46,13 @@ export interface Ipc {
   openProject(path: string): Promise<OpenProject>;
   restoreVersion(path: string, snapshot: string): Promise<OpenProject>;
   compareVersions(path: string, from: string, to: string): Promise<string[]>;
+  startWorkflow(
+    graph: EncastraGraph,
+    inputs: InputSpec[],
+    grants: GrantSpec[],
+  ): Promise<WorkflowStatus>;
+  stopWorkflow(): Promise<void>;
+  about(): Promise<About>;
 }
 
 function inTauri(): boolean {
@@ -120,6 +129,22 @@ class TauriIpc implements Ipc {
   compareVersions(path: string, from: string, to: string): Promise<string[]> {
     return this.invoke<string[]>('compare_versions', { path, from, to });
   }
+
+  startWorkflow(
+    graph: EncastraGraph,
+    inputs: InputSpec[],
+    grants: GrantSpec[],
+  ): Promise<WorkflowStatus> {
+    return this.invoke<WorkflowStatus>('start_workflow', { graph, inputs, grants });
+  }
+
+  stopWorkflow(): Promise<void> {
+    return this.invoke<void>('stop_workflow');
+  }
+
+  about(): Promise<About> {
+    return this.invoke<About>('about');
+  }
 }
 
 /** Thrown when the preview is asked for something only the real runtime can answer. */
@@ -178,6 +203,24 @@ class PreviewIpc implements Ipc {
 
   async compareVersions(): Promise<string[]> {
     throw new PreviewOnlyError('Comparing versions');
+  }
+
+  async startWorkflow(): Promise<WorkflowStatus> {
+    throw new PreviewOnlyError('Running a workflow');
+  }
+
+  async stopWorkflow(): Promise<void> {
+    throw new PreviewOnlyError('Stopping a workflow');
+  }
+
+  async about(): Promise<About> {
+    // The preview knows what it is, and says so rather than inventing a build.
+    return {
+      version: 'preview',
+      runtime: 'not attached',
+      protocolSchema: 1,
+      projectSchema: 1,
+    };
   }
 }
 

@@ -55,6 +55,9 @@ function PortRow({ name, port, side }: { name: string; port: Port; side: 'in' | 
 export function ComponentNode({ id, data, selected }: NodeProps<EditorNode>) {
   const manifest = useEditor((s) => s.manifests[data.componentRef]);
   const record = useEditor((s) => s.journal?.nodes[id]);
+  // While something is running, the live state is what matters; the journal is the record of
+  // what already finished. Preferring the live value is what makes a node show as running.
+  const live = useEditor((s) => s.liveNodes[id]);
 
   if (!manifest) {
     // The graph references something this build does not have. Saying so on the canvas beats
@@ -78,7 +81,7 @@ export function ComponentNode({ id, data, selected }: NodeProps<EditorNode>) {
       className={['node', selected ? 'is-selected' : '', data.disabled ? 'is-disabled' : '']
         .filter(Boolean)
         .join(' ')}
-      data-state={record?.status ?? 'idle'}
+      data-state={live ?? record?.status ?? 'idle'}
     >
       <span className="node__state" aria-hidden="true" />
       <div className="node__header">

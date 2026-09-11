@@ -20,7 +20,7 @@ pub trait ComponentRegistry {
 
 /// A registry built from manifests already in memory. Used for the shipped core set and by
 /// tests.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct InMemoryRegistry {
     by_ref: BTreeMap<String, ComponentManifest>,
 }

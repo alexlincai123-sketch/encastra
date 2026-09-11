@@ -46,6 +46,8 @@ export interface ComponentManifest {
   category?: string;
   runtime: string;
   kind: 'core' | 'wasm';
+  /** A source of events rather than a step: it starts the workflow instead of running in it. */
+  trigger?: boolean;
   ports: {
     inputs: Record<string, Port>;
     outputs: Record<string, Port>;
@@ -193,4 +195,11 @@ export interface OpenProject {
   history: History;
   /** Components the file pins that this build does not have. */
   missing: string[];
+}
+
+export interface About {
+  version: string;
+  runtime: string;
+  protocolSchema: number;
+  projectSchema: number;
 }

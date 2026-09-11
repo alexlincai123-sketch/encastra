@@ -17,17 +17,34 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import { create } from 'zustand';
+import type { Demo } from './demos';
+import { subscribe, type WorkflowStatus } from './events';
+import {
+  cut,
+  emptyHistory,
+  type History,
+  paste,
+  record,
+  redo as redoHistory,
+  type Snapshot,
+  undo as undoHistory,
+} from './history';
 import { ipc } from './ipc';
 import type {
+  About,
   ComponentManifest,
   EncastraGraph,
   GrantSpec,
   InputSpec,
+  NodeStatus,
   OpenProject,
+  Snapshot as ProjectSnapshot,
   RunJournal,
-  Snapshot,
   Validation,
 } from './types';
+
+/** Where the person is in the application. */
+export type View = 'home' | 'builder' | 'components' | 'security' | 'settings';
 
 export interface NodeData extends Record<string, unknown> {
   componentRef: string;
@@ -55,9 +72,23 @@ interface EditorState {
   busy: boolean;
   message: { tone: 'info' | 'error'; text: string } | null;
 
+  view: View;
+
+  /** Live state while something is running. Distinct from the journal, which is the record. */
+  running: boolean;
+  watching: boolean;
+  runs: number;
+  pending: number;
+  liveNodes: Record<string, NodeStatus>;
+  notifications: { at: number; text: string }[];
+  about: About | null;
+
+  history: History;
+  clipboard: Snapshot | null;
+
   projectPath: string | null;
   projectName: string;
-  versions: Snapshot[];
+  versions: ProjectSnapshot[];
   /** True when the canvas differs from what was last written to disk. */
   dirty: boolean;
 
@@ -82,6 +113,23 @@ interface EditorState {
   openProject: () => Promise<void>;
   saveProject: (options?: { as?: boolean; label?: string }) => Promise<void>;
   restoreVersion: (snapshot: string) => Promise<void>;
+
+  setView: (view: View) => void;
+  attachRuntime: () => Promise<() => void>;
+  startWorkflow: () => Promise<void>;
+  stopWorkflow: () => Promise<void>;
+  loadDemo: (demo: Demo) => void;
+  dismissNotifications: () => void;
+
+  undo: () => void;
+  redo: () => void;
+  copySelection: () => void;
+  pasteClipboard: () => void;
+  duplicateSelection: () => void;
+  selectAll: () => void;
+
+  /** What a node is doing now, or what it did last. */
+  nodeStatus: (id: string) => NodeStatus | undefined;
 }
 
 let nextId = 1;
@@ -106,6 +154,16 @@ export const useEditor = create<EditorState>((set, get) => ({
   projectName: 'Untitled',
   versions: [],
   dirty: false,
+  view: 'home',
+  running: false,
+  watching: false,
+  runs: 0,
+  pending: 0,
+  liveNodes: {},
+  notifications: [],
+  about: null,
+  history: emptyHistory,
+  clipboard: null,
 
   async loadComponents() {
     try {
@@ -154,6 +212,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         selectedNodeId: node.id,
         validation: null,
         dirty: true,
+        history: record(s.history, { nodes: s.nodes, edges: s.edges }),
       };
     });
   },
@@ -188,6 +247,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const id = get().selectedNodeId;
     if (!id) return;
     set((s) => ({
+      history: record(s.history, { nodes: s.nodes, edges: s.edges }),
       nodes: s.nodes.filter((n) => n.id !== id),
       // Edges that pointed at it go too, rather than dangling.
       edges: s.edges.filter((e) => e.source !== id && e.target !== id),
@@ -198,12 +258,22 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   onNodesChange(changes) {
-    set((s) => ({
-      nodes: applyNodeChanges(changes, s.nodes),
-      // Dragging a node changes the file even though it does not change what runs. The
-      // history diff is where that distinction belongs, not the save prompt.
-      dirty: s.dirty || changes.some((c) => c.type !== 'select'),
-    }));
+    set((s) => {
+      // A drag reports a position on every frame. Recording each one would fill the history
+      // with a single gesture, so a move is recorded when the pointer is released.
+      const dragEnded = changes.some((c) => c.type === 'position' && c.dragging === false);
+      const structural = changes.some((c) => c.type === 'remove');
+      return {
+        nodes: applyNodeChanges(changes, s.nodes),
+        // Dragging a node changes the file even though it does not change what runs. The
+        // history diff is where that distinction belongs, not the save prompt.
+        dirty: s.dirty || changes.some((c) => c.type !== 'select'),
+        history:
+          dragEnded || structural
+            ? record(s.history, { nodes: s.nodes, edges: s.edges })
+            : s.history,
+      };
+    });
   },
 
   onEdgesChange(changes) {
@@ -225,6 +295,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         edges: addEdge({ ...connection, type: 'wire' }, withoutExisting),
         validation: null,
         dirty: true,
+        history: record(s.history, { nodes: s.nodes, edges: s.edges }),
       };
     });
   },
@@ -353,6 +424,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       projectName: 'Untitled',
       versions: [],
       dirty: false,
+      history: emptyHistory,
+      liveNodes: {},
       message: null,
     });
   },
@@ -397,6 +470,200 @@ export const useEditor = create<EditorState>((set, get) => ({
     } finally {
       set({ busy: false });
     }
+  },
+
+  setView(view) {
+    set({ view });
+  },
+
+  async attachRuntime() {
+    // One subscription for the whole application. The teardown is returned so that a reload in
+    // development does not leave a second set of listeners updating the same state.
+    const off = await subscribe({
+      runStarted: ({ order }) => {
+        const pending: Record<string, NodeStatus> = {};
+        for (const id of order) pending[id] = 'pending';
+        set({ liveNodes: pending, journal: null, journalIsRecording: false });
+      },
+      nodeStarted: ({ node }) => {
+        set((s) => ({ liveNodes: { ...s.liveNodes, [node]: 'running' } }));
+      },
+      nodeFinished: ({ node, record: nodeRecord }) => {
+        if (!nodeRecord) return;
+        set((s) => ({ liveNodes: { ...s.liveNodes, [node]: nodeRecord.status } }));
+      },
+      runFinished: (journal) => {
+        set({ journal, journalIsRecording: false });
+      },
+      status: (status: WorkflowStatus) => {
+        set((s) => ({
+          running: status.running,
+          watching: status.watching,
+          runs: status.runs,
+          pending: status.pending,
+          message: status.message
+            ? { tone: 'error', text: status.message }
+            : status.running
+              ? s.message
+              : null,
+        }));
+      },
+      notification: (text) => {
+        set((s) => ({
+          // Newest first, and capped: a workflow that notifies on every file would otherwise
+          // grow this list until the application slowed down.
+          notifications: [{ at: Date.now(), text }, ...s.notifications].slice(0, 20),
+        }));
+      },
+    });
+
+    try {
+      set({ about: await ipc.about() });
+    } catch {
+      // Not knowing the version is not a reason to fail to start.
+    }
+
+    return off;
+  },
+
+  async startWorkflow() {
+    set({ busy: true, message: null, journal: null, liveNodes: {} });
+    try {
+      const state = get();
+      const status = await ipc.startWorkflow(state.toGraph(), state.inputs, state.grants);
+      set({
+        running: status.running,
+        watching: status.watching,
+        view: 'builder',
+        message: {
+          tone: 'info',
+          text: status.watching ? 'Watching. It will run whenever something appears.' : 'Running.',
+        },
+      });
+    } catch (error) {
+      set({ message: { tone: 'error', text: describe(error) }, running: false });
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  async stopWorkflow() {
+    try {
+      await ipc.stopWorkflow();
+      set({ message: { tone: 'info', text: 'Stopping.' } });
+    } catch (error) {
+      set({ message: { tone: 'error', text: describe(error) } });
+    }
+  },
+
+  loadDemo(demo) {
+    const nodes: EditorNode[] = Object.entries(demo.graph.nodes).map(([id, node]) => ({
+      id,
+      type: 'component',
+      position: node.position,
+      data: {
+        componentRef: node.component,
+        config: { ...node.config },
+        disabled: node.disabled ?? false,
+      },
+    }));
+    const edges: Edge[] = demo.graph.edges.map((edge) => ({
+      id: `${edge.from.node}.${edge.from.port}->${edge.to.node}.${edge.to.port}`,
+      source: edge.from.node,
+      sourceHandle: edge.from.port,
+      target: edge.to.node,
+      targetHandle: edge.to.port,
+      type: 'wire',
+    }));
+
+    set({
+      nodes,
+      edges,
+      selectedNodeId: null,
+      validation: null,
+      journal: null,
+      liveNodes: {},
+      inputs: [],
+      grants: [],
+      // A sample is not the person's project until they save it somewhere, so it starts
+      // unattached — saving will ask where to put it rather than overwriting anything.
+      projectPath: null,
+      projectName: demo.name,
+      versions: [],
+      dirty: true,
+      history: emptyHistory,
+      view: 'builder',
+      message: {
+        tone: 'info',
+        text: `${demo.name}: fill in ${demo.needs.join(', ').toLowerCase()}, then start it.`,
+      },
+    });
+  },
+
+  dismissNotifications() {
+    set({ notifications: [] });
+  },
+
+  undo() {
+    const s = get();
+    const step = undoHistory(s.history, { nodes: s.nodes, edges: s.edges });
+    if (!step) return;
+    set({
+      history: step.history,
+      nodes: step.snapshot.nodes,
+      edges: step.snapshot.edges,
+      validation: null,
+      dirty: true,
+    });
+  },
+
+  redo() {
+    const s = get();
+    const step = redoHistory(s.history, { nodes: s.nodes, edges: s.edges });
+    if (!step) return;
+    set({
+      history: step.history,
+      nodes: step.snapshot.nodes,
+      edges: step.snapshot.edges,
+      validation: null,
+      dirty: true,
+    });
+  },
+
+  copySelection() {
+    const s = get();
+    const selected = new Set(s.nodes.filter((n) => n.selected).map((n) => n.id));
+    if (s.selectedNodeId) selected.add(s.selectedNodeId);
+    if (selected.size === 0) return;
+    set({ clipboard: cut(s.nodes, s.edges, selected) });
+  },
+
+  pasteClipboard() {
+    const s = get();
+    if (!s.clipboard || s.clipboard.nodes.length === 0) return;
+    const pasted = paste(s.clipboard, new Set(s.nodes.map((n) => n.id)));
+    set({
+      history: record(s.history, { nodes: s.nodes, edges: s.edges }),
+      nodes: [...s.nodes.map((n) => ({ ...n, selected: false })), ...pasted.nodes],
+      edges: [...s.edges, ...pasted.edges],
+      selectedNodeId: pasted.ids[0] ?? null,
+      validation: null,
+      dirty: true,
+    });
+  },
+
+  duplicateSelection() {
+    get().copySelection();
+    get().pasteClipboard();
+  },
+
+  selectAll() {
+    set((s) => ({ nodes: s.nodes.map((n) => ({ ...n, selected: true })) }));
+  },
+
+  nodeStatus(id) {
+    const s = get();
+    return s.liveNodes[id] ?? s.journal?.nodes[id]?.status;
   },
 
   async restoreVersion(snapshot) {
@@ -455,6 +722,9 @@ function applyProject(set: (partial: Partial<EditorState>) => void, project: Ope
     projectName: project.name,
     versions: project.history.snapshots,
     dirty: false,
+    // Undoing into the graph of a different project would look exactly like corruption.
+    history: emptyHistory,
+    liveNodes: {},
     // A project pinning components this build does not have cannot run as saved. Saying so on
     // open beats letting somebody press Run and read a confusing refusal.
     message: project.missing.length

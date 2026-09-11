@@ -8,24 +8,40 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use encastra_core::broker::{Broker, GrantScope, GrantSet};
 use encastra_core::graph::{Graph, NodeId, PortRef};
+use encastra_core::journal::NodeRecord;
 use encastra_core::journal::RunJournal;
 use encastra_core::registry::{ComponentRegistry, InMemoryRegistry};
-use encastra_core::runner::{CoreComponentSet, run_seeded};
+use encastra_core::runner::{
+    CoreComponentSet, RunObserver, RunRequest, execute_request, run_seeded,
+};
+use encastra_core::session::{Session, TriggerSet};
 use encastra_core::validate::{Validation, validate_with_supplied};
 use encastra_core::value::{HandleKind, Value};
 use encastra_project::{History, LockedComponent, Lockfile, Project, SnapshotId};
 use encastra_protocol::manifest::ComponentManifest;
 use serde::{Deserialize, Serialize};
+use tauri::{Emitter, Manager};
 
 /// Loaded once at start-up. Building the registry per call would let two calls disagree about
 /// what is installed.
 struct Runtime {
     registry: InMemoryRegistry,
     components: CoreComponentSet,
+    triggers: TriggerSet,
+    /// The workflow currently running, if any. One at a time: two workflows writing into the
+    /// same folders at once is a surprise nobody asked for, and the editor shows one graph.
+    running: Mutex<Option<Running>>,
+}
+
+struct Running {
+    stop: Arc<AtomicBool>,
+    started_at_ms: u64,
 }
 
 /// A value the application supplies for an input nothing in the graph produces — the file a
@@ -306,14 +322,354 @@ fn describe(project: Project, path: &str, registry: &InMemoryRegistry) -> OpenPr
     }
 }
 
+// -- live progress ------------------------------------------------------------------------
+//
+// The journal is the record of a finished run and stays immutable. Progress is a stream, and
+// these events are it. Conflating the two would mean handing the debugger a half-written
+// journal, and its guarantee — that what it shows is what happened — would stop being true.
+
+/// Event names, in one place so the TypeScript side has something to match against.
+mod events {
+    pub const RUN_STARTED: &str = "encastra://run-started";
+    pub const NODE_STARTED: &str = "encastra://node-started";
+    pub const NODE_FINISHED: &str = "encastra://node-finished";
+    pub const RUN_FINISHED: &str = "encastra://run-finished";
+    pub const STATUS: &str = "encastra://status";
+    pub const NOTIFICATION: &str = "encastra://notification";
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RunStarted {
+    run_id: String,
+    order: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct NodeEvent {
+    run_id: String,
+    node: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    record: Option<NodeRecord>,
+}
+
+/// What the status bar shows while a workflow is running.
+#[derive(Debug, Clone, Serialize)]
+struct Status {
+    running: bool,
+    /// True when the workflow starts itself and keeps going until stopped.
+    watching: bool,
+    runs: u64,
+    pending: usize,
+    dropped: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+struct Progress {
+    app: tauri::AppHandle,
+}
+
+impl RunObserver for Progress {
+    fn run_started(&self, run_id: &str, order: &[NodeId]) {
+        let _ = self.app.emit(
+            events::RUN_STARTED,
+            RunStarted {
+                run_id: run_id.to_owned(),
+                order: order.iter().map(ToString::to_string).collect(),
+            },
+        );
+    }
+
+    fn node_started(&self, run_id: &str, node: &NodeId) {
+        let _ = self.app.emit(
+            events::NODE_STARTED,
+            NodeEvent {
+                run_id: run_id.to_owned(),
+                node: node.to_string(),
+                record: None,
+            },
+        );
+    }
+
+    fn node_finished(&self, run_id: &str, node: &NodeId, record: &NodeRecord) {
+        // A component that asked to notify gets its notification here, from the side of the
+        // application that owns a screen. The runtime only records the request (see
+        // encastra_builtins::system), so the same graph runs headless in the CLI.
+        if record.component.starts_with("encastra.system.notify@") {
+            if let Some(message) = record.outputs.get("message") {
+                let _ = self.app.emit(events::NOTIFICATION, message.clone());
+            }
+        }
+
+        let _ = self.app.emit(
+            events::NODE_FINISHED,
+            NodeEvent {
+                run_id: run_id.to_owned(),
+                node: node.to_string(),
+                record: Some(record.clone()),
+            },
+        );
+    }
+
+    fn run_finished(&self, journal: &RunJournal) {
+        let _ = self.app.emit(events::RUN_FINISHED, journal.clone());
+    }
+}
+
+fn announce(app: &tauri::AppHandle, status: Status) {
+    let _ = app.emit(events::STATUS, status);
+}
+
+/// Assembles the grants for a run: declared input-handle scopes, plus whatever the user said
+/// yes to. A manifest asking for something never grants it.
+fn grant_set(graph: &Graph, registry: &InMemoryRegistry, grants: &[GrantSpec]) -> GrantSet {
+    let mut set = GrantSet::new();
+    for (id, node) in &graph.nodes {
+        if let Some(manifest) = registry.get(&node.component) {
+            set.allow_declared_input_handles(id, manifest);
+        }
+    }
+    for grant in grants {
+        let node = NodeId(grant.node.clone());
+        let scope = match (&grant.folder, &grant.hosts) {
+            (Some(folder), _) => GrantScope::Directory(PathBuf::from(folder)),
+            (None, Some(hosts)) => GrantScope::HttpHosts(hosts.clone()),
+            (None, None) => GrantScope::Allowed,
+        };
+        set.grant(&node, &grant.kind, scope);
+    }
+    set
+}
+
+fn seed_for(broker: &mut Broker, inputs: &[InputSpec]) -> Result<BTreeMap<PortRef, Value>, String> {
+    let mut seed = BTreeMap::new();
+    for input in inputs {
+        let path = PathBuf::from(&input.path);
+        let absolute = std::fs::canonicalize(&path)
+            .map_err(|e| format!("Could not open {}: {}", path.display(), e.kind()))?;
+        let kind = kind_for(&absolute);
+        let handle = broker.import_file(absolute, kind);
+        seed.insert(input.port_ref(), Value::Handle(handle));
+    }
+    Ok(seed)
+}
+
+/// Starts a workflow.
+///
+/// A graph with a trigger keeps going until it is stopped. A graph without one runs once, with
+/// whatever the application supplied. Both report progress the same way, so the interface does
+/// not have two shapes of "running" to keep in step.
+#[tauri::command]
+fn start_workflow(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Runtime>,
+    graph: Graph,
+    inputs: Vec<InputSpec>,
+    grants: Vec<GrantSpec>,
+) -> Result<Status, String> {
+    {
+        let running = state.running.lock().map_err(|_| "The runtime is busy.")?;
+        if running.is_some() {
+            return Err("A workflow is already running. Stop it before starting another.".into());
+        }
+    }
+
+    let registry = state.registry.clone();
+    let components = state.components.clone();
+    let triggers = state.triggers.clone();
+
+    let run_id = format!("session-{}", encastra_core::journal::now_ms());
+    let run_dir = std::env::temp_dir().join("encastra").join(&run_id);
+    let mut broker = Broker::new(run_dir.clone(), grant_set(&graph, &registry, &grants))
+        .map_err(|e| format!("Could not prepare a working folder: {e}"))?;
+
+    let seed = seed_for(&mut broker, &inputs)?;
+
+    let session = Session::start(
+        graph.clone(),
+        &registry,
+        components.clone(),
+        &triggers,
+        run_id.clone(),
+    )
+    .map_err(|validation| {
+        // The editor already shows the issues; this is the one-line version for the status bar.
+        let errors = validation.errors().count();
+        format!("This workflow cannot run yet: {errors} problem(s) to fix.")
+    })?;
+
+    let watching = session.has_triggers();
+    let stop = session.stop_flag();
+
+    {
+        let mut running = state.running.lock().map_err(|_| "The runtime is busy.")?;
+        *running = Some(Running {
+            stop: Arc::clone(&stop),
+            started_at_ms: encastra_core::journal::now_ms(),
+        });
+    }
+
+    let thread_app = app.clone();
+    std::thread::Builder::new()
+        .name("encastra-workflow".into())
+        .spawn(move || {
+            let observer = Progress {
+                app: thread_app.clone(),
+            };
+            let mut session = session;
+
+            if watching {
+                while !session.is_stopped() {
+                    let tick = session.tick(&registry, &mut broker, Some(&observer));
+                    let (pending, dropped) = session.backlog();
+
+                    let message = tick
+                        .trigger_errors
+                        .first()
+                        .map(|(node, error)| format!("{node}: {error}"))
+                        .or_else(|| {
+                            (tick.dropped > 0).then(|| {
+                                format!("{} event(s) dropped — too many at once.", tick.dropped)
+                            })
+                        });
+
+                    announce(
+                        &thread_app,
+                        Status {
+                            running: true,
+                            watching: true,
+                            runs: session.runs_completed(),
+                            pending,
+                            dropped,
+                            message,
+                        },
+                    );
+
+                    // Sleeping for the whole interval would make Stop feel slow; a short cap
+                    // keeps it immediate without polling the folder any harder.
+                    let wait = session.quiet_for().min(Duration::from_millis(200));
+                    if !wait.is_zero() {
+                        std::thread::sleep(wait);
+                    }
+                }
+            } else {
+                let request = RunRequest {
+                    graph: &graph,
+                    registry: &registry,
+                    components: &components,
+                    cancel: &stop,
+                    run_id: &run_id,
+                    seed,
+                    observer: Some(&observer),
+                };
+                if let Err(validation) = execute_request(request, &mut broker) {
+                    announce(
+                        &thread_app,
+                        Status {
+                            running: false,
+                            watching: false,
+                            runs: 0,
+                            pending: 0,
+                            dropped: 0,
+                            message: Some(format!(
+                                "Nothing ran: {} problem(s) to fix first.",
+                                validation.errors().count()
+                            )),
+                        },
+                    );
+                }
+            }
+
+            // Scratch space belongs to the run. Anything worth keeping was copied into a folder
+            // the user allowed, by a component that asked.
+            let _ = std::fs::remove_dir_all(&run_dir);
+
+            announce(
+                &thread_app,
+                Status {
+                    running: false,
+                    watching,
+                    runs: session.runs_completed(),
+                    pending: 0,
+                    dropped: session.backlog().1,
+                    message: None,
+                },
+            );
+
+            if let Some(state) = thread_app.try_state::<Runtime>() {
+                if let Ok(mut running) = state.running.lock() {
+                    *running = None;
+                }
+            }
+        })
+        .map_err(|e| format!("Could not start the workflow: {e}"))?;
+
+    Ok(Status {
+        running: true,
+        watching,
+        runs: 0,
+        pending: 0,
+        dropped: 0,
+        message: None,
+    })
+}
+
+#[tauri::command]
+fn stop_workflow(state: tauri::State<'_, Runtime>) -> Result<(), String> {
+    let running = state.running.lock().map_err(|_| "The runtime is busy.")?;
+    if let Some(running) = running.as_ref() {
+        running.stop.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn workflow_status(state: tauri::State<'_, Runtime>) -> Status {
+    let running = state.running.lock().ok().and_then(|r| {
+        r.as_ref().map(|running| Status {
+            running: true,
+            watching: false,
+            runs: 0,
+            pending: 0,
+            dropped: 0,
+            message: Some(format!(
+                "Running for {} seconds.",
+                (encastra_core::journal::now_ms().saturating_sub(running.started_at_ms)) / 1000
+            )),
+        })
+    });
+
+    running.unwrap_or(Status {
+        running: false,
+        watching: false,
+        runs: 0,
+        pending: 0,
+        dropped: 0,
+        message: None,
+    })
+}
+
+/// The version shown in Settings, taken from the build rather than typed anywhere.
+#[tauri::command]
+fn about() -> serde_json::Value {
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "runtime": encastra_core::RUNTIME_VERSION,
+        "protocolSchema": encastra_protocol::SCHEMA_VERSION,
+        "projectSchema": encastra_project::PROJECT_SCHEMA,
+    })
+}
+
 pub fn run() {
-    let (registry, components) = encastra_builtins::install();
+    let installed = encastra_builtins::install_all();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Runtime {
-            registry,
-            components,
+            registry: installed.registry,
+            components: installed.components,
+            triggers: installed.triggers,
+            running: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             list_components,
@@ -323,7 +679,11 @@ pub fn run() {
             save_project,
             open_project,
             restore_version,
-            compare_versions
+            compare_versions,
+            start_workflow,
+            stop_workflow,
+            workflow_status,
+            about
         ])
         .run(tauri::generate_context!())
         .expect("the application window could not be created");

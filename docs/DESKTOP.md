@@ -1,0 +1,289 @@
+# DESKTOP APPLICATION
+
+> `apps/desktop` — a Tauri 2 shell holding a React editor, with the runtime compiled in beside
+> it. This describes what the application does today and how to work on it. The reasoning behind
+> two of the shell's settings also lives in `apps/desktop/src-tauri/README.md`, because
+> `tauri.conf.json` is validated strictly and JSON has no comments.
+
+---
+
+## 1. Architecture
+
+```
+┌──────────────────────────────── one process ────────────────────────────────┐
+│                                                                             │
+│  WebView                          Rust                                      │
+│  ┌──────────────────────┐         ┌─────────────────────────────────────┐   │
+│  │ React 19 editor      │  invoke │ Tauri commands                      │   │
+│  │  · React Flow canvas │ ──────► │  apps/desktop/src-tauri/src/lib.rs  │   │
+│  │  · palette           │         └──────────────┬──────────────────────┘   │
+│  │  · inspector         │  events                │                          │
+│  │  · store (zustand)   │ ◄────── ┌──────────────▼──────────────────────┐   │
+│  └──────────────────────┘         │ encastra-core — validate, execute,   │  │
+│                                   │ journal, session                     │  │
+│                                   └──────────────┬──────────────────────┘   │
+│                                   ┌──────────────▼──────────────────────┐   │
+│                                   │ capability broker                   │   │
+│                                   └──────────────┬──────────────────────┘   │
+│                                   ┌──────────────▼──────────────────────┐   │
+│                                   │ the operating system                │   │
+│                                   └─────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+Two properties hold this together.
+
+**There is no second runtime.** The editor performs *static* validation from the shared type
+table as the user drags an edge, and asks `encastra-core` for everything else. A TypeScript
+preview engine would diverge from the real one, and a workflow that behaves differently in
+preview than in production is worse than having no preview at all
+([ADR-0003](adr/0003-one-runtime-shared-type-table.md)).
+
+**The command layer decides nothing.** Every command in `lib.rs` is a thin translation between
+JSON and `encastra-core`. There is no second validator, no second scheduler, and no place where
+the editor could come to believe something the engine disagrees with. When a command starts to
+look like it is deciding something, that decision belongs in the runtime.
+
+The registry of installed components is built once at start-up and held in Tauri's managed
+state. Building it per call would let two calls disagree about what is installed.
+
+---
+
+## 2. The command surface
+
+| Command | What it does |
+|---|---|
+| `list_components` | every manifest this build offers, for the palette |
+| `type_graph` | the coercion table, served by the runtime that enforces it |
+| `validate_graph` | validation for a graph plus the ports the application will supply |
+| `run_graph` | one-shot: assemble grants, import the picked files, run, return a journal |
+| `start_workflow` / `stop_workflow` / `workflow_status` | the session path, for a graph that starts itself |
+| `save_project` / `open_project` | the `.encastra` container |
+| `restore_version` / `compare_versions` | version history |
+| `about` | versions, taken from the build rather than typed anywhere |
+
+A few of these are worth spelling out.
+
+**`type_graph` looks redundant and is not.** The editor already has the rule table at build
+time. Serving it from the runtime as well means a *running* application can be asked which rules
+it is actually using — which is the question that matters when a connection is refused and
+nobody can see why.
+
+**`run_graph` reports a refused graph and a failed run as different shapes.** The result is a
+tagged union: `Invalid { validation }` or `Ran { journal }`. They are different outcomes, and the
+UI cannot accidentally render one as the other.
+
+**Grants arrive per run.** A `GrantSpec` names a node, a capability kind, and either a folder or
+a list of hosts. Capabilities declared with an `input-handles` scope are admitted from the
+manifest without a dialog, because they grant nothing the user has not already said by drawing
+an edge; everything else is in the list because a person answered a question. Nothing is
+remembered between runs — "allowed once" and "allowed always" are different promises, and only
+the UI knows which one was given.
+
+**Scratch space belongs to the run.** Each run gets a temporary directory, and it is deleted
+when the run ends. Anything the user wanted to keep was copied into a folder they allowed, by a
+component that asked.
+
+**One workflow at a time.** `start_workflow` refuses if something is already running. Two
+workflows writing into the same folders at once is a surprise nobody asked for, and the editor
+shows one graph.
+
+---
+
+## 3. Events, and why the journal is not one
+
+The journal is the record of a *finished* run, and it is immutable. Progress is a stream. These
+are genuinely different things, and conflating them would mean handing the debugger a
+half-written journal — at which point its guarantee, that what it shows is what happened, stops
+being true.
+
+So the Rust side implements `RunObserver` and emits six channels:
+
+```
+encastra://run-started      the run id and the order nodes will run in
+encastra://node-started     a node began
+encastra://node-finished    a node's complete record
+encastra://run-finished     the whole journal
+encastra://status           running / watching / runs completed / pending / dropped
+encastra://notification     a component asked for a desktop notification
+```
+
+Channel names live in one Rust module and one TypeScript map, so there is something to match
+against on both sides. `events.ts` subscribes to all of them together and returns a single
+teardown function: a half-unsubscribed set would leave the interface updating from a workflow
+the user has already closed.
+
+### Notifications
+
+The runtime does not draw a notification. `encastra.system.notify` asks the broker for
+permission, records the request, and returns. The side of the application that owns a screen
+delivers it — the desktop app listens for `node-finished` from that component and emits
+`encastra://notification`; the CLI prints it. A runtime that reached for a windowing API would be
+a runtime that cannot run headless, and the same code has to serve both.
+
+---
+
+## 4. The editor
+
+`App.tsx` is one screen: a topbar, the palette, the canvas, the inspector, and a status bar.
+
+**The canvas** uses `@xyflow/react` as a *substrate* — pan, zoom, selection, marquee, minimap,
+edge routing, viewport virtualisation. It provides no pixels the user sees: node rendering, port
+rendering, edge rendering, the execution-state overlay and the entire visual language are ours,
+and connection validation is driven by the shared type table.
+[ADR-0005](adr/0005-react-flow-canvas-substrate.md) records why the library is not visible in the
+result, and why building a viewport from scratch would spend months to arrive at the same
+interaction model, worse, without changing how the product looks by a single pixel.
+
+**The inspector** is both the settings panel and the debugger. Its Permissions section lists
+every capability whose scope is not `input-handles` and shows the manifest's `reason` verbatim —
+that string is what the person is consenting to. For `fs.write` it offers "Allow this folder",
+using the node's own folder setting and refusing to grant anything until one is chosen, because
+a grant with no scope is an unbounded grant. Its run section shows a node's inputs and outputs,
+duration, logs, error, and every capability call the broker saw, with refusals marked.
+
+> **Gap.** The panel only knows how to *scope* `fs.write`. Anything else produces a bare allow,
+> which the broker reads as no permitted hosts and no readable directories — so HTTP Request and
+> Watch Folder cannot currently be granted what they need from the editor. The runtime supports
+> both grant shapes; the UI does not yet express them. See [SECURITY](SECURITY.md) §9.7.
+
+**Keyboard.** Ctrl/Cmd+Enter runs, Ctrl/Cmd+S saves (Shift for Save As), Ctrl/Cmd+O opens.
+
+**In the tree but not yet mounted.** `src/Sidebar.tsx`, `src/views/{Home,Components,Security,
+Settings}.tsx`, `src/demos.ts` and `src/history.ts` exist and are not imported by `App.tsx`. The
+navigation shell they belong to is in progress; today the application is the single screen
+described above. This paragraph should disappear when they are wired in.
+
+---
+
+## 5. Content Security Policy
+
+```
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+img-src 'self' data: asset: http://asset.localhost; font-src 'self';
+connect-src 'self' ipc: http://ipc.localhost; object-src 'none';
+base-uri 'none'; frame-ancestors 'none'
+```
+
+No `unsafe-eval`, no remote origins, no wildcards. The editor is a local application and
+everything it needs is bundled; there is no case where it should fetch code or styles from the
+network. `style-src` allows inline styles because the canvas positions nodes with them.
+`asset:` and `ipc:` are Tauri's own schemes for local assets and for the command bridge.
+
+**Loosening any of this is a security decision, not a build convenience.** If a library needs
+`unsafe-eval`, the answer is a different library.
+
+This matters more than it looks. The Tauri commands accept a graph, an input list and a grant
+list from the WebView and act on them — which is the correct trust relationship, because the
+WebView is first-party, but it means the CSP is what stands between foreign code and a forged
+grant.
+
+---
+
+## 6. Windows installer: NSIS, not MSI
+
+`bundle.targets` is `["nsis"]` deliberately; `"all"` would produce both.
+
+- NSIS installs per-user without elevation, so a first run does not need an administrator.
+- One installer covers every language. MSI needs one per language.
+- The updater supports NSIS's quiet and passive modes properly. MSI cannot elevate quietly.
+- **An MSI-to-NSIS migration works; the reverse does not.** Choosing MSI first would be a
+  one-way door.
+
+The known cost is that NSIS installers draw more SmartScreen and antivirus false positives than
+MSI. That is a code-signing problem rather than a packaging one, and it is solved by signing
+rather than by switching format.
+
+Windows builds require the MSVC toolchain, and the GNU toolchain is not a supported alternative
+— Tauri does not test it, and the concrete breakage (a missing `WebView2Loader.dll` at runtime,
+no application icon, a binary roughly three times larger) is documented in
+[ADR-0009](adr/0009-windows-msvc-toolchain.md) along with the exact Build Tools components to
+install and how to verify the linker actually works.
+
+---
+
+## 7. The browser preview
+
+`npm run dev --workspace @encastra/desktop` serves the editor at `http://localhost:5173` in an
+ordinary browser, with no Tauri behind it. This exists so the interface can be built and looked
+at without a Rust build, and so the visual work can be reviewed in a browser's devtools.
+
+**It is not a second runtime, and it does not simulate one.** `ipc.ts` has two implementations
+selected by whether `__TAURI_INTERNALS__` is present on `window`. The browser one:
+
+- serves `src/fixtures/components.json` for `listComponents` — a recording of what the real
+  runtime reports;
+- throws `PreviewOnlyError` for *everything* else: validating, running, choosing a file,
+  opening or saving a project, restoring a version, starting a workflow. The message says what
+  is missing and that the desktop app is where to do it;
+- reports `live: false`, which the topbar renders as a **preview** badge;
+- reports its version as `"preview"` and its runtime as `"not attached"`, rather than inventing
+  a build.
+
+Instead of a fake run it offers **recordings**: `src/fixtures/example-run.json` and
+`example-run-denied.json` are journals the real engine produced, captured with
+`encastra run --json`, and the second one is a run where a folder was not allowed. They are
+labelled as recordings wherever they are shown, and the status bar carries a `recording` badge
+while one is displayed.
+
+A UI harness that quietly simulated the engine would be the most dangerous kind of drift: it
+would look right, and it would be lying about the one thing this product sells.
+
+Event subscription in the browser succeeds and nothing ever arrives, which is the honest
+behaviour for a preview that does not run anything.
+
+---
+
+## 8. Development
+
+```bash
+npm install
+
+npm run tauri:dev        # Vite + the Rust shell, hot reload on the frontend
+npm run tauri:build      # a production build and an NSIS installer on Windows
+npm run dev --workspace @encastra/desktop     # browser preview only, no Rust
+npm run check            # lint + typecheck + tests before you push
+```
+
+Two things about the Vite configuration are deliberate.
+
+**`@encastra/protocol` is aliased to its source**, not to its build output. An edit to the type
+rules is visible in the editor immediately, with no build step in between — which matters,
+because those rules are the one thing the editor and the runtime must agree on, and a stale
+compiled copy is exactly the failure
+[ADR-0003](adr/0003-one-runtime-shared-type-table.md) exists to prevent.
+
+**`strictPort: true` on 5173.** Tauri points at that exact port; failing loudly beats silently
+serving on another one and leaving the window blank.
+
+The build targets `esnext` with sourcemaps — the desktop app ships its own runtime and never
+runs in an old browser, so there is no reason to ship downlevelled output — and `envPrefix` is
+restricted to `VITE_` and `TAURI_` so build paths do not leak into the bundle.
+
+The Rust side is split into a library (`encastra_desktop_lib`) plus a thin binary, which is how
+Tauri 2 wants it: the same code can be reached from mobile targets and from integration tests.
+
+Icons in `src-tauri/icons/` are generated by `scripts/make_brand.py`. Do not hand-edit them —
+regenerate.
+
+The release profile optimises for size (`opt-level = "z"`, LTO, one codegen unit, stripped). It
+deliberately does **not** set `panic = "abort"`: a first-party component that panics would
+otherwise take the whole application down, and the runtime already treats a component failure as
+an ordinary, recoverable outcome. The binary is a little larger; the editor survives a bug in one
+node.
+
+---
+
+## 9. What the desktop application does not do yet
+
+- **Remember a grant.** Permissions are answered per run and discarded. There is no Security
+  Center listing what has been allowed.
+- **Resolve a secret.** `variables.json` records names and types; nothing reads them and there
+  is no keystore integration. See [PROJECT-FORMAT](PROJECT-FORMAT.md) §5.
+- **Install a component.** The palette shows what is compiled in. There is no registry, no
+  install flow, and no way to run a third-party component at all — see
+  [COMPONENT-SDK](COMPONENT-SDK.md).
+- **Update itself.** [ADR-0008](adr/0008-signing-and-revocation.md) specifies the updater's
+  verification rules; there is no updater.
+- **Show a run's history.** A journal lives as long as the window holds it.
+- **Offer navigation.** See the note at the end of §4.
