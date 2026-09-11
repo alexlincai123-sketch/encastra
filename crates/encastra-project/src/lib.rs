@@ -47,6 +47,8 @@ pub enum ProjectError {
     Invalid { entry: String, reason: String },
     #[error("the project file could not be read as an archive: {0}")]
     Archive(String),
+    #[error("{entry} unpacks to more than this build will read ({limit} bytes)")]
+    TooLarge { entry: String, limit: u64 },
     #[error("input/output error: {0}")]
     Io(String),
 }
@@ -266,15 +268,38 @@ fn to_pretty<T: Serialize>(value: &T) -> Vec<u8> {
     into_bytes(serde_json::to_string_pretty(value).expect("project data always serialises"))
 }
 
+/// The most any single entry may unpack to.
+///
+/// A `.encastra` file is a handful of JSON documents. The largest realistic one is the graph of
+/// an enormous workflow, which is still kilobytes — so this ceiling is generous by a wide margin
+/// and is not there to constrain honest files.
+///
+/// It is there because a ZIP entry's compressed size says nothing about its uncompressed size.
+/// A few kilobytes of zeros expands to gigabytes, and a project file is exactly the kind of
+/// thing somebody is sent and opens. Without a ceiling, reading one is an out-of-memory crash
+/// that the person who sent it chose. The same reasoning already governs image decoding in
+/// `encastra-core::media`, which probes dimensions before it allocates.
+pub const MAX_ENTRY_BYTES: u64 = 32 * 1024 * 1024;
+
 fn read_json<T: for<'de> Deserialize<'de>, R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     entry: &str,
 ) -> Result<T, ProjectError> {
-    let mut file = archive
+    let file = archive
         .by_name(entry)
         .map_err(|_| ProjectError::MissingEntry(entry.to_owned()))?;
+
+    // Read one byte past the ceiling, so that hitting it exactly is distinguishable from being
+    // truncated at it. Without the extra byte a file of exactly the limit would be refused.
     let mut text = String::new();
-    file.read_to_string(&mut text)?;
+    file.take(MAX_ENTRY_BYTES + 1).read_to_string(&mut text)?;
+    if text.len() as u64 > MAX_ENTRY_BYTES {
+        return Err(ProjectError::TooLarge {
+            entry: entry.to_owned(),
+            limit: MAX_ENTRY_BYTES,
+        });
+    }
+
     serde_json::from_str(&text).map_err(|e| ProjectError::Invalid {
         entry: entry.to_owned(),
         reason: e.to_string(),

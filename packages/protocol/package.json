@@ -1,6 +1,6 @@
 {
   "name": "@encastra/protocol",
-  "version": "0.2.0-beta.1",
+  "version": "0.3.0-beta.1",
   "private": true,
   "description": "Component protocol: type system, manifest schema, canonicalisation. The single source of truth shared by the editor and the runtime.",
   "type": "module",
