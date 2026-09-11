@@ -274,17 +274,21 @@ export function Scene04Build({ locale }: { locale: Locale }): ReactNode {
                 );
               })}
             </div>
-          </div>
 
-          <div className={styles.buildResolve}>
-            <div className={styles.buildResolveInner}>
-              <GraphFlow steps={RESOLVED_FLOW} dense caption={COPY.resolve} />
+            {/* Inside the field rather than beside it. Both of these are absolutely positioned
+                against their containing block, and while that was the whole stage they covered
+                the headline and the paragraph as well as the diagram — the resolved workflow
+                arrived on top of the sentence introducing it. */}
+            <div className={styles.buildResolve}>
+              <div className={styles.buildResolveInner}>
+                <GraphFlow steps={RESOLVED_FLOW} dense caption={COPY.resolve} />
+              </div>
             </div>
-          </div>
 
-          <p className={styles.buildCaption} aria-hidden="true">
-            {TOTAL_COUNT} real components, one graph
-          </p>
+            <p className={styles.buildCaption} aria-hidden="true">
+              {TOTAL_COUNT} real components, one graph
+            </p>
+          </div>
         </div>
       </div>
     </section>

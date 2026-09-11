@@ -120,6 +120,30 @@ const es: Messages = {
         body: 'El sandbox de WebAssembly está diseñado y documentado. Todavía no se ejecuta nada de terceros.',
       },
     },
+    availability: {
+      eyebrow: 'Disponibilidad',
+      title: 'Sólo Windows, por ahora',
+      lead: 'Encastra funciona en Windows 10 y 11 de 64 bits. No hay versión para macOS ni para Linux — no es «próximamente» ni hay lista de espera: no existen, y un botón de descarga que no diera nada sería peor que decirlo.',
+      platforms: {
+        windows: {
+          name: 'Windows',
+          detail: '10 y 11 · x64 · instalador por usuario, sin permisos de administrador',
+          state: 'Disponible',
+        },
+        macos: {
+          name: 'macOS',
+          detail:
+            'Sin construir. El runtime es Rust portable, así que es cuestión de trabajo, no de posibilidad.',
+          state: 'No disponible',
+        },
+        linux: {
+          name: 'Linux',
+          detail: 'Sin construir, por la misma razón.',
+          state: 'No disponible',
+        },
+      },
+      note: 'El instalador no está firmado, así que Windows avisará de un editor desconocido. Ese aviso es cierto. El SHA-256 publicado es lo que tienes en lugar de una firma.',
+    },
     closing: {
       eyebrow: 'Beta {version}',
       title: 'Solo Windows, sin firmar, y sincero sobre ambas cosas',

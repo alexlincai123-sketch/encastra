@@ -122,6 +122,30 @@ const en: Messages = {
         body: 'The WebAssembly sandbox is designed and documented. Nothing third-party runs yet.',
       },
     },
+    availability: {
+      eyebrow: 'Availability',
+      title: 'Windows only, for now',
+      lead: 'Encastra runs on Windows 10 and 11, 64-bit. There is no macOS build and no Linux build — not "coming soon", not hidden behind a waiting list: they do not exist, and a download button that produced nothing would be worse than saying so.',
+      platforms: {
+        windows: {
+          name: 'Windows',
+          detail: '10 and 11 · x64 · per-user installer, no administrator needed',
+          state: 'Available',
+        },
+        macos: {
+          name: 'macOS',
+          detail:
+            'Not built. The runtime is portable Rust, so it is a matter of work rather than of possibility.',
+          state: 'Not available',
+        },
+        linux: {
+          name: 'Linux',
+          detail: 'Not built, for the same reason.',
+          state: 'Not available',
+        },
+      },
+      note: 'The installer is not code-signed, so Windows will warn about an unrecognised publisher. That warning is accurate. The published SHA-256 is what you have instead of a signature.',
+    },
     closing: {
       eyebrow: 'Beta {version}',
       title: 'Windows only, not code-signed, and honest about both',

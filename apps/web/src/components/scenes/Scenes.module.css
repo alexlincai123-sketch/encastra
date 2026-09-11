@@ -290,17 +290,28 @@
 /* Its own stage rather than `.stageFull` — reduced motion needs to collapse this one's fixed
    height back to `auto` (see below) without touching scene 2's cluster, which reuses
    `.stageFull` and must keep its fixed height so its absolutely-positioned chips stay placed. */
+/*
+ * A column: the sentence takes the height it needs, the field takes what is left.
+ *
+ * This used to be a fixed-height box with a field claiming 100% of it *and* the copy living in
+ * the same box, so the two drew over each other — the paragraph sat across the diagram's first
+ * conversion badge. A fixed height cannot be right for both a headline that wraps differently
+ * per language and a diagram that has to fit whatever remains.
+ */
 .buildStage {
   composes: stage;
-  /* The field has to leave room for the sentence above it inside one screen. At 80vh it did
-     not: content measured 981px against a 900px stage. */
-  height: min(52svh, 520px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
 }
 
 .buildField {
   position: relative;
   width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  margin-block-start: var(--space-5);
   will-change: transform;
 }
 

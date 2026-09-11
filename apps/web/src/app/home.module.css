@@ -61,3 +61,68 @@
   flex-wrap: wrap;
   gap: var(--space-3);
 }
+
+/* --- Availability ---------------------------------------------------------------------------
+ * Three platforms, one of which exists. The two that do not are on the page rather than absent
+ * from it: somebody on a Mac should learn that here, not after downloading a file that will not
+ * run, and a page that simply omits them invites the assumption that they are coming.
+ */
+
+.platforms {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  margin-block-start: var(--space-6);
+}
+
+.platform {
+  padding: var(--space-5);
+  background: var(--site-card);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  /* The unavailable ones are quieter, not hidden. */
+  opacity: 0.62;
+}
+
+.platform[data-available="true"] {
+  opacity: 1;
+  border-color: var(--accent-dim);
+}
+
+.platformHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.platformName {
+  font-size: var(--site-step-1);
+}
+
+.platformState {
+  font-family: var(--site-mono);
+  font-size: var(--site-step--1);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.platform[data-available="true"] .platformState {
+  color: var(--accent);
+}
+
+.platformDetail {
+  margin-block-start: var(--space-3);
+  font-size: var(--site-step--1);
+  line-height: var(--leading-normal);
+  color: var(--ink-muted);
+}
+
+.platformNote {
+  max-width: var(--site-measure);
+  margin-block-start: var(--space-5);
+  font-size: var(--site-step--1);
+  color: var(--ink-faint);
+}

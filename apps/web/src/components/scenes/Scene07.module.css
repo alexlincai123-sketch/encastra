@@ -9,7 +9,7 @@
 .visualStage {
   position: relative;
   width: 100%;
-  height: min(50vh, 380px);
+  height: min(46svh, 400px);
   margin-block-start: var(--space-6);
 }
 
@@ -52,22 +52,40 @@
 
 /* The stack of saved templates MORPH reveals in the shell's place. Its own children start
    perfectly overlapped on this same centre point; STACK is what gives them their pile offsets. */
+/*
+ * A pile that is a pile before the timeline touches it.
+ *
+ * Its children used to sit perfectly overlapped, with STACK supplying every offset. That is
+ * correct for the animation and wrong for every frame before it: a visitor arriving mid-scene
+ * saw one small card in the middle of a large empty area and nothing else. The resting state is
+ * now already three cards deep, and STACK opens the pile further rather than creating it.
+ */
 .stackGroup {
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 210px;
-  height: 64px;
+  width: 280px;
+  height: 132px;
   will-change: transform, opacity;
+}
+
+.templateCard:nth-child(1) {
+  transform: translateY(-26px) scale(0.94);
+  opacity: 0.75;
+}
+
+.templateCard:nth-child(2) {
+  transform: translateY(-13px) scale(0.97);
+  opacity: 0.88;
 }
 
 .templateCard {
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 210px;
+  width: 280px;
   height: fit-content;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
   background: var(--site-card);
   border: var(--border-strong);
   border-radius: var(--radius-md);
@@ -81,7 +99,7 @@
 @media (max-width: 899px) {
   .templateCard,
   .stackGroup {
-    width: 176px;
+    width: 220px;
   }
 }
 

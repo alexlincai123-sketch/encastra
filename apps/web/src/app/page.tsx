@@ -75,6 +75,39 @@ export default async function HomePage(): Promise<ReactNode> {
         </div>
       </section>
 
+      {/* Availability, said plainly and in its own section.
+          A visitor on a Mac should find out here rather than after downloading something that
+          will not run, and a platform that does not exist is listed as not existing rather than
+          left off the page to be discovered later. */}
+      <section className="section" aria-labelledby="availability-heading">
+        <div className="page">
+          <SectionHeading
+            id="availability-heading"
+            eyebrow={t(locale, 'home.availability.eyebrow')}
+            title={t(locale, 'home.availability.title')}
+            lead={t(locale, 'home.availability.lead')}
+          />
+          <ul className={styles.platforms}>
+            {(['windows', 'macos', 'linux'] as const).map((key) => (
+              <li key={key} className={styles.platform} data-available={key === 'windows'}>
+                <div className={styles.platformHead}>
+                  <h3 className={styles.platformName}>
+                    {t(locale, `home.availability.platforms.${key}.name`)}
+                  </h3>
+                  <span className={styles.platformState}>
+                    {t(locale, `home.availability.platforms.${key}.state`)}
+                  </span>
+                </div>
+                <p className={styles.platformDetail}>
+                  {t(locale, `home.availability.platforms.${key}.detail`)}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <p className={styles.platformNote}>{t(locale, 'home.availability.note')}</p>
+        </div>
+      </section>
+
       <section className="section">
         <div className="page">
           <div className={styles.closing}>

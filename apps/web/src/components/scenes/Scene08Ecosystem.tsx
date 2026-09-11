@@ -5,8 +5,7 @@ import type { ReactNode } from 'react';
 import { GraphNode } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
 import type { Locale } from '@/lib/i18n/locale';
-import { Flip } from '@/lib/motion';
-import { BEAT, DEPTH, EASE, handoff, handon, morph, scatterOrder, snap } from '@/lib/motion-system';
+import { assemble, BEAT, DEPTH, EASE, handoff, handon, morph, snap } from '@/lib/motion-system';
 import { sceneCopy } from '@/lib/scenes';
 import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
@@ -38,14 +37,23 @@ export function Scene08Ecosystem({ locale }: { locale: Locale }): ReactNode {
     const heading = ctx.root.querySelector(sel(styles.headline));
     const body = ctx.root.querySelector(sel(styles.body));
     const field = ctx.root.querySelector<HTMLElement>(sel(eco.field));
-    const mixedPool = ctx.root.querySelector<HTMLElement>(sel(eco.mixedPool));
+    const _mixedPool = ctx.root.querySelector<HTMLElement>(sel(eco.mixedPool));
     const categories = ctx.root.querySelector<HTMLElement>(sel(eco.categories));
     const nestWrap = ctx.root.querySelector<HTMLElement>(sel(eco.nestWrap));
     const chips = gsap.utils.toArray<HTMLElement>(sel(eco.chip), ctx.root);
     const labels = gsap.utils.toArray<HTMLElement>(sel(eco.categoryLabel), ctx.root);
     const ticks = gsap.utils.toArray<HTMLElement>(sel(eco.categoryTick), ctx.root);
+    const boxes = gsap.utils.toArray<HTMLElement>(sel(eco.category), ctx.root);
 
     gsap.set(targets(heading, body), { autoAlpha: 0, y: 16 });
+    // The boxes are barely there until their own chips have arrived in them.
+    //
+    // While the chips are travelling they are, by construction, somewhere else — that is what
+    // Flip is measuring. Drawn at full strength, six framed rectangles with nothing inside them
+    // are the first thing the eye lands on, and the scene reads as broken for the half of its
+    // scroll that it is doing its most interesting work. Faded back, the same frames read as
+    // what they are: places these parts are about to belong to.
+    gsap.set(boxes, { autoAlpha: 0.18 });
     gsap.set(labels, { y: -4, autoAlpha: 0.5 });
     gsap.set(ticks, { scaleX: 0, transformOrigin: 'left center', autoAlpha: 0 });
     gsap.set(targets(nestWrap), { autoAlpha: 0, scale: 1.08 });
@@ -65,61 +73,38 @@ export function Scene08Ecosystem({ locale }: { locale: Locale }): ReactNode {
       const nestDepth = desktop ? DEPTH.under : DEPTH.under / 2;
       gsap.set(targets(nestWrap), { z: nestDepth });
 
-      // Flip is the one exception to "everything is one of eleven verbs" (see motion-system.ts):
-      // grouping real components by category means moving each into a different container, and
-      // where it lands depends on the category grid's own computed layout — three columns here,
-      // two on a narrow screen — not a vector this file could author by hand. Flip measures the
-      // real "before" and "after" and animates the difference, which is the one move none of the
-      // eleven verbs can do on their own.
+      // ASSEMBLE, not Flip.
       //
-      // 1. Move every chip into one flat, jumbled pool — a real DOM move, not a transform, so
-      //    there is a genuine "before" arrangement to capture.
-      scatterOrder(flipChips.length).forEach((index) => {
-        const chip = flipChips[index];
-        if (chip != null && mixedPool != null) mixedPool.appendChild(chip);
-      });
-
-      // 2. Capture that jumbled arrangement.
-      const state = Flip.getState(flipChips);
-
-      // 3. And put every chip back exactly where the page's own markup already has it — the
-      //    reduced-motion composition, unmodified, grouped by `data-category`.
-      flipChips.forEach((chip) => {
-        const category = chip.dataset.category;
-        const slot =
-          category != null
-            ? ctx.root.querySelector<HTMLElement>(`[data-slot="${category}"]`)
-            : null;
-        slot?.appendChild(chip);
-      });
-
-      // 4. Chips now render as though they never left the pool — Flip sets that up the moment
-      //    this tween is created. Adding it to the master timeline (`paused` so scroll drives it,
-      //    never GSAP's own clock) is what turns that standing illusion into a travel-and-settle
-      //    the visitor scrubs through.
-      const regroup = Flip.from(state, {
-        targets: flipChips,
-        duration: BEAT.base,
-        stagger: 0.02,
-        ease: EASE.arrive,
-        paused: true,
-      });
-
+      // This scene used to move every chip into a flat pool, let Flip measure that arrangement,
+      // put the chips back, and scrub the difference. It was a correct use of the plugin and it
+      // looked wrong: for half the scene's scroll the chips sat in a heap across the middle of
+      // the field while six framed rectangles stood empty behind them, and a visitor arriving
+      // mid-scene saw a broken layout rather than a system being sorted.
+      //
+      // The chips are already in their categories in the markup, so a scattered `fromTo` says
+      // the same thing — parts arriving where they belong — with no detour and nothing ever
+      // rendered outside the box it ends in. Flip stays registered for a scene that needs to
+      // measure a layout it cannot author; this one does not.
       const tl = pinnedTimeline(ctx, { vh: desktop ? 190 : 140 });
 
       handon(tl, targets(heading, body, field), { at: 0 });
 
-      tl.add(regroup, 0.1);
+      assemble(tl, flipChips, { at: 0.1, duration: BEAT.base, stagger: 0.02, spread: 0.55 });
 
       // SNAP: each category's joint ticks once its own chips have arrived, staggered so the
       // categories visibly lock in one at a time rather than as a single block.
       const snapStart = 0.56;
       labels.forEach((label, index) => {
+        const at = snapStart + index * 0.025;
         snap(tl, label, ticks[index] ?? null, {
-          at: snapStart + index * 0.025,
+          at,
           duration: BEAT.tick,
           from: { y: -4, autoAlpha: 0.5 },
         });
+        // The box comes up with its own label, so each category becomes solid at the moment its
+        // contents settle rather than all six at once.
+        const box = boxes[index];
+        if (box) tl.to(box, { autoAlpha: 1, duration: BEAT.short, ease: EASE.arrive }, at - 0.04);
       });
 
       // MORPH: the palette of parts becomes the one concrete instance the copy describes — a

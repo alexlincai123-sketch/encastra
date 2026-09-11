@@ -47,12 +47,21 @@
 
 /* --- The categorised palette ---------------------------------------------------------------- */
 
+/*
+ * Boxes that hug what is in them.
+ *
+ * `grid-auto-rows: 1fr` split the field into six equal rows whatever they held, so a category
+ * with one component was a tall empty frame with a chip floating in the middle of it — and while
+ * the chips were travelling to their categories, all six were frames with nothing in them at
+ * all. `min-content` makes each box exactly as tall as its label and its chips, and the grid as
+ * a whole is what gets centred in the field.
+ */
 .categories {
   position: absolute;
   inset: 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: 1fr;
+  grid-auto-rows: min-content;
   gap: var(--space-3);
   align-content: center;
 }
@@ -104,9 +113,7 @@
 
 .categoryChips {
   display: flex;
-  flex: 1;
   flex-direction: column;
-  justify-content: center;
   gap: var(--space-2);
   min-height: 0;
 }
@@ -130,6 +137,9 @@
    the nested composition — CSS has to do both, the same way `Scene04Build` collapses its own
    animated field down to just the resolved state. */
 @media (prefers-reduced-motion: reduce) {
+  /* The build function never runs, so nothing would ever bring the boxes back up from the
+     opacity the script gives them — but the script never runs either, so they are simply at
+     their CSS value here, which is full strength. Nothing to undo. */
   .mixedPool,
   .categories {
     display: none;
