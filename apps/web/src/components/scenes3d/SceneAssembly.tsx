@@ -7,6 +7,7 @@ import { GraphFlow } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
 import { CONNECT_ACCEPTED_LABEL, RUN_FLOW_IDS, RUN_SECOND_WIRE_LABEL } from '@/lib/scenes';
 import { sel, useScrollScene } from '@/lib/scroll';
+import type { Category, Glyph } from '@/three/face';
 import { createBlock, createConnection, createPulse, setBlockEdge } from '@/three/objects';
 import { useStage3D } from '@/three/useStage';
 
@@ -59,6 +60,41 @@ function scatter(i: number): { x: number; y: number; z: number; rx: number; ry: 
   };
 }
 
+/**
+ * The three that assemble, and the face each one wears.
+ *
+ * The names come from the real manifests through `componentNode`, so what is written on a block
+ * is what the component is called in the application. The glyph and the category are this file's
+ * choice about how to draw them.
+ */
+const PRINCIPAL_FACES: ReadonlyArray<{ glyph: Glyph; category: Category }> = [
+  { glyph: 'folder', category: 'file' },
+  { glyph: 'image', category: 'media' },
+  { glyph: 'document', category: 'file' },
+];
+
+/**
+ * The field around them: other components this build ships, each in its own category colour, so
+ * the scatter reads as a set of parts rather than as a texture.
+ */
+const FIELD_FACES: ReadonlyArray<{ label: string; glyph: Glyph; category: Category }> = [
+  { label: 'Read CSV', glyph: 'document', category: 'data' },
+  { label: 'HTTP', glyph: 'link', category: 'network' },
+  { label: 'If', glyph: 'branch', category: 'flow' },
+  { label: 'Notify', glyph: 'bell', category: 'system' },
+  { label: 'Thumbnail', glyph: 'image', category: 'media' },
+  { label: 'Move File', glyph: 'folder', category: 'file' },
+  { label: 'Parse JSON', glyph: 'document', category: 'data' },
+  { label: 'Switch', glyph: 'branch', category: 'flow' },
+  { label: 'Clipboard', glyph: 'gear', category: 'system' },
+  { label: 'Convert', glyph: 'image', category: 'media' },
+  { label: 'Write CSV', glyph: 'document', category: 'data' },
+  { label: 'Rename', glyph: 'folder', category: 'file' },
+  { label: 'Delay', glyph: 'gear', category: 'flow' },
+  { label: 'Read File', glyph: 'document', category: 'file' },
+  { label: 'Image Info', glyph: 'image', category: 'media' },
+];
+
 const DESKTOP_EXTRAS = 15;
 const MOBILE_EXTRAS = 7;
 
@@ -83,16 +119,29 @@ export function SceneAssembly(): ReactNode {
         // The three that become the workflow, and the field they emerge from. The extras are
         // the same object at a smaller size: the point of the scene is that everything here is
         // the same kind of thing, and three of them happen to be the ones being talked about.
-        const principals = ROW.map(() => createBlock({ width: 1.7, height: 1.05, depth: 0.24 }));
-        const others = Array.from({ length: extras }, () =>
-          createBlock({
-            width: 0.9,
-            height: 0.58,
+        const principals = ROW.map((_, i) => {
+          const node = STEPS[i];
+          const look = PRINCIPAL_FACES[i];
+          return createBlock({
+            width: 1.7,
+            height: 1.05,
+            depth: 0.24,
+            ...(look ? { category: look.category } : {}),
+            ...(node && look
+              ? { face: { label: node.name, glyph: look.glyph, category: look.category } }
+              : {}),
+          });
+        });
+        const others = Array.from({ length: extras }, (_, i) => {
+          const look = FIELD_FACES[i % FIELD_FACES.length];
+          return createBlock({
+            width: 1.05,
+            height: 0.68,
             depth: 0.16,
-            color: '#20262f',
-            edge: '#44506280',
-          }),
-        );
+            color: '#242b36',
+            ...(look ? { category: look.category, face: look } : {}),
+          });
+        });
 
         [...principals, ...others].forEach((block, i) => {
           const at = scatter(i + 3);

@@ -4,16 +4,23 @@
  * rather than the site's reading scale — this pair is chrome from the application, not prose.
  */
 
+/*
+ * One card, centred.
+ *
+ * This was a two-column grid with the transcript on the left and a copy of the workflow diagram
+ * on the right. The diagram was removed: the same three blocks are already built, connected and
+ * run in front of the reader earlier in the page, and repeating them beside the terminal split
+ * the attention of a scene whose whole point is the text.
+ */
 .demo {
   display: grid;
   gap: var(--space-5);
-  align-items: start;
+  justify-items: center;
 }
 
-@media (min-width: 60rem) {
-  .demo {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  }
+.demo > * {
+  width: 100%;
+  max-width: 52rem;
 }
 
 /* --- The terminal card -------------------------------------------------------------------- */

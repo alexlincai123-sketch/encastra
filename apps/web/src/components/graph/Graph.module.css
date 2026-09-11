@@ -302,6 +302,18 @@
 
 .flowWrap {
   container-type: inline-size;
+  /*
+   * `container-type: inline-size` implies `contain: inline-size`, which means this element's
+   * inline size is resolved *without* looking at its contents. As a block that is harmless — it
+   * already fills its parent. As a flex item with `flex-basis: auto` it is fatal: the content
+   * contribution is zero, so the item shrinks to zero and every node inside it collapses to a
+   * couple of pixels with one word per line.
+   *
+   * Measured on the terminal scene, whose card is a flex row: card 626px, this element 0px, the
+   * node inside it 2px. An explicit width gives the container a size of its own to be queried
+   * against, in both contexts.
+   */
+  width: 100%;
 }
 
 .flow {

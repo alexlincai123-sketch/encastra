@@ -1,17 +1,14 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { FlowStep, NodeState } from '@/components/graph/Graph';
-import { GraphFlow } from '@/components/graph/Graph';
-import { componentNode } from '@/lib/graph-nodes';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Speed, TerminalLine } from '@/lib/terminal-script';
 import { SPEEDS, TERMINAL_SESSION } from '@/lib/terminal-script';
 
 import styles from './Terminal.module.css';
 
 /**
- * Replays `TERMINAL_SESSION` beside a live `GraphFlow`, and does nothing else.
+ * Replays `TERMINAL_SESSION`, and does nothing else.
  *
  * **This is an animation, never an evaluator.** There is no `eval`, no `new Function`, no
  * server round-trip, and no input element anywhere in this file — the only state a visitor can
@@ -30,33 +27,6 @@ import styles from './Terminal.module.css';
 const CHAR_MS = 24;
 const DEFAULT_LINE_PAUSE = 90;
 const LOOP_PAUSE = 1600;
-
-/* -------------------------------------------------------------------------------------------
- * The three nodes, built from the real manifests — never retyped.
- * ---------------------------------------------------------------------------------------- */
-
-const WATCH_NODE = componentNode('encastra.file.watch');
-const RESIZE_NODE = componentNode('encastra.image.resize');
-const SAVE_NODE = componentNode('encastra.file.save');
-
-/**
- * `watch.file` (a `File`) into `resize.image` (an `Image`) is a narrowing, explicit conversion —
- * `decode-image` in `packages/protocol/data/type-graph.json` — not the same type arriving twice.
- * `resize.image` into `save.file` is the reverse: a widening, which is silent. Getting this
- * backwards on a page that is *explaining* the type system would be the one mistake that matters.
- */
-const DEMO_FLOW: readonly FlowStep[] = [
-  { node: WATCH_NODE },
-  { node: RESIZE_NODE, wire: { type: 'file', label: 'FILE → IMAGE · decode-image' } },
-  { node: SAVE_NODE, wire: { type: 'image', label: 'IMAGE → FILE' } },
-];
-
-/** `TerminalLine.step` (0, 1, 2) indexes into this, mirroring `DEMO_FLOW` above. */
-const STEP_NODE_IDS: readonly [string, string, string] = [
-  WATCH_NODE.id,
-  RESIZE_NODE.id,
-  SAVE_NODE.id,
-];
 
 const TOTAL_LINES = TERMINAL_SESSION.length;
 
@@ -155,64 +125,6 @@ export function TerminalDemo(): ReactNode {
 
   const finished = revealCount >= TOTAL_LINES;
 
-  const activeIndex = useMemo(() => {
-    let max = -1;
-    const upTo = Math.min(revealCount, TOTAL_LINES - 1);
-    for (let i = 0; i <= upTo; i += 1) {
-      const line = TERMINAL_SESSION[i];
-      if (line?.step !== undefined && line.step > max) max = line.step;
-    }
-    return max;
-  }, [revealCount]);
-
-  /**
-   * How much of the diagram exists yet, counted from the transcript rather than from a clock.
-   *
-   * This is what makes the terminal a tutorial instead of a widget sitting next to one: a step
-   * appears on the `encastra add` that adds it, and a wire is drawn on the `encastra connect`
-   * that connects it, so every command has a visible consequence. Both counts are derived from
-   * the same `revealCount` the text is, which means the two can never drift out of step and the
-   * loop resets them together.
-   *
-   * Matching on the command text is safe here in a way it would not be anywhere else: these are
-   * fixed strings in a file in this repository, not input. The terminal still evaluates nothing.
-   */
-  const { presentCount, wiredCount } = useMemo(() => {
-    let added = 0;
-    let connected = 0;
-    const upTo = Math.min(revealCount, TOTAL_LINES);
-    for (let i = 0; i < upTo; i += 1) {
-      const line = TERMINAL_SESSION[i];
-      if (line === undefined || line.kind !== 'command') continue;
-      const text = line.text.trim();
-      if (text.startsWith('encastra add ')) added += 1;
-      else if (text.startsWith('encastra connect ')) connected += 1;
-    }
-    return { presentCount: added, wiredCount: connected };
-  }, [revealCount]);
-
-  const nodeStates = useMemo(() => {
-    const states: Record<string, NodeState> = {};
-    const upTo = Math.min(revealCount, TOTAL_LINES);
-    for (let i = 0; i < upTo; i += 1) {
-      const line = TERMINAL_SESSION[i];
-      if (line === undefined || line.step === undefined) continue;
-      const nodeId = STEP_NODE_IDS[line.step];
-      if (nodeId === undefined) continue;
-      const trimmed = line.text.trim();
-      if (line.kind === 'command' && trimmed.startsWith('encastra run')) {
-        states[nodeId] = 'running';
-      } else if (line.kind === 'info' && /^(event|convert)/.test(trimmed)) {
-        states[nodeId] = 'running';
-      } else if (line.kind === 'ok' && trimmed.startsWith('ok ')) {
-        states[nodeId] = 'ok';
-      } else if (line.kind === 'error' && trimmed.startsWith('FAIL')) {
-        states[nodeId] = 'failed';
-      }
-    }
-    return states;
-  }, [revealCount]);
-
   const lines: Array<{ line: TerminalLine; text: string; typing: boolean }> = [];
   for (let i = 0; i < revealCount && i < TOTAL_LINES; i += 1) {
     const line = TERMINAL_SESSION[i];
@@ -308,18 +220,6 @@ export function TerminalDemo(): ReactNode {
             Reduced motion is on, so this shows the finished transcript rather than typing it out.
           </p>
         )}
-      </div>
-
-      <div className={styles.graphCard}>
-        <GraphFlow
-          steps={DEMO_FLOW}
-          activeIndex={activeIndex}
-          states={nodeStates}
-          presentCount={presentCount}
-          wiredCount={wiredCount}
-          dense
-          caption="The same three blocks as the Image Processor template that ships with the app."
-        />
       </div>
     </div>
   );

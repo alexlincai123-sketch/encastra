@@ -26,13 +26,24 @@
   isolation: isolate;
 }
 
+/*
+ * A pinned stage is exactly one screen, never more.
+ *
+ * `min-height` alone let the taller scenes grow past the viewport — measured at 1,131px and
+ * 1,192px against a 900px screen — and a pinned element taller than the screen simply has its
+ * bottom off the bottom of it. That is why the connect and compose scenes were showing a
+ * headline and half a diagram. The height is fixed and the type inside it is set to fit.
+ *
+ * `svh` rather than `vh`: on a phone `vh` is the viewport with the address bar hidden, so a
+ * scene sized in `vh` is taller than what is actually on screen for as long as the bar is there.
+ */
 .pin {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  padding-block: var(--site-section-y);
+  height: 100svh;
+  padding-block: var(--space-7);
   overflow: hidden;
 }
 
@@ -48,7 +59,7 @@
    column needs a defined height to position against. */
 .stageFull {
   composes: stage;
-  height: min(72vh, 640px);
+  height: min(56svh, 560px);
 }
 
 /* --- Scene furniture: index numeral + eyebrow + headline -------------------------------------- */
@@ -68,10 +79,12 @@
   letter-spacing: -0.02em;
 }
 
+/* A step down from the opening headline. These scenes carry a diagram as well as a sentence,
+   and both have to be on the same screen. */
 .headlineMd {
   composes: headline;
-  max-width: 20ch;
-  font-size: var(--site-step-4);
+  max-width: 24ch;
+  font-size: var(--site-step-3);
 }
 
 /* Word-mask reveal: each word sits in an `overflow: hidden` box; the inner span is what
@@ -90,7 +103,8 @@
 
 .body {
   max-width: var(--site-measure);
-  margin-block-start: var(--space-5);
+  margin-block-start: var(--space-4);
+  font-size: var(--site-step-0);
 }
 
 .centerCol {
@@ -278,7 +292,9 @@
    `.stageFull` and must keep its fixed height so its absolutely-positioned chips stay placed. */
 .buildStage {
   composes: stage;
-  height: min(80vh, 720px);
+  /* The field has to leave room for the sentence above it inside one screen. At 80vh it did
+     not: content measured 981px against a 900px stage. */
+  height: min(52svh, 520px);
 }
 
 .buildField {

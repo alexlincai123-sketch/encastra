@@ -2,6 +2,8 @@
 
 import * as THREE from 'three';
 
+import { CATEGORY_COLOUR, type Category, type FaceOptions, faceTexture } from './face';
+
 /**
  * The vocabulary of things a scene can put on a stage.
  *
@@ -34,6 +36,16 @@ export interface BlockOptions {
    */
   readonly metalness?: number;
   readonly roughness?: number;
+  /**
+   * What the block carries.
+   *
+   * Without it a block is a rectangle in perspective. With it — an icon, a name, and the colour
+   * its category has everywhere else in the product — it is plainly a component, and a field of
+   * them is plainly a set of parts rather than a pattern.
+   */
+  readonly face?: FaceOptions;
+  /** Tints the hairline to the category's colour, so the edge agrees with the face. */
+  readonly category?: Category;
 }
 
 /**
@@ -95,6 +107,8 @@ export function createBlock(options: BlockOptions = {}): THREE.Group {
     edge = '#63748c',
     metalness = 0.12,
     roughness = 0.52,
+    face,
+    category,
   } = options;
 
   const group = new THREE.Group();
@@ -107,9 +121,34 @@ export function createBlock(options: BlockOptions = {}): THREE.Group {
   // segments do not each draw a line and turn the block into a wireframe.
   const lines = new THREE.LineSegments(
     new THREE.EdgesGeometry(geometry, 28),
-    new THREE.LineBasicMaterial({ color: edge, transparent: true, opacity: 0.85 }),
+    new THREE.LineBasicMaterial({
+      color: category ? CATEGORY_COLOUR[category] : edge,
+      transparent: true,
+      opacity: category ? 0.9 : 0.85,
+    }),
   );
   group.add(lines);
+
+  if (face !== undefined) {
+    // A separate plane a hair in front of the slab rather than a texture on it. `ExtrudeGeometry`
+    // does not give the front face a clean 0-1 UV — its coordinates come from the shape's own
+    // outline — so mapping an image onto it directly would arrive skewed. A plane is exact, and
+    // it also lets the face be sized independently of the bevel.
+    const aspect = width / height;
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(width * 0.86, height * 0.86),
+      new THREE.MeshBasicMaterial({
+        map: faceTexture({ ...face, aspect }),
+        transparent: true,
+        // The face is printed on the block, so it must not be shaded a second time by the lights
+        // that already shaded the surface under it.
+        toneMapped: false,
+      }),
+    );
+    panel.position.z = depth / 2 + 0.004;
+    group.add(panel);
+    group.userData.face = panel;
+  }
 
   group.userData.mesh = mesh;
   group.userData.edge = lines;
