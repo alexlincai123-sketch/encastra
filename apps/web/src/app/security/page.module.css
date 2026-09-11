@@ -1,0 +1,55 @@
+.intro {
+  margin-block-end: var(--space-6);
+}
+
+.scopeGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  margin-block-start: var(--space-5);
+}
+
+.scopeCard h3 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--site-step--1);
+  color: var(--accent);
+}
+
+.scopeCard p {
+  margin: 0;
+  font-size: var(--site-step--1);
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+.absentGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  margin-block-start: var(--space-5);
+}
+
+.absentCard h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--site-step-0);
+}
+
+.absentCard p {
+  margin: 0;
+  font-size: var(--site-step--1);
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+.limitations {
+  margin-block-start: var(--space-5);
+}
+
+.limitations li {
+  margin-block-end: var(--space-4);
+}
+
+.limitations li strong {
+  color: var(--ink);
+}
+
+.disclosureCta {
+  margin-block-start: var(--space-5);
+}

@@ -1,0 +1,344 @@
+/* --- The node ----------------------------------------------------------------------------
+ * Geometry from `apps/desktop/src/styles.css`. A tight card, a hairline border, a header rule,
+ * ports as tabs that break the edge. The website's card is a little wider than the app's 200px
+ * because it carries a line of explanation the editor does not need.
+ */
+
+.node {
+  position: relative;
+  width: 100%;
+  max-width: 260px;
+  margin: 0;
+  background: var(--site-card);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--duration-slow) var(--ease-out),
+    box-shadow var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-out);
+}
+
+.node[data-highlighted="true"] {
+  border-color: var(--focus);
+  box-shadow: var(--ring-focus), var(--shadow-md);
+}
+
+/* The run state is a bar down the left edge — a separate layer on top of one card appearance,
+   never a recoloured card. */
+.nodeState {
+  position: absolute;
+  left: -1px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+
+.node[data-state="ok"] .nodeState {
+  background: var(--ok);
+}
+
+.node[data-state="failed"] .nodeState {
+  background: var(--danger);
+}
+
+.node[data-state="skipped"] .nodeState {
+  background: var(--ink-faint);
+}
+
+.node[data-state="running"] .nodeState {
+  background: var(--accent);
+}
+
+/* The app pulses a running node. On a page it would run forever in the corner of somebody's
+   eye and burn a compositor thread, so it pulses a fixed number of times and stops. */
+@media (prefers-reduced-motion: no-preference) {
+  .node[data-state="running"] .nodeState {
+    animation: node-pulse 1s var(--ease-in-out) 6;
+  }
+}
+
+@keyframes node-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.nodeHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: var(--border);
+}
+
+.nodeName {
+  flex: 1;
+  font-size: var(--site-step--1);
+  font-weight: var(--weight-medium);
+  color: var(--ink);
+  line-height: var(--leading-tight);
+}
+
+.nodeStateLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.nodeStateLabel[data-state="ok"] {
+  color: var(--ok);
+}
+
+.nodeStateLabel[data-state="failed"] {
+  color: var(--danger);
+}
+
+.nodeStateLabel[data-state="running"] {
+  color: var(--accent);
+}
+
+.nodeNote {
+  padding: var(--space-2) var(--space-3) 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+/* --- Ports -------------------------------------------------------------------------------- */
+
+.ports {
+  padding: var(--space-2) 0;
+}
+
+.port {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 22px;
+  padding: 2px var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.port[data-direction="out"] {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+/* The tab: a rectangle that breaks the node's edge. */
+.portTab {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 10px;
+  transform: translateY(-50%);
+  border: 1px solid var(--site-card);
+}
+
+.port[data-direction="in"] .portTab {
+  left: -5px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.port[data-direction="out"] .portTab {
+  right: -5px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.portLabel {
+  flex: 1;
+}
+
+.portRequired {
+  color: var(--accent);
+}
+
+.portType {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* --- Permission chip ----------------------------------------------------------------------- */
+
+.permission {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 var(--space-3) var(--space-3);
+  padding-block-start: var(--space-2);
+  border-top: var(--border);
+  font-size: 10px;
+}
+
+.permissionKey {
+  padding: 1px var(--space-2);
+  font-family: var(--font-mono);
+  color: var(--warn);
+  background: var(--warn-dim);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-full);
+}
+
+.permissionNote {
+  color: var(--ink-faint);
+}
+
+/* --- The wire ------------------------------------------------------------------------------
+ * Vertical by default, because the smallest screen is the one that has to work. It becomes
+ * horizontal when there is room, and it is the same element either way.
+ */
+
+.wire {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 64px;
+  padding-block: var(--space-2);
+}
+
+.wireLine {
+  width: 1.5px;
+  flex: 1;
+  min-height: 14px;
+  background: var(--edge);
+  transition: background-color var(--duration-slow) var(--ease-out);
+}
+
+.wireHead {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 6px solid var(--edge);
+  transition: border-color var(--duration-slow) var(--ease-out);
+}
+
+.wire[data-active="true"] .wireLine {
+  background: var(--focus);
+}
+
+.wire[data-active="true"] .wireHead {
+  border-top-color: var(--focus);
+}
+
+/* The conversion badge the editor puts on an edge: small, quiet, readable at a glance. */
+.wireBadge {
+  padding: 1px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  color: var(--ink-muted);
+  background: var(--ground-3);
+  border: var(--border-strong);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  transition: border-color var(--duration-slow) var(--ease-out);
+}
+
+.wire[data-active="true"] .wireBadge {
+  color: var(--ink);
+}
+
+/* --- The flow -------------------------------------------------------------------------------- */
+
+.flowWrap {
+  container-type: inline-size;
+}
+
+.flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.flowItem {
+  display: contents;
+}
+
+.flowCaption {
+  margin-block-start: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.arms {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  width: 100%;
+  justify-items: center;
+}
+
+/* Wide enough for a row: the flow turns horizontal and the wires turn with it. Driven by the
+   container rather than the viewport, so a flow inside a narrow column stays stacked. */
+@container (min-width: 720px) {
+  .flow {
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: center;
+  }
+
+  .flowItem {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .flow[data-dense="true"] .node {
+    max-width: 220px;
+  }
+
+  .wire {
+    flex-direction: row;
+    min-height: 0;
+    min-width: 72px;
+    padding-block: 0;
+    padding-inline: var(--space-2);
+  }
+
+  .wireLine {
+    width: auto;
+    height: 1.5px;
+    min-height: 0;
+    min-width: 12px;
+  }
+
+  .wireHead {
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 6px solid var(--edge);
+    border-right: 0;
+  }
+
+  .wire[data-active="true"] .wireHead {
+    border-top-color: transparent;
+    border-left-color: var(--focus);
+  }
+
+  /* The badge sits on the wire rather than beside it, as it does on the canvas. */
+  .wireBadge {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .arms {
+    grid-template-columns: 1fr;
+  }
+}

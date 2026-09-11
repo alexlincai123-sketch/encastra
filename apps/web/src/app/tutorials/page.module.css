@@ -1,0 +1,71 @@
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  margin-block-end: var(--space-6);
+  font-size: var(--site-step--1);
+  color: var(--ink-muted);
+}
+
+.meta dt {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.meta dd {
+  margin: 0;
+}
+
+.folders {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  margin-block-start: var(--space-4);
+}
+
+.folder code {
+  display: block;
+  margin-block-start: var(--space-2);
+  font-size: var(--site-step-0);
+  color: var(--ink);
+}
+
+.settings {
+  margin-block-start: var(--space-2);
+}
+
+.permissions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  justify-content: center;
+}
+
+.changeGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  margin-block-start: var(--space-5);
+}
+
+.changeGrid h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--site-step-0);
+}
+
+.changeGrid p {
+  margin: 0;
+  font-size: var(--site-step--1);
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+.refusal {
+  padding: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--site-step--1);
+  color: var(--danger);
+  background: var(--danger-dim);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+}

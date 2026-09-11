@@ -1,0 +1,288 @@
+/* --- Status ------------------------------------------------------------------------------
+ * Four states, four colours, borrowed from the product's state palette rather than invented:
+ * what is available reads as success, what is in preview reads as attention, what exists only
+ * on paper reads as neutral. Colour is never the only signal — the label always says it too.
+ */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-3) 2px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: var(--border-strong);
+  border-radius: var(--radius-full);
+  color: var(--ink-muted);
+  background: var(--ground-3);
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: currentcolor;
+}
+
+.status[data-state="built"] {
+  color: var(--ok);
+  border-color: var(--ok);
+  background: var(--ok-dim);
+}
+
+.status[data-state="preview"] {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: var(--warn-dim);
+}
+
+.status[data-state="designed"],
+.status[data-state="planned"] {
+  color: var(--ink-faint);
+  border-color: var(--line-strong);
+  background: var(--ground-3);
+}
+
+/* --- Not built ---------------------------------------------------------------------------
+ * A designed treatment for an absence. The diagonal hatch marks the whole block as scaffolding
+ * without dimming the text, which would make it harder to read the very thing it has to say.
+ */
+
+.notBuilt {
+  position: relative;
+  padding: var(--space-6);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent,
+      transparent 9px,
+      color-mix(in oklab, var(--line) 55%, transparent) 9px,
+      color-mix(in oklab, var(--line) 55%, transparent) 10px
+    ),
+    var(--site-panel);
+}
+
+.notBuiltHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+.notBuiltTitle {
+  font-size: var(--site-step-2);
+}
+
+.notBuiltBody {
+  max-width: var(--site-measure);
+  color: var(--ink-muted);
+  line-height: 1.7;
+}
+
+.notBuiltBody > * + * {
+  margin-block-start: var(--space-3);
+}
+
+.notBuiltBlocked {
+  margin-block-start: var(--space-5);
+  padding-block-start: var(--space-5);
+  border-top: var(--border);
+}
+
+.notBuiltBlockedTitle {
+  margin-block-end: var(--space-3);
+  font-size: var(--site-step--1);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.ordered {
+  list-style: decimal;
+  padding-inline-start: var(--space-5);
+  color: var(--ink-muted);
+  font-size: var(--site-step--1);
+}
+
+.ordered li + li {
+  margin-block-start: var(--space-2);
+}
+
+/* --- Buttons ------------------------------------------------------------------------------ */
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--site-step-0);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.cta[data-variant="primary"] {
+  background: var(--accent);
+  color: var(--ink-inverse);
+}
+
+.cta[data-variant="primary"]:hover {
+  background: var(--accent-strong);
+}
+
+.cta[data-variant="secondary"] {
+  background: var(--ground-2);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.cta[data-variant="secondary"]:hover {
+  background: var(--ground-3);
+  border-color: var(--focus);
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* --- Card --------------------------------------------------------------------------------- */
+
+.card {
+  padding: var(--space-5);
+  background: var(--site-card);
+  border: var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.card > * + * {
+  margin-block-start: var(--space-3);
+}
+
+/* --- Callout ------------------------------------------------------------------------------ */
+
+/* The state marker is the application's, not a decoration invented for the web: a node shows
+   its run state as a 2px inset bar down its left edge (`styles.css` → `.node__state`) rather
+   than by tinting the whole card. A callout is the same idea — the card keeps one appearance
+   and the meaning is a separate layer on top of it. */
+
+.callout {
+  position: relative;
+  padding: var(--space-4) var(--space-5);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  background: var(--site-panel);
+  font-size: var(--site-step--1);
+  line-height: 1.65;
+  color: var(--ink-muted);
+}
+
+.callout::before {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-4);
+  bottom: var(--space-4);
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: var(--callout-marker, var(--line-strong));
+}
+
+.callout > * + * {
+  margin-block-start: var(--space-3);
+}
+
+.callout[data-tone="note"] {
+  --callout-marker: var(--focus);
+}
+
+.callout[data-tone="warn"] {
+  --callout-marker: var(--warn);
+  background: color-mix(in oklab, var(--warn-dim) 40%, var(--site-panel));
+}
+
+.callout[data-tone="danger"] {
+  --callout-marker: var(--danger);
+  background: color-mix(in oklab, var(--danger-dim) 40%, var(--site-panel));
+}
+
+.callout[data-tone="ok"] {
+  --callout-marker: var(--ok);
+  background: color-mix(in oklab, var(--ok-dim) 40%, var(--site-panel));
+}
+
+.calloutTitle {
+  font-weight: var(--weight-strong);
+  color: var(--ink);
+}
+
+.calloutBody > * + * {
+  margin-block-start: var(--space-2);
+}
+
+/* --- Page furniture ----------------------------------------------------------------------- */
+
+.pageHeader {
+  padding-block: clamp(2.5rem, 7vw, 5rem) clamp(1.5rem, 4vw, 3rem);
+}
+
+.pageHeader > * + * {
+  margin-block-start: var(--space-4);
+}
+
+.pageTitle {
+  font-size: var(--site-step-4);
+  max-width: 18ch;
+}
+
+.sectionHeading {
+  margin-block-end: var(--space-6);
+}
+
+.sectionHeading > * + * {
+  margin-block-start: var(--space-3);
+}
+
+.sectionTitle {
+  font-size: var(--site-step-3);
+  max-width: 24ch;
+}
+
+/* --- Source reference ---------------------------------------------------------------------- */
+
+.sourceRef {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+.sourceRefLabel {
+  font-family: var(--font-mono);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.sourceRef code {
+  color: var(--ink-muted);
+}
+
+.sourceRefNote {
+  color: var(--ink-faint);
+}

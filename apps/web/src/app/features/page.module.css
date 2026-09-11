@@ -1,0 +1,30 @@
+.grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  margin-block-start: var(--space-5);
+  margin-block-end: var(--space-7);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.card h3 {
+  font-size: var(--site-step-0);
+}
+
+.card p {
+  margin: 0;
+  font-size: var(--site-step--1);
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+.notBuilt {
+  margin-block-start: var(--space-5);
+}
+
+.cta {
+  margin-block-start: var(--space-7);
+}

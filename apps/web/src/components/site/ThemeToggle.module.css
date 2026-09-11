@@ -1,0 +1,29 @@
+.toggle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--ink-muted);
+  background: var(--ground-2);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.toggle:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--ground-3);
+}
+
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+}

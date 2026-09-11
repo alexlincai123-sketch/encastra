@@ -12,7 +12,8 @@
       "!**/target",
       "!**/.next",
       "!**/node_modules",
-      "!packages/protocol/data/*.json"
+      "!packages/protocol/data/*.json",
+      "!apps/web/next-env.d.ts"
     ]
   },
   "formatter": {

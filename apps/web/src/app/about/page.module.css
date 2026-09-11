@@ -1,0 +1,28 @@
+.checkpoint {
+  padding: var(--space-5);
+  margin-block: var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--site-step--1);
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--ground-1);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+.grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  margin-block-start: var(--space-5);
+}
+
+.grid p {
+  margin: 0;
+  font-size: var(--site-step--1);
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+.grid h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--site-step-0);
+}

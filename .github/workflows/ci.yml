@@ -37,8 +37,13 @@ jobs:
         run: npm run typecheck
       - name: Tests
         run: npm run test
-      - name: Frontend production build
-        run: npm run build
+      - name: Desktop frontend production build
+        run: npm run build --workspace @encastra/desktop
+      - name: Website production build
+        # The website is part of the product, not a separate project. A site that stops building
+        # is as much a broken release as an application that stops building, and finding that out
+        # at release time is finding it out too late.
+        run: npm run build --workspace @encastra/web
       - name: The conformance matrix must be committed up to date
         # Regenerating must produce no diff. If it does, the type rules changed without the
         # fixture being refreshed, and the Rust job below would be checking a stale contract.
