@@ -7,13 +7,15 @@
 
 import { useEffect } from 'react';
 import { ipc, recordedRuns } from './ipc';
+import { Welcome } from './onboarding/Welcome';
+import { applyToDocument, usePreferences } from './preferences';
 import { Sidebar } from './Sidebar';
 import { useEditor } from './store';
 import { Builder } from './views/Builder';
 import { Components } from './views/Components';
 import { Home } from './views/Home';
 import { Security } from './views/Security';
-import { readStoredTheme, Settings } from './views/Settings';
+import { Settings } from './views/Settings';
 
 function Mark() {
   return (
@@ -233,9 +235,15 @@ export function App() {
   const saveProject = useEditor((s) => s.saveProject);
   const openProject = useEditor((s) => s.openProject);
 
+  // Theme and motion live on the document element, where the token file reads them, so they
+  // are pushed there whenever the choice changes rather than only at start-up. Subscribing to
+  // the two values rather than to the whole store keeps an unrelated preference from
+  // re-rendering the shell.
+  const theme = usePreferences((p) => p.theme);
+  const motion = usePreferences((p) => p.motion);
   useEffect(() => {
-    document.documentElement.dataset.theme = readStoredTheme();
-  }, []);
+    applyToDocument({ theme, motion });
+  }, [theme, motion]);
 
   useEffect(() => {
     void loadComponents();
@@ -275,6 +283,10 @@ export function App() {
     <div className={`shell shell--${view}`}>
       <Sidebar />
       <Toolbar />
+
+      {/* Before the content, so the tour can outline the panel its current step is about
+          without needing the highlight state lifted up here. */}
+      <Welcome />
 
       <div className="content">
         {view === 'home' ? <Home /> : null}

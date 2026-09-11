@@ -78,6 +78,13 @@ export function ComponentNode({ id, data, selected }: NodeProps<EditorNode>) {
 
   return (
     <div
+      // The id is what the canvas points `aria-activedescendant` at, so a screen reader follows
+      // the arrow keys to the step they moved to. `group` and not `option`: `option` is only
+      // valid inside a listbox, and inventing a listbox around a canvas would be a worse lie to
+      // assistive technology than describing a node as what it is — a group of ports.
+      id={`node-${id}`}
+      role="group"
+      aria-label={`${data.label ?? manifest.name}, ${inputs.length} in, ${outputs.length} out`}
       className={['node', selected ? 'is-selected' : '', data.disabled ? 'is-disabled' : '']
         .filter(Boolean)
         .join(' ')}

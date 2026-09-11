@@ -61,17 +61,18 @@ That is a test (`crates/encastra-builtins/tests/image_processor.rs`), not a scre
 $ cd examples/json-report
 $ cargo run -p encastra-cli -- run graph.json --input read.file=./data.json
 ok   read  (encastra.file.read@1.0.0) 0ms
+       -> name: text (9 characters)
        -> text: text (62 characters)
 ok   parse  (encastra.data.json@1.0.0) 0ms
        -> json: json (3 fields)
 FAIL write  (encastra.file.write@1.0.0) 0ms
-       denied: This component tried to use fs.write and was not allowed: no folder has been
-       allowed for this node.
+       denied: This component tried to use fs.write and was not allowed: no folder has been allowed for this node.
        Grant this component access to a folder, then run again.
+       1 capability call(s) refused
 skip notify  (encastra.system.notify@1.0.0)
        because "write" did not finish
 
-Finished with 1 failure(s). The rest of the graph still ran. in 0ms
+Finished with 1 failure(s). The rest of the graph still ran. in 1ms
 ```
 
 That refusal is the product working, not failing: a first-party component asked to write

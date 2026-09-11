@@ -300,22 +300,28 @@ Stated plainly, because a security document that only lists controls is marketin
    shell, no record of what has been allowed before, and no distinction between "allowed once"
    and "allowed always".
 
-7. **The consent UI can only scope `fs.write`.** The inspector's permissions panel offers
-   "Allow this folder" for `fs.write`, using the node's own folder setting, and a bare "Allow"
-   for everything else. A bare allow becomes `GrantScope::Allowed`, which the broker treats as
-   *no* readable directories and *no* permitted hosts. The direction of the failure is safe —
-   the broker denies — but the consequence is that **HTTP Request and Watch Folder cannot
-   currently be used from the editor**, and the CLI has the mirror-image gap: it offers
-   `--allow-write` and `--allow-notify` and nothing else. The runtime supports both grant shapes;
-   the two front ends do not express them.
+7. **Both front ends now express the whole grant model.** *(Was a limitation; fixed.)* The
+   inspector scopes `fs.read` and `fs.write` to a folder and `net.http` to the host taken from
+   the address on the node itself, and the command line has `--allow-read`, `--allow-write`,
+   `--allow-http`, `--allow-clipboard` and `--allow-notify`. Previously only `fs.write` could be
+   scoped from the editor and everything else fell through to a bare allow — which the broker
+   reads as *no* readable directories and *no* permitted hosts, so it failed closed, but it also
+   meant Watch Folder and HTTP Request could not be granted from the editor at all.
 
-8. **A trigger's handle is reachable to every direct consumer of the trigger node.** When the
-   session seeds a trigger's output, the executor makes the handle reachable to every node with
-   an edge from that trigger, not only to nodes wired to the port the handle came from. A node
-   connected solely to the trigger's `name` output can therefore open the `file` handle — if it
-   declared `fs.read`, and if it knows the handle number, which it is not given. The widening is
-   small and the effect is bounded by the declaration check, but it is wider than the stated
-   rule "a component reaches exactly what the graph wired to its ports".
+   One property is worth keeping in view: the editor reads the host out of the address, which
+   makes it a second parser for a string the runtime also parses. The grant stores exactly what
+   the editor computed and the runtime compares its own reading against it for equality, so the
+   two disagreeing costs a refused request and never a host nobody allowed. `apps/desktop/src/url.ts`
+   carries the reasoning and the tests.
+
+8. **A trigger's handle reaches only what is wired to that port.** *(Was a limitation; fixed.)*
+   Seeding a trigger's output used to make the handle reachable to every node with an edge from
+   that trigger, regardless of which port the edge came from — so a node wired only to a
+   watcher's `name` output was given reach over the `file`. It was not exploitable, because
+   values travel along edges and such a node never receives the handle, but it was wider than
+   the rule the model states. Seeding is now filtered by the edge's source port, and
+   `a_step_wired_to_the_name_cannot_read_the_file` pins it. That test was checked by reverting
+   the fix and confirming it fails.
 
 9. **The desktop bridge trusts its own front end.** Tauri commands accept a graph, an input list
    and a grant list from the WebView and apply them. That is the correct trust relationship —

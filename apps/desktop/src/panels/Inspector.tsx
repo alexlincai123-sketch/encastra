@@ -169,6 +169,23 @@ function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: Component
 }
 
 /**
+ * Every kind of authority the broker knows about, in the order they are worth reading.
+ *
+ * Deliberately a fixed list rather than something derived from the manifests present: the point
+ * is to name what a component *cannot* do, and a list built from what components happen to ask
+ * for could never contain the thing none of them asked for.
+ */
+const REACH_ORDER = ['fs.read', 'fs.write', 'net.http', 'system.clipboard', 'system.notify'];
+
+const REACH_LABEL: Record<string, string> = {
+  'fs.read': 'read your files',
+  'fs.write': 'write files',
+  'net.http': 'use the network',
+  'system.clipboard': 'use the clipboard',
+  'system.notify': 'show notifications',
+};
+
+/**
  * Capabilities that need an answer before this node can run.
  *
  * Every kind of grant the broker understands has a control here. It used to have one — a
@@ -182,7 +199,26 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
   const config = useEditor((s) => s.nodes.find((n) => n.id === nodeId)?.data.config);
 
   const needsAnswer = manifest.capabilities.filter((c) => c.scope !== 'input-handles');
-  if (needsAnswer.length === 0) return null;
+
+  // What it cannot reach, stated rather than left to be inferred from an absence. This is the
+  // more trustworthy half of a permission statement: "it needs to write files" is a request,
+  // "and it can never touch the network" is the reassurance, and the second one is the reason
+  // somebody presses Allow. Derived from the manifest, so a component that later asks for more
+  // stops appearing on this list rather than quietly keeping its reputation.
+  const declared = new Set(manifest.capabilities.map((c) => c.kind));
+  const cannot = REACH_ORDER.filter((kind) => !declared.has(kind));
+
+  if (needsAnswer.length === 0) {
+    return (
+      <section className="panel__section">
+        <h3 className="panel__group-label">Permissions</h3>
+        <p className="field__doc">
+          This component asks for nothing. It works only on what the graph hands it, and it cannot
+          reach your files, the network or the clipboard.
+        </p>
+      </section>
+    );
+  }
 
   const folder = typeof config?.folder === 'string' ? config.folder.trim() : '';
   // The host is taken from the address on the node, so allowing is about the place the person
@@ -253,6 +289,21 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
           </div>
         );
       })}
+
+      {cannot.length > 0 ? (
+        <div className="cannot">
+          <span className="cannot__label">It cannot</span>
+          <ul className="cannot__list">
+            {cannot.map((kind) => (
+              <li key={kind}>{REACH_LABEL[kind] ?? kind}</li>
+            ))}
+          </ul>
+          <p className="field__doc">
+            Not a setting — the component never declared these, so the runtime refuses them whatever
+            you allow here.
+          </p>
+        </div>
+      ) : null}
     </section>
   );
 }

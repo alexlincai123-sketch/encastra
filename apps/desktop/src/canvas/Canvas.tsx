@@ -19,10 +19,12 @@ import {
   type ReactFlowInstance,
   useReactFlow,
 } from '@xyflow/react';
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import { usePreferences } from '../preferences';
 import { type EditorNode, useEditor } from '../store';
 import { ComponentNode } from './ComponentNode';
 import { Wire } from './Wire';
+import { indexOf, step, walkOrder } from './walk';
 
 const nodeTypes = { component: ComponentNode };
 const edgeTypes = { wire: Wire };
@@ -34,11 +36,96 @@ export function Canvas() {
   const onEdgesChange = useEditor((s) => s.onEdgesChange);
   const connect = useEditor((s) => s.connect);
   const select = useEditor((s) => s.select);
+  const selectedNodeId = useEditor((s) => s.selectedNodeId);
   const addNode = useEditor((s) => s.addNode);
   const journal = useEditor((s) => s.journal);
+  const manifests = useEditor((s) => s.manifests);
+
+  // Read one at a time rather than as an object: a selector returning a fresh object would
+  // re-render the canvas on every unrelated preference change.
+  const showGrid = usePreferences((p) => p.showGrid);
+  const snapToGrid = usePreferences((p) => p.snapToGrid);
+  const showMinimap = usePreferences((p) => p.showMinimap);
 
   const instance = useRef<ReactFlowInstance<EditorNode, Edge> | null>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, setCenter, getZoom } = useReactFlow();
+
+  /** The order the arrow keys walk. Its rules, and their reasons, live in `walk.ts`. */
+  const ordered = useMemo(() => walkOrder(nodes), [nodes]);
+
+  const nameOf = useCallback(
+    (node: EditorNode) => node.data.label ?? manifests[node.data.componentRef]?.name ?? node.id,
+    [manifests],
+  );
+
+  /** Selects a step and brings it into view, because selecting something off-screen is a trap. */
+  const go = useCallback(
+    (node: EditorNode | undefined) => {
+      if (!node) return;
+      select(node.id);
+      setCenter(node.position.x + 110, node.position.y + 60, {
+        zoom: getZoom(),
+        duration: 180,
+      });
+    },
+    [select, setCenter, getZoom],
+  );
+
+  /**
+   * The canvas is one tab stop, and the arrow keys move within it.
+   *
+   * This is the composite-widget pattern, and it is also the only humane answer: putting every
+   * node in the tab order would mean a graph of forty steps costs forty presses to tab past.
+   * Before this, the canvas had no tab stop at all — tabbing went sidebar, toolbar, palette and
+   * then wrapped — so a step could not be reached without a mouse, and a step that cannot be
+   * reached cannot be configured, because its settings and its permission prompt live in the
+   * inspector.
+   */
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (ordered.length === 0) return;
+      // Never swallow a modified chord: Ctrl+Enter runs the workflow and Ctrl+S saves, and both
+      // have to keep working while the canvas holds focus.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      switch (event.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          event.preventDefault();
+          go(step(ordered, selectedNodeId, 'forward'));
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          event.preventDefault();
+          go(step(ordered, selectedNodeId, 'back'));
+          break;
+        case 'Home':
+          event.preventDefault();
+          go(ordered[0]);
+          break;
+        case 'End':
+          event.preventDefault();
+          go(ordered[ordered.length - 1]);
+          break;
+        case 'Enter':
+        case ' ': {
+          // Selecting is what opens the inspector, so entering the canvas and pressing Enter
+          // lands on something useful rather than doing nothing.
+          event.preventDefault();
+          const at = indexOf(ordered, selectedNodeId);
+          go(at < 0 ? ordered[0] : ordered[at]);
+          break;
+        }
+        case 'Escape':
+          event.preventDefault();
+          select(null);
+          break;
+        default:
+          break;
+      }
+    },
+    [ordered, selectedNodeId, go, select],
+  );
 
   const isConnectionLegal: IsValidConnection = useCallback((connection) => {
     const { source, target, sourceHandle, targetHandle } = connection;
@@ -73,6 +160,10 @@ export function Canvas() {
       // pointer model, which is exactly what role="application" tells assistive technology.
       role="application"
       aria-label="Workflow canvas"
+      aria-describedby="canvas-keys"
+      aria-activedescendant={selectedNodeId ? `node-${selectedNodeId}` : undefined}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
       onDrop={onDrop}
       onDragOver={(event) => {
         event.preventDefault();
@@ -94,20 +185,17 @@ export function Canvas() {
         onNodeClick={(_, node) => select(node.id)}
         onPaneClick={() => select(null)}
         // The inspector follows the *selection*, not the click that usually causes one, so a
-        // step selected any other way — a box selection, a restore, anything programmatic —
-        // also opens in the inspector.
-        //
-        // This was meant to fix keyboard use as well, and does not. `nodesFocusable` is set and
-        // the nodes still do not appear in the tab order: tabbing through the editor goes
-        // sidebar, toolbar, palette, and then wraps, never reaching the canvas. So a step
-        // cannot be reached without a mouse, and therefore cannot be configured without one.
-        // That is a real hole and it is recorded in docs/AUDIT.md §8.7 rather than papered
-        // over here.
+        // step selected any other way — a box selection, an arrow key, anything programmatic —
+        // also opens in the inspector. That is what lets the keyboard handler above do its job
+        // by doing nothing more than selecting.
         onSelectionChange={({ nodes: selected }) => select(selected[0]?.id ?? null)}
-        nodesFocusable
+        // Off deliberately. The canvas is one tab stop with its own arrow-key model, and
+        // letting React Flow also put each node in the tab order would give a graph of forty
+        // steps forty tab stops to get past.
+        nodesFocusable={false}
         // Keeps hundreds of nodes affordable: offscreen ones are not in the DOM at all.
         onlyRenderVisibleElements
-        snapToGrid
+        snapToGrid={snapToGrid}
         snapGrid={[8, 8]}
         minZoom={0.2}
         maxZoom={2}
@@ -118,10 +206,11 @@ export function Canvas() {
         // Without a ceiling, a graph with one node fills the screen with one node.
         fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+        {showGrid ? <Background variant={BackgroundVariant.Dots} gap={16} size={1} /> : null}
         <Controls showInteractive={false} />
-        {/* An empty minimap is a black rectangle that looks like a rendering fault. */}
-        {nodes.length > 0 ? (
+        {/* An empty minimap is a black rectangle that looks like a rendering fault — so it is
+            shown only when there is something for it to show, and only if it is wanted. */}
+        {showMinimap && nodes.length > 0 ? (
           <MiniMap
             pannable
             zoomable
@@ -138,13 +227,36 @@ export function Canvas() {
 
       {nodes.length === 0 ? (
         <div className="canvas__empty">
-          <h2>Nothing here yet</h2>
+          <h2>Your canvas is empty</h2>
           <p>
-            Pick a component on the left to place your first step. Connect its output to the next
-            one, and press Run.
+            A workflow is a few components joined together. Pick one from the left to place your
+            first step, connect its output to the next, and press Run.
+          </p>
+          <p className="canvas__empty-hint">
+            Every component says what it can reach before it runs, and nothing touches your files
+            until you allow it.
           </p>
         </div>
       ) : null}
+
+      {/* Named by aria-describedby, so the keys are announced on entering the canvas rather
+          than having to be discovered. Visible to screen readers only. */}
+      <p id="canvas-keys" className="visually-hidden">
+        Use the arrow keys to move between steps, Enter to open a step in the inspector, Escape to
+        deselect, and Delete to remove the selected step.
+      </p>
+
+      {/* What changed, for somebody who cannot see the selection move. Polite: it should not
+          interrupt, it should be there when the reader gets to it. */}
+      <p className="visually-hidden" aria-live="polite">
+        {selectedNodeId
+          ? (() => {
+              const at = indexOf(ordered, selectedNodeId);
+              const node = ordered[at];
+              return node ? `${nameOf(node)}, step ${at + 1} of ${ordered.length}, selected.` : '';
+            })()
+          : ''}
+      </p>
     </div>
   );
 }

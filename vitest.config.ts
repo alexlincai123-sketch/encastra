@@ -7,6 +7,9 @@ export default defineConfig({
       'packages/*/test/**/*.test.ts',
       'apps/*/test/**/*.test.ts',
       'services/*/test/**/*.test.ts',
+      // Invariants that belong to the repository rather than to any one package — the version
+      // agreeing with itself across six files, for instance.
+      'tests/**/*.test.ts',
     ],
     environment: 'node',
     // A hanging test is a failing test; it should not hold CI open.
