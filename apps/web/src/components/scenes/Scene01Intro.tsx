@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { assemble, DEPTH, handoff, settle, stack } from '@/lib/motion-system';
 import { SCENE_COPY } from '@/lib/scenes';
-import { pinnedTimeline, sunflowerLayout, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, sunflowerLayout, targets, useScrollScene } from '@/lib/scroll';
 
 import scene from './Scene01.module.css';
 import styles from './Scenes.module.css';
@@ -64,16 +64,16 @@ const SHARDS: readonly ShardSpec[] = SHARD_ROLES.map((role, i) => {
 export function Scene01Intro(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
-    const field = ctx.root.querySelector(`.${scene.field}`);
-    const headlineGroup = ctx.root.querySelector(`.${scene.headlineGroup}`);
-    const allShards = gsap.utils.toArray<HTMLElement>(`.${scene.shard}`, ctx.root);
+    const field = ctx.root.querySelector(sel(scene.field));
+    const headlineGroup = ctx.root.querySelector(sel(scene.headlineGroup));
+    const allShards = gsap.utils.toArray<HTMLElement>(sel(scene.shard), ctx.root);
     const stackShards = gsap.utils.toArray<HTMLElement>(`[data-role='stack']`, ctx.root);
     const backShards = gsap.utils.toArray<HTMLElement>(`[data-role='back']`, ctx.root);
     const liftShards = gsap.utils.toArray<HTMLElement>(`[data-role='lift']`, ctx.root);
     const planeShards = gsap.utils.toArray<HTMLElement>(`[data-role='plane']`, ctx.root);
-    const words = gsap.utils.toArray<HTMLElement>(`.${styles.word}`, ctx.root);
-    const index = ctx.root.querySelector(`.${styles.index}`);
-    const sub = ctx.root.querySelector(`.${styles.body}`);
+    const words = gsap.utils.toArray<HTMLElement>(sel(styles.word), ctx.root);
+    const index = ctx.root.querySelector(sel(styles.index));
+    const sub = ctx.root.querySelector(sel(styles.body));
     const hint = ctx.root.querySelector('[data-hint]');
 
     // Running text only — index/words/sub are the one place plain autoAlpha + y is allowed, and
@@ -95,7 +95,7 @@ export function Scene01Intro(): ReactNode {
       // Structure: every shard travels in from its scattered start at once. A tight stagger
       // (0.012 x 15 gaps = 0.18) keeps the whole field's arrival inside its own window, so the
       // next beat never has to fight an assemble tween that is still running on a late shard.
-      assemble(tl, allShards, { at: 0, duration: 0.28, stagger: 0.012 });
+      assemble(tl, allShards, { at: 0, duration: 0.28, stagger: 0.012, fade: false });
       // Movement: the four `stack` shards, having arrived at their shared spot, cascade into a
       // deck — the "several group" beat, distinct from the wider field settling around them.
       stack(tl, stackShards, { at: 0.48, duration: 0.14 });
@@ -128,7 +128,7 @@ export function Scene01Intro(): ReactNode {
 
       const tl = pinnedTimeline(ctx, { vh: 130 });
 
-      assemble(tl, animated, { at: 0, duration: 0.24, spread: 0.6, stagger: 0.02 });
+      assemble(tl, animated, { at: 0, duration: 0.24, spread: 0.6, stagger: 0.02, fade: false });
       stack(tl, stackShards, { at: 0.4, duration: 0.12, step: 8, depth: 15 });
       settle(tl, animated, { at: 0.7, duration: 0.14, stagger: 0.01 });
 

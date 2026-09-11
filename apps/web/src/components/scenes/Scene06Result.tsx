@@ -7,7 +7,7 @@ import { componentNode } from '@/lib/graph-nodes';
 import { handoff, handon, merge, morph, settle, split } from '@/lib/motion-system';
 import { RESULT_AFTER, RESULT_BEFORE, RUN_FLOW_IDS, SCENE_COPY } from '@/lib/scenes';
 import type { SceneCtx } from '@/lib/scroll';
-import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import { MiniNode } from './MiniNode';
 import local from './Scene06.module.css';
@@ -60,13 +60,13 @@ interface Variant {
 
 function buildVariant(ctx: SceneCtx, variant: Variant): void {
   const { gsap } = ctx;
-  const heading = ctx.root.querySelector(`.${styles.headline}`);
-  const body = ctx.root.querySelector(`.${styles.body}`);
-  const depthGroup = ctx.root.querySelector(`.${local.depthGroup}`);
+  const heading = ctx.root.querySelector(sel(styles.headline));
+  const body = ctx.root.querySelector(sel(styles.body));
+  const depthGroup = ctx.root.querySelector(sel(local.depthGroup));
   const tiles = gsap.utils.toArray<HTMLElement>('[data-tile]', variant.tilesRoot);
-  const moduleRow = ctx.root.querySelector(`.${local.moduleRow}`);
-  const moduleCards = gsap.utils.toArray<HTMLElement>(`.${local.moduleCard}`, ctx.root);
-  const outputLayer = ctx.root.querySelector(`.${local.outputLayer}`);
+  const moduleRow = ctx.root.querySelector(sel(local.moduleRow));
+  const moduleCards = gsap.utils.toArray<HTMLElement>(sel(local.moduleCard), ctx.root);
+  const outputLayer = ctx.root.querySelector(sel(local.outputLayer));
 
   gsap.set(targets(heading, body), { autoAlpha: 0, y: 16 });
   // The module cards start collapsed onto the shared centre point MORPH will reveal them at —

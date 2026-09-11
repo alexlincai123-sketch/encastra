@@ -7,7 +7,7 @@ import { RELEASE } from '@/config/site';
 import { COMPONENT_COUNT, TRIGGER_COUNT } from '@/lib/components.data';
 import { assemble, handon, settle } from '@/lib/motion-system';
 import { SCENE_COPY } from '@/lib/scenes';
-import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import scene from './Scene10.module.css';
 import styles from './Scenes.module.css';
@@ -25,11 +25,14 @@ const WORDS = COPY.headline.split(' ');
 export function Scene10Try(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
-    const index = ctx.root.querySelector(`.${styles.index}`);
-    const words = gsap.utils.toArray<HTMLElement>(`.${styles.word}`);
-    const body = ctx.root.querySelector(`.${styles.body}`);
-    const actionButtons = gsap.utils.toArray<HTMLElement>(`.${styles.tryActions} > a`, ctx.root);
-    const meta = ctx.root.querySelector(`.${styles.tryMeta}`);
+    const index = ctx.root.querySelector(sel(styles.index));
+    const words = gsap.utils.toArray<HTMLElement>(sel(styles.word));
+    const body = ctx.root.querySelector(sel(styles.body));
+    const actionButtons = gsap.utils.toArray<HTMLElement>(
+      `${sel(styles.tryActions)} > a`,
+      ctx.root,
+    );
+    const meta = ctx.root.querySelector(sel(styles.tryMeta));
 
     gsap.set(words, { yPercent: 115 });
     gsap.set(targets(body, meta), { autoAlpha: 0, y: 14 });

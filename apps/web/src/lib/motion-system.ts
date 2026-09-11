@@ -149,9 +149,16 @@ export function scatterOrder(count: number): number[] {
 export function assemble(
   tl: gsap.core.Timeline,
   items: Targets,
-  opts: At & { spread?: number } = {},
+  opts: At & { spread?: number; fade?: boolean } = {},
 ): gsap.core.Timeline {
-  const { at = 0, duration = BEAT.base, stagger = 0.04, spread = 1 } = opts;
+  const { at = 0, duration = BEAT.base, stagger = 0.04, spread = 1, fade = true } = opts;
+  // `fade: false` is for the opening scene, and for any beat where the parts are meant to have
+  // been there all along. Fading in from nothing means the frame *before* the beat is empty,
+  // which is fine in the middle of a scroll and unacceptable as the first thing a visitor sees:
+  // parts that are scattered and visible say "this is made of pieces" on frame one, and the
+  // arrival then has something to do besides appearing.
+  const alpha = fade ? { autoAlpha: 0 } : {};
+  const alphaTo = fade ? { autoAlpha: 1 } : {};
   return tl.fromTo(
     items,
     {
@@ -159,14 +166,14 @@ export function assemble(
       y: (i: number) => scatterVector(i, spread).y,
       rotate: (i: number) => scatterVector(i, spread).rotate,
       scale: 0.82,
-      autoAlpha: 0,
+      ...alpha,
     },
     {
       x: 0,
       y: 0,
       rotate: 0,
       scale: 1,
-      autoAlpha: 1,
+      ...alphaTo,
       duration,
       stagger: { each: stagger, from: 'random' },
       ease: EASE.arrive,

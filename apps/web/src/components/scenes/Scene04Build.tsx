@@ -15,7 +15,7 @@ import {
   SCENE_COPY,
 } from '@/lib/scenes';
 import type { SceneCtx } from '@/lib/scroll';
-import { pinnedTimeline, sunflowerLayout, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, sunflowerLayout, targets, useScrollScene } from '@/lib/scroll';
 
 import { MiniNode } from './MiniNode';
 import local from './Scene04.module.css';
@@ -71,17 +71,17 @@ interface Variant {
 
 function buildVariant(ctx: SceneCtx, variant: Variant): void {
   const { gsap } = ctx;
-  const heading = ctx.root.querySelector(`.${styles.headline}`);
-  const body = ctx.root.querySelector(`.${styles.body}`);
-  const caption = ctx.root.querySelector(`.${styles.buildCaption}`);
-  const depthGroup = ctx.root.querySelector(`.${local.depthGroup}`);
+  const heading = ctx.root.querySelector(sel(styles.headline));
+  const body = ctx.root.querySelector(sel(styles.body));
+  const caption = ctx.root.querySelector(sel(styles.buildCaption));
+  const depthGroup = ctx.root.querySelector(sel(local.depthGroup));
   // `.buildResolve` (Scenes.module.css) is the element whose *own* base CSS carries `opacity: 0`
   // — its reduced-motion override flips that same rule to `opacity: 1`. MORPH and HANDOFF target
   // it directly for exactly that reason: revealing only `.buildResolveInner` inside it would
   // leave the outer wrapper's own opacity at 0, hiding everything inside it regardless.
-  const resolveOuter = ctx.root.querySelector(`.${styles.buildResolve}`);
+  const resolveOuter = ctx.root.querySelector(sel(styles.buildResolve));
   const resolveNodes = gsap.utils.toArray<HTMLElement>(
-    `.${styles.buildResolveInner} figure`,
+    `${sel(styles.buildResolveInner)} figure`,
     ctx.root,
   );
 

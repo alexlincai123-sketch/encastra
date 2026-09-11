@@ -6,7 +6,7 @@ import { TerminalDemo } from '@/components/terminal/Terminal';
 import terminal from '@/components/terminal/Terminal.module.css';
 import { BEAT, flow, handoff, handon, merge } from '@/lib/motion-system';
 import { SCENE_COPY } from '@/lib/scenes';
-import { targets, useScrollScene } from '@/lib/scroll';
+import { sel, targets, useScrollScene } from '@/lib/scroll';
 
 import scene from './Scene09.module.css';
 import styles from './Scenes.module.css';
@@ -31,12 +31,12 @@ const COPY = SCENE_COPY.terminal;
 export function Scene09Terminal(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
-    const heading = ctx.root.querySelector(`.${styles.headline}`);
-    const body = ctx.root.querySelector(`.${styles.body}`);
-    const pair = ctx.root.querySelector<HTMLElement>(`.${scene.pair}`);
-    const terminalCard = ctx.root.querySelector<HTMLElement>(`.${terminal.terminalCard}`);
-    const graphCard = ctx.root.querySelector<HTMLElement>(`.${terminal.graphCard}`);
-    const bridgeDot = ctx.root.querySelector<HTMLElement>(`.${scene.bridgeDot}`);
+    const heading = ctx.root.querySelector(sel(styles.headline));
+    const body = ctx.root.querySelector(sel(styles.body));
+    const pair = ctx.root.querySelector<HTMLElement>(sel(scene.pair));
+    const terminalCard = ctx.root.querySelector<HTMLElement>(sel(terminal.terminalCard));
+    const graphCard = ctx.root.querySelector<HTMLElement>(sel(terminal.graphCard));
+    const bridgeDot = ctx.root.querySelector<HTMLElement>(sel(scene.bridgeDot));
 
     gsap.set(targets(heading, body), { autoAlpha: 0, y: 18 });
     if (bridgeDot != null) gsap.set(bridgeDot, { xPercent: 0, autoAlpha: 0 });

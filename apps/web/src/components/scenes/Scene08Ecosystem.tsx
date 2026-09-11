@@ -7,7 +7,7 @@ import { componentNode } from '@/lib/graph-nodes';
 import { Flip } from '@/lib/motion';
 import { BEAT, DEPTH, EASE, handoff, handon, morph, scatterOrder, snap } from '@/lib/motion-system';
 import { SCENE_COPY } from '@/lib/scenes';
-import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import { MiniNode } from './MiniNode';
 import eco from './Scene08.module.css';
@@ -34,15 +34,15 @@ const CATEGORY_GROUPS = [
 export function Scene08Ecosystem(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
-    const heading = ctx.root.querySelector(`.${styles.headline}`);
-    const body = ctx.root.querySelector(`.${styles.body}`);
-    const field = ctx.root.querySelector<HTMLElement>(`.${eco.field}`);
-    const mixedPool = ctx.root.querySelector<HTMLElement>(`.${eco.mixedPool}`);
-    const categories = ctx.root.querySelector<HTMLElement>(`.${eco.categories}`);
-    const nestWrap = ctx.root.querySelector<HTMLElement>(`.${eco.nestWrap}`);
-    const chips = gsap.utils.toArray<HTMLElement>(`.${eco.chip}`, ctx.root);
-    const labels = gsap.utils.toArray<HTMLElement>(`.${eco.categoryLabel}`, ctx.root);
-    const ticks = gsap.utils.toArray<HTMLElement>(`.${eco.categoryTick}`, ctx.root);
+    const heading = ctx.root.querySelector(sel(styles.headline));
+    const body = ctx.root.querySelector(sel(styles.body));
+    const field = ctx.root.querySelector<HTMLElement>(sel(eco.field));
+    const mixedPool = ctx.root.querySelector<HTMLElement>(sel(eco.mixedPool));
+    const categories = ctx.root.querySelector<HTMLElement>(sel(eco.categories));
+    const nestWrap = ctx.root.querySelector<HTMLElement>(sel(eco.nestWrap));
+    const chips = gsap.utils.toArray<HTMLElement>(sel(eco.chip), ctx.root);
+    const labels = gsap.utils.toArray<HTMLElement>(sel(eco.categoryLabel), ctx.root);
+    const ticks = gsap.utils.toArray<HTMLElement>(sel(eco.categoryTick), ctx.root);
 
     gsap.set(targets(heading, body), { autoAlpha: 0, y: 16 });
     gsap.set(labels, { y: -4, autoAlpha: 0.5 });

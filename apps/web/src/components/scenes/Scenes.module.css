@@ -588,8 +588,21 @@
 /* Not pinned — the terminal's own transcript runs on real timers with its own play/pause/speed
    controls, and its combined height (with the graph card beside it) can exceed one viewport, so
    this scene reveals on normal scroll instead of fighting `pin: true`'s viewport-height limit. */
+/*
+ * The one scene that is not pinned, and therefore the one that has to contain its own entrance.
+ *
+ * Its two cards start pushed apart so they can converge, and the outward one was landing 61px
+ * past the right edge of the document — a horizontal scrollbar on every page load, before the
+ * scene had even been reached. Every pinned scene is already contained by `.pin`'s own
+ * `overflow-x: hidden`; this is the same guarantee for the one that has no pin.
+ *
+ * `clip` rather than `hidden` on purpose: `hidden` on one axis forces the other to `auto`, which
+ * would turn this section into a scroll container and give ScrollTrigger a second scroller to
+ * measure against. `clip` cuts without scrolling.
+ */
 .terminalSection {
   padding-block: var(--site-section-y);
+  overflow-x: clip;
 }
 
 .terminalIntro {

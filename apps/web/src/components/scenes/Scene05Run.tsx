@@ -12,7 +12,7 @@ import {
   SCENE_COPY,
 } from '@/lib/scenes';
 import type { SceneCtx } from '@/lib/scroll';
-import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import local from './Scene05.module.css';
 import styles from './Scenes.module.css';
@@ -48,16 +48,16 @@ interface Variant {
 
 function buildVariant(ctx: SceneCtx, variant: Variant): void {
   const { gsap } = ctx;
-  const heading = ctx.root.querySelector(`.${styles.headline}`);
-  const body = ctx.root.querySelector(`.${styles.body}`);
-  const depthGroup = ctx.root.querySelector(`.${local.depthGroup}`);
+  const heading = ctx.root.querySelector(sel(styles.headline));
+  const body = ctx.root.querySelector(sel(styles.body));
+  const depthGroup = ctx.root.querySelector(sel(local.depthGroup));
   // Scoped to `depthGroup`, not `ctx.root` — `.staticRun` right beside it (below) renders the
   // same `.chainNode`/`.traveller` classes for its own, unrelated reduced-motion copy, and an
   // unscoped query would animate both copies as one array with double the elements.
-  const nodes = gsap.utils.toArray<HTMLElement>(`.${local.chainNode}`, depthGroup);
-  const figures = gsap.utils.toArray<HTMLElement>(`.${local.chainNode} figure`, depthGroup);
-  const travellers = gsap.utils.toArray<HTMLElement>(`.${local.traveller}`, depthGroup);
-  const logLines = gsap.utils.toArray<HTMLElement>(`.${local.logLine}`, ctx.root);
+  const nodes = gsap.utils.toArray<HTMLElement>(sel(local.chainNode), depthGroup);
+  const figures = gsap.utils.toArray<HTMLElement>(`${sel(local.chainNode)} figure`, depthGroup);
+  const travellers = gsap.utils.toArray<HTMLElement>(sel(local.traveller), depthGroup);
+  const logLines = gsap.utils.toArray<HTMLElement>(sel(local.logLine), ctx.root);
 
   gsap.set(targets(heading, body), { autoAlpha: 0, y: 16 });
   gsap.set(logLines, { autoAlpha: 0 });

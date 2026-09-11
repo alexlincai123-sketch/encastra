@@ -6,7 +6,7 @@ import { GraphNode, Wire } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
 import { assemble, handoff, handon, snap } from '@/lib/motion-system';
 import { CONNECT_ACCEPTED_LABEL, SCENE_COPY, WHAT_IF_IDS } from '@/lib/scenes';
-import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import scene from './Scene02.module.css';
 import styles from './Scenes.module.css';
@@ -39,15 +39,15 @@ const LOOSE_LAYOUT = [
 export function Scene02WhatIf(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
-    const composition = ctx.root.querySelector(`.${styles.stageFull}`);
+    const composition = ctx.root.querySelector(sel(styles.stageFull));
     const modules = gsap.utils.toArray<HTMLElement>('[data-module]', ctx.root);
     const looseModules = gsap.utils.toArray<HTMLElement>('[data-loose]', ctx.root);
     const pairModules = gsap.utils.toArray<HTMLElement>('[data-pair-node]', ctx.root);
-    const wireSlot = ctx.root.querySelector(`.${scene.wireSlot}`);
-    const joint = ctx.root.querySelector(`.${scene.joint}`);
-    const index = ctx.root.querySelector(`.${styles.index}`);
-    const headline = ctx.root.querySelector(`.${styles.headlineMd}`);
-    const body = ctx.root.querySelector(`.${styles.body}`);
+    const wireSlot = ctx.root.querySelector(sel(scene.wireSlot));
+    const joint = ctx.root.querySelector(sel(scene.joint));
+    const index = ctx.root.querySelector(sel(styles.index));
+    const headline = ctx.root.querySelector(sel(styles.headlineMd));
+    const body = ctx.root.querySelector(sel(styles.body));
 
     gsap.set(targets(index, headline, body), { autoAlpha: 0, y: 14 });
 

@@ -13,7 +13,7 @@ import {
   CONNECT_TARGET_ID,
   SCENE_COPY,
 } from '@/lib/scenes';
-import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import scene from './Scene03.module.css';
 import styles from './Scenes.module.css';
@@ -29,19 +29,19 @@ const TARGET_REFUSED: typeof TARGET = { ...TARGET, id: `${TARGET.id}-refused-att
 export function Scene03Connect(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
-    const composition = ctx.root.querySelector(`.${scene.composition}`);
-    const heading = ctx.root.querySelector(`.${styles.headlineMd}`);
-    const body = ctx.root.querySelector(`.${styles.body}`);
+    const composition = ctx.root.querySelector(sel(scene.composition));
+    const heading = ctx.root.querySelector(sel(styles.headlineMd));
+    const body = ctx.root.querySelector(sel(styles.body));
     const okAttempt = ctx.root.querySelector(`[data-attempt='ok']`);
     const badAttempt = ctx.root.querySelector(`[data-attempt='bad']`);
-    const okWireSlot = ctx.root.querySelector(`[data-attempt='ok'] .${scene.wireSlot}`);
-    const badWireSlot = ctx.root.querySelector(`[data-attempt='bad'] .${scene.wireSlot}`);
-    const convertChip = ctx.root.querySelector(`.${styles.convertChip}`);
-    const refusedMark = ctx.root.querySelector(`.${styles.refusedMark}`);
-    const okLabel = ctx.root.querySelector(`[data-attempt='ok'] .${styles.connectLabel}`);
-    const badLabel = ctx.root.querySelector(`[data-attempt='bad'] .${styles.connectLabel}`);
+    const okWireSlot = ctx.root.querySelector(`[data-attempt='ok'] ${sel(scene.wireSlot)}`);
+    const badWireSlot = ctx.root.querySelector(`[data-attempt='bad'] ${sel(scene.wireSlot)}`);
+    const convertChip = ctx.root.querySelector(sel(styles.convertChip));
+    const refusedMark = ctx.root.querySelector(sel(styles.refusedMark));
+    const okLabel = ctx.root.querySelector(`[data-attempt='ok'] ${sel(styles.connectLabel)}`);
+    const badLabel = ctx.root.querySelector(`[data-attempt='bad'] ${sel(styles.connectLabel)}`);
     const badEnds = gsap.utils.toArray<HTMLElement>(
-      `[data-attempt='bad'] .${styles.connectNode}`,
+      `[data-attempt='bad'] ${sel(styles.connectNode)}`,
       ctx.root,
     );
 

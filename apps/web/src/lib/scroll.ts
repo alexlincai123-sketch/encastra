@@ -138,6 +138,11 @@ export function targets(...items: readonly (Element | null | undefined)[]): Elem
  * case where this is wrong and one where it is the difference between a working page and a
  * crash, so scenes use it rather than interpolating a class name directly.
  */
-export function sel(className: string): string {
-  return `.${className.trim().split(/\s+/).join('.')}`;
+export function sel(className: string | undefined): string {
+  // `undefined` is accepted because that is what a CSS-Modules lookup is typed as, and refusing
+  // it would only push the problem into ninety call sites that would each handle it slightly
+  // differently. The result — `.undefined` — is a valid selector that matches nothing, which is
+  // exactly what the old `` `.${styles.missing}` `` produced. Nothing is quietly papered over:
+  // the lookup still returns null and GSAP still says so, which is how this bug was found.
+  return `.${String(className).trim().split(/\s+/).join('.')}`;
 }

@@ -6,7 +6,7 @@ import { componentNode } from '@/lib/graph-nodes';
 import { encapsulate, execute, handoff, handon, morph, settle, stack } from '@/lib/motion-system';
 import { RUN_FLOW_IDS, SCENE_COPY } from '@/lib/scenes';
 import type { SceneCtx } from '@/lib/scroll';
-import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
+import { pinnedTimeline, sel, targets, useScrollScene } from '@/lib/scroll';
 
 import { MiniNode } from './MiniNode';
 import local from './Scene07.module.css';
@@ -38,14 +38,14 @@ interface Variant {
 
 function buildVariant(ctx: SceneCtx, variant: Variant): void {
   const { gsap } = ctx;
-  const heading = ctx.root.querySelector(`.${styles.headline}`);
-  const body = ctx.root.querySelector(`.${styles.body}`);
-  const depthGroup = ctx.root.querySelector(`.${local.depthGroup}`);
-  const members = gsap.utils.toArray<HTMLElement>(`.${local.memberNode}`, ctx.root);
-  const shell = ctx.root.querySelector(`.${styles.reuseCard}`);
-  const stackGroup = ctx.root.querySelector(`.${local.stackGroup}`);
-  const templateCards = gsap.utils.toArray<HTMLElement>(`.${local.templateCard}`, ctx.root);
-  const steps = gsap.utils.toArray<HTMLElement>(`.${styles.reuseStep}`, ctx.root);
+  const heading = ctx.root.querySelector(sel(styles.headline));
+  const body = ctx.root.querySelector(sel(styles.body));
+  const depthGroup = ctx.root.querySelector(sel(local.depthGroup));
+  const members = gsap.utils.toArray<HTMLElement>(sel(local.memberNode), ctx.root);
+  const shell = ctx.root.querySelector(sel(styles.reuseCard));
+  const stackGroup = ctx.root.querySelector(sel(local.stackGroup));
+  const templateCards = gsap.utils.toArray<HTMLElement>(sel(local.templateCard), ctx.root);
+  const steps = gsap.utils.toArray<HTMLElement>(sel(styles.reuseStep), ctx.root);
 
   gsap.set(targets(heading, body), { autoAlpha: 0, y: 16 });
   // Spread into a readable row on the same centre ENCAPSULATE will converge them back onto —
