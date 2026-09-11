@@ -64,9 +64,10 @@ handles without touching layout or paint. Nothing animates `width`, `height`, `t
 scene 6 is cut into tiles by `background-position`, which is set once and never tweened. A
 twelve-tile split therefore costs what twelve transformed divs cost.
 
-`will-change` appears in exactly one place — the picture's tiles — because those are the elements
-that are certainly about to move, there are few of them, and they are briefly on screen.
-Promoting a layer that never moves spends memory for nothing.
+`will-change` is restricted to elements a timeline is certainly about to transform: a scene's
+depth group, the layers a MORPH crosses between, and the picture's tiles. It is not a utility to
+sprinkle on anything that might move, because promoting a layer that never moves spends memory
+for nothing, and a page that promotes everything has promoted nothing.
 
 ### Timings are normalised, not absolute
 

@@ -123,3 +123,21 @@ export { prefersReducedMotion };
 export function targets(...items: readonly (Element | null | undefined)[]): Element[] {
   return items.filter((item): item is Element => item != null);
 }
+
+/**
+ * A valid CSS selector for a CSS-Modules class name.
+ *
+ * `styles.foo` is usually one generated class, and `` `.${styles.foo}` `` is usually fine. But a
+ * class declared with `composes:` resolves to **two** class names separated by a space — a
+ * perfectly good `className`, and a selector that throws `SyntaxError` the moment it reaches
+ * `querySelector`. `Scenes.module.css` has five such classes today, and a scene that happens to
+ * reach for one of them would take the page down.
+ *
+ * Splitting on whitespace and joining with dots turns either shape into a compound selector:
+ * one class stays `.a`, two become `.a.b`, which matches exactly the same elements. There is no
+ * case where this is wrong and one where it is the difference between a working page and a
+ * crash, so scenes use it rather than interpolating a class name directly.
+ */
+export function sel(className: string): string {
+  return `.${className.trim().split(/\s+/).join('.')}`;
+}

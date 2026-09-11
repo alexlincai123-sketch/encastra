@@ -413,6 +413,21 @@ table.data td code {
   backface-visibility: hidden;
 }
 
+/*
+ * Less depth on a small screen, in one line rather than eighteen.
+ *
+ * Each scene halves the piece counts and travel distances it controls, but the `DEPTH` constants
+ * are baked into the motion verbs and cannot be scaled per breakpoint without every verb growing
+ * a parameter every caller would have to remember to pass. Lengthening the perspective achieves
+ * the same thing from the other end: the same `translateZ` values through a longer lens produce
+ * a shallower composition, everywhere, with nothing to forget.
+ */
+@media (max-width: 899px) {
+  .u-stage {
+    perspective: 3000px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* A reduced-motion visitor never gets a timeline, so nothing will ever set `z`. Leaving the
      perspective in place would still skew any element that happens to carry a static rotation. */
