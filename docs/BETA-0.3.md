@@ -115,3 +115,30 @@ at the point where it would need one.
 - Windows only. macOS and Linux are not built, and the download page says so rather than
   offering buttons that do nothing.
 - The licence is still `UNLICENSED`, which grants nobody any rights.
+
+## 7. Verified in the installed 0.3
+
+Driven through the installed application over the DevTools protocol, and measured rather than
+looked at:
+
+| Checked | Result |
+|---|---|
+| Checkpoint end to end through the interface | `photo-small.png`, 800×400 in and **800×400 out** — no longer enlarged |
+| Settings categories | All eighteen present and navigable |
+| Language switching | Spanish → German → French → English → Spanish, the shell relabelling each time |
+| Language detection | The application started in Spanish on its own, from the system locale |
+| Diagnostics | Real version, runtime, schemas, 21 components, platform, architecture, GPU, WebView; copy and export both work |
+| About | `0.3.0-beta.1`, runtime attached, "Not signed", "No update channel" |
+
+## 8. A gap this exposed, not yet closed
+
+**The shell is translated; the Settings screen is not.** Sidebar, Home, palette and canvas
+relabel correctly in all six languages. The Settings categories and rows stay in English.
+
+The locale files *do* carry a full `settings.*` tree — it was written for exactly this — but the
+Settings screen and the locale files were built in parallel by different hands, and Settings has
+not adopted those keys yet. It is one mechanical pass: replace the literals with `t('settings.…')`
+calls against keys that already exist.
+
+It is listed here because it is plainly visible in any non-English locale, and a half-translated
+application that does not say so is worse than one that does.
