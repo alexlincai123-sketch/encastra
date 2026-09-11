@@ -1,0 +1,147 @@
+/*
+ * Scene 08 — Ecosystem.
+ *
+ * The brief for this scene is to stop looking like a list of cards and start looking like a
+ * system the visitor could rearrange themselves. Twelve real components start mixed together in
+ * one pool, travel to the category they actually belong to (Flip measures that move — see the
+ * comment in Scene08Ecosystem.tsx for why this is the one place a second plugin earns its keep),
+ * and the categorised palette then becomes the exact nested composition the copy describes: one
+ * component, inside one workflow, inside one project.
+ *
+ * `.tier`/`.tierProject`/`.tierWorkflow`/`.tierComponent`/`.tierLabel` are the shared classes from
+ * `Scenes.module.css` — reused here unmodified for the nested reveal, exactly as the previous
+ * version of this scene used them.
+ */
+
+.field {
+  position: relative;
+  width: 100%;
+  height: min(64vh, 560px);
+  margin-block-start: var(--space-6);
+}
+
+@media (max-width: 56.1875rem) {
+  .field {
+    height: min(78vh, 660px);
+  }
+}
+
+/* --- The mixed pool -----------------------------------------------------------------------
+ * Never actually painted with anything inside it — chips pass through it once, synchronously,
+ * before the browser's first paint (see the build function), purely so Flip has a genuinely
+ * different "before" layout to measure. `opacity: 0` and `pointer-events: none` are defensive,
+ * not load-bearing.
+ */
+.mixedPool {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding-inline: 14%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* --- The categorised palette ---------------------------------------------------------------- */
+
+.categories {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 1fr;
+  gap: var(--space-3);
+  align-content: center;
+}
+
+@media (max-width: 56.1875rem) {
+  .categories {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-2);
+  }
+}
+
+.category {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--space-2);
+  gap: var(--space-2);
+  background: color-mix(in oklab, var(--site-panel) 92%, transparent);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+.categoryLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block-end: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: var(--border);
+  will-change: transform, opacity;
+}
+
+/* The joint `snap()` pulses once each category's chips have landed — confirmation that this
+   group, specifically, is now settled, rather than the palette settling all at once as a block. */
+.categoryTick {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  transform-origin: left center;
+  will-change: transform, opacity;
+}
+
+.categoryChips {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.chip {
+  will-change: transform, opacity;
+}
+
+/* --- The nested reveal --------------------------------------------------------------------- */
+
+.nestWrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform, opacity;
+}
+
+/* Reduced motion never runs the build function, so it never gets to hide the palette or reveal
+   the nested composition — CSS has to do both, the same way `Scene04Build` collapses its own
+   animated field down to just the resolved state. */
+@media (prefers-reduced-motion: reduce) {
+  .mixedPool,
+  .categories {
+    display: none;
+  }
+
+  .field {
+    height: auto;
+  }
+
+  .nestWrap {
+    position: static;
+    opacity: 1;
+    margin-block-start: var(--space-6);
+  }
+}

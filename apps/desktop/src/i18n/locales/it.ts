@@ -104,15 +104,31 @@ const it: Messages = {
     categories: {
       general: {
         label: 'Generale',
-        description: 'Aspetto, movimento e il tour del primo avvio.',
+        description: 'Come iniziare, e cosa ti mostra questa applicazione quando si apre.',
+      },
+      appearance: {
+        label: 'Aspetto',
+        description: 'Tema e movimento.',
+      },
+      language: {
+        label: 'Lingua e regione',
+        description: 'La lingua che parla questa interfaccia, e come mostra date e numeri.',
       },
       workspace: {
         label: 'Area di lavoro',
-        description: 'Dove vivono i progetti, e con cosa si apre questa applicazione.',
+        description: 'Dove vivono i tuoi progetti sul disco.',
+      },
+      projects: {
+        label: 'Progetti',
+        description: 'Come si apre un progetto, e il formato in cui viene salvato.',
       },
       editor: {
         label: 'Editor',
-        description: 'Aiuti mostrati sulla tela mentre costruisci un grafo.',
+        description: 'Scorciatoie e comportamento mentre costruisci un grafo.',
+      },
+      canvas: {
+        label: 'Tela',
+        description: 'Aiuti disegnati sulla tela stessa: la griglia, lo snap, la minimappa.',
       },
       runtime: {
         label: 'Runtime',
@@ -120,7 +136,8 @@ const it: Messages = {
       },
       components: {
         label: 'Componenti',
-        description: 'Cosa è installato in questa versione, e cosa può raggiungere ciascuno.',
+        description:
+          'Cosa è installato in questa versione, ed esattamente cosa può raggiungere ciascuno.',
       },
       security: {
         label: 'Sicurezza',
@@ -131,91 +148,219 @@ const it: Messages = {
         label: 'Privacy',
         description: 'Cosa raccoglie e invia questa applicazione, dichiarato come fatto.',
       },
-      advanced: {
-        label: 'Avanzate',
+      notifications: {
+        label: 'Notifiche',
+        description: 'Dove appaiono le notifiche di un flusso di lavoro, e dove no.',
+      },
+      files: {
+        label: 'File',
+        description: 'Cosa scrive Encastra sul disco, e cosa no.',
+      },
+      updates: {
+        label: 'Aggiornamenti',
+        description: 'Come una versione più recente arriva su questo computer.',
+      },
+      account: {
+        label: 'Account',
+        description: 'Accesso, abbonamenti, e perché non ce ne sono.',
+      },
+      developer: {
+        label: 'Sviluppatore',
         description:
           'Dettagli interni per chi li vuole, e un modo per tornare ai valori predefiniti.',
+      },
+      diagnostics: {
+        label: 'Diagnostica',
+        description:
+          'Cosa riportano questa versione e questo computer, pronto da incollare in una segnalazione di bug.',
       },
       about: {
         label: 'Informazioni',
         description: 'Versione, build, e dove si trova la documentazione completa.',
       },
     },
+
+    shared: {
+      startup: {
+        label: 'All’avvio',
+        hint: 'Cosa mostra questa applicazione quando si apre.',
+        options: {
+          home: 'Home',
+          lastProject: 'Ultimo progetto',
+        },
+      },
+      runtimeStatus: {
+        label: 'Runtime',
+        hint: 'Se un vero runtime Encastra è collegato a questa finestra.',
+        attached: 'Collegato',
+        notAttached: 'Non collegato — anteprima nel browser',
+      },
+      signing: {
+        label: 'Firma',
+        hint: 'Se questa versione può dimostrare chi l’ha prodotta.',
+        status: 'Non firmata',
+      },
+      version: {
+        label: 'Versione',
+        hint: 'La versione che stai eseguendo.',
+        unknown: 'sconosciuta',
+      },
+      openSecurity: 'Apri Sicurezza',
+      notBuilt: 'Non ancora costruito',
+      noneCollected: 'Nessun dato raccolto',
+      schemaValue: 'schema {value}',
+      projectFormatHint: 'Come viene scritto un file .encastra salvato.',
+    },
+
     general: {
-      appearance: {
-        title: 'Aspetto',
-        theme: {
-          label: 'Tema',
-          hint: 'Sistema segue il tuo sistema operativo. Chiaro e scuro restano fissi indipendentemente da esso.',
-          options: {
-            system: 'Sistema',
-            light: 'Chiaro',
-            dark: 'Scuro',
-          },
-        },
-        motion: {
-          label: 'Movimento',
-          hint: 'Ridotto disattiva completamente le transizioni invece di accorciarle, indipendentemente da cosa preferisce il tuo sistema.',
-          options: {
-            system: 'Sistema',
-            reduced: 'Ridotto',
-          },
+      title: 'Come iniziare',
+      welcomeTour: {
+        label: 'Tour di benvenuto',
+        hint: 'Il primo flusso di lavoro guidato, mostrato una volta al primo avvio.',
+        button: 'Mostra di nuovo il benvenuto',
+      },
+    },
+
+    appearance: {
+      title: 'Aspetto',
+      theme: {
+        label: 'Tema',
+        hint: 'Sistema segue il tuo sistema operativo. Chiaro e scuro restano fissi indipendentemente da esso.',
+        options: {
+          system: 'Sistema',
+          light: 'Chiaro',
+          dark: 'Scuro',
         },
       },
-      getStarted: {
-        title: 'Per iniziare',
-        welcomeTour: {
-          label: 'Tour di benvenuto',
-          hint: 'Il primo flusso di lavoro guidato, mostrato una volta al primo avvio.',
-          button: 'Mostra di nuovo il benvenuto',
+      motion: {
+        label: 'Movimento',
+        hint: 'Ridotto disattiva completamente le transizioni invece di accorciarle, indipendentemente da cosa preferisce il tuo sistema.',
+        options: {
+          system: 'Sistema',
+          reduced: 'Ridotto',
         },
       },
     },
+
+    language: {
+      interface: {
+        title: 'Lingua',
+        picker: {
+          label: 'Lingua dell’interfaccia',
+          hint: 'Traduce questa applicazione. L’inglese è sempre il ripiego per ciò che non è ancora tradotto nella lingua che scegli.',
+        },
+        loading: 'Caricamento…',
+        loadError: 'Impossibile caricare {name}. Resta attiva la lingua corrente.',
+        comingLater: {
+          label: 'In arrivo',
+          hint: 'L’interfaccia è strutturata per supportarle; nessuno le ha ancora tradotte.',
+        },
+      },
+      formatting: {
+        title: 'Come questa lingua scrive le cose',
+        dates: {
+          label: 'Date',
+          hint: 'Oggi, nell’ordine e con le parole proprie di questa lingua.',
+        },
+        times: {
+          label: 'Orari',
+          hint: 'L’ora attuale, secondo la convenzione di questa lingua.',
+        },
+        numbers: {
+          label: 'Numeri',
+          hint: 'Un numero di esempio, raggruppato come lo raggruppa questa lingua.',
+        },
+        note: 'Ogni data, ora e numero che questa applicazione mostra segue la lingua qui sopra — non c’è un formato separato da scegliere, come nella maggior parte dei software che lo fanno bene.',
+      },
+    },
+
     workspace: {
-      projects: {
-        title: 'Progetti',
-        folder: {
-          label: 'Cartella progetti predefinita',
-          hint: 'Da dove parte la finestra di salvataggio. Se lasciata vuota, si apre dove si trovava l’ultima volta il sistema.',
-          placeholder: 'Nessuna cartella predefinita impostata',
-          browseTitleUnavailable: 'Richiede il runtime desktop, non questa anteprima nel browser',
-        },
-        startup: {
-          label: 'All’avvio',
-          hint: 'Cosa mostra questa applicazione quando si apre.',
-          options: {
-            home: 'Home',
-            lastProject: 'Ultimo progetto',
-          },
-        },
+      title: 'Avvio',
+      lastProject: {
+        label: 'Ultimo progetto',
+        hint: 'Registrato automaticamente ogni volta che ne apri o salvi uno. Usato quando All’avvio è impostato su Ultimo progetto — uno che nel frattempo è stato spostato o eliminato viene semplicemente dimenticato, invece di essere mostrato come errore.',
+        none: 'Ancora nessuno',
       },
     },
+
+    projects: {
+      location: {
+        title: 'Da dove si aprono',
+        label: 'Cartella progetti predefinita',
+        hint: 'Da dove parte la finestra di salvataggio. Se lasciata vuota, si apre dove si trovava l’ultima volta il sistema.',
+        placeholder: 'Nessuna cartella predefinita impostata',
+        browse: 'Sfoglia…',
+        browseUnavailable: 'Richiede il runtime desktop, non questa anteprima nel browser',
+      },
+      format: {
+        title: 'Formato',
+        label: 'Formato del file di progetto',
+      },
+      notBuilt: {
+        title: 'Non ancora costruito',
+        copy: 'Non c’è una lista di progetti recenti. Le impostazioni sono per computer, non per progetto — un progetto aperto su un altro computer non porta con sé le proprie preferenze, solo il grafo stesso.',
+      },
+    },
+
     editor: {
-      canvas: {
-        title: 'Tela',
-        grid: {
-          label: 'Griglia',
-          hint: 'Mostra la griglia di allineamento dietro i nodi sulla tela.',
+      shortcuts: {
+        title: 'Scorciatoie da tastiera',
+        table: {
+          shortcut: 'Scorciatoia',
+          action: 'Azione',
         },
-        snapToGrid: {
-          label: 'Aggancia alla griglia',
-          hint: 'I nodi si allineano alla griglia mentre li trascini, invece di restare liberi.',
+        actions: {
+          runOrWatch: 'Esegue il flusso di lavoro, o inizia a osservare se si apre con un trigger',
+          save: 'Salva',
+          saveAs: 'Salva come',
+          openProject: 'Apri un progetto',
+          undo: 'Annulla',
+          redo: 'Ripeti',
+          copySelection: 'Copia la selezione',
+          paste: 'Incolla',
+          duplicateSelection: 'Duplica la selezione',
+          selectAll: 'Seleziona tutto',
+          deleteSelection: 'Elimina la selezione',
         },
-        minimap: {
-          label: 'Minimappa',
-          hint: 'Una piccola panoramica dell’intero grafo nell’angolo della tela.',
-        },
+        note: 'Fisse per ora, non riassegnabili. Nessuna di queste si attiva mentre digiti in un campo di testo.',
+      },
+      notBuilt: {
+        title: 'Non ancora costruito',
+        copy: 'Il salvataggio automatico, un intervallo di salvataggio configurabile e la personalizzazione delle scorciatoie qui sopra non sono ancora costruiti.',
       },
     },
+
+    canvas: {
+      title: 'Tela',
+      grid: {
+        label: 'Griglia',
+        hint: 'Mostra la griglia di allineamento dietro i nodi sulla tela.',
+      },
+      snapToGrid: {
+        label: 'Aggancia alla griglia',
+        hint: 'I nodi si allineano alla griglia mentre li trascini, invece di restare liberi.',
+      },
+      minimap: {
+        label: 'Minimappa',
+        hint: 'Una piccola panoramica dell’intero grafo nell’angolo della tela.',
+      },
+    },
+
     runtime: {
       runs: {
         title: 'Esecuzioni',
         openRunPanel: {
           label: 'Apri il pannello di esecuzione',
           hint: 'Porta automaticamente in primo piano il pannello di esecuzione non appena inizia un’esecuzione.',
+          toggleLabel: 'Apri il pannello di esecuzione all’avvio di un’esecuzione',
         },
       },
+      notBuilt: {
+        title: 'Non ancora costruito',
+        copy: 'Eseguire i passaggi in parallelo, i timeout di esecuzione, i limiti di ritentativo e i limiti di risorse per esecuzione non sono configurabili. Un flusso di lavoro esegue i suoi passaggi nell’ordine stabilito dalla validazione, fino al completamento o al fallimento, con il tempo e la memoria che il computer gli concede.',
+      },
     },
+
     components: {
       installed: {
         title: 'Installati',
@@ -233,58 +378,83 @@ const it: Messages = {
         permissionTable: {
           label: 'Tabella completa dei permessi',
           hint: 'Ogni componente installato, la sua versione, ed esattamente cosa può raggiungere.',
-          button: 'Apri Sicurezza',
         },
+      },
+      table: {
+        title: 'Ogni componente, e cosa può raggiungere',
+        headers: {
+          component: 'Componente',
+          version: 'Versione',
+          source: 'Origine',
+          canReach: 'Può raggiungere',
+        },
+        kind: {
+          core: 'incluso di base',
+          thirdParty: 'di terze parti',
+        },
+        none: 'nulla',
+        note: 'Nulla al di fuori di questo elenco è installato, e nulla qui può raggiungere qualcosa che la propria riga non nomina — nessun accesso arbitrario ai file, nessuna shell, nessuna rete oltre a quanto elencato.',
+      },
+      capabilityLabels: {
+        fsRead: 'Leggere i file',
+        fsWrite: 'Scrivere i file',
+        netHttp: 'Usare la rete',
+        systemNotify: 'Mostrare notifiche',
+        systemClipboard: 'Usare gli appunti',
       },
       installMore: {
         title: 'Installa altro',
         installFromFile: {
           label: 'Installa da un file',
           hint: 'Aggiungi un componente di terze parti a questa versione.',
-          status: 'Non ancora costruita',
         },
         note: 'La sandbox in cui questi componenti verrebbero eseguiti è progettata e documentata ma non ancora costruita, quindi al momento non si può installare nulla oltre ai {count} elencati sopra.',
       },
     },
+
     security: {
-      permissionModel: {
-        title: 'Modello dei permessi',
-        copy: 'Un componente non può accedere ai tuoi file, alla tua rete o agli appunti a meno che il suo manifesto non lo dichiari e tu non lo consenta — una volta per esecuzione. Ogni richiesta, consentita o rifiutata, viene registrata dove puoi leggerla.',
-        allowedInOpenWorkflow: {
-          label: 'Consentito nel flusso di lavoro aperto',
-          hint: 'Cancellato non appena questa applicazione si chiude.',
-          nothingAllowed: 'Nulla consentito',
-          allowed: '{count} consentiti',
-        },
-        fullDetail: {
-          label: 'Dettaglio completo',
-          hint: 'Cosa è stato consentito, a cosa, e da cosa questo non protegge.',
-          button: 'Apri Sicurezza',
-        },
+      title: 'Modello dei permessi',
+      copy: 'Un componente non può accedere ai tuoi file, alla tua rete o agli appunti a meno che il suo manifesto non lo dichiari e tu non lo consenta — una volta per esecuzione. Ogni richiesta, consentita o rifiutata, viene registrata dove puoi leggerla.',
+      thirdParty: {
+        label: 'Componenti di terze parti',
+        hint: 'Se qualcosa al di fuori di questa versione può essere installato ed eseguito.',
+        status: 'Non ancora possibile — la sandbox non è costruita',
+      },
+      allowedInOpenWorkflow: {
+        label: 'Consentito nel flusso di lavoro aperto',
+        hint: 'Cancellato non appena questa applicazione si chiude.',
+        nothingAllowed: 'Nulla consentito',
+        allowed: '{count} consentiti',
+      },
+      fullDetail: {
+        label: 'Dettaglio completo',
+        hint: 'Cosa è stato consentito, a cosa, e da cosa questo non protegge.',
       },
     },
+
     privacy: {
-      collection: {
-        title: 'Raccolta',
+      collect: {
+        title: 'Cosa potrebbe raccogliere questa applicazione, e non raccoglie',
         telemetry: {
           label: 'Telemetria',
-          hint: 'Dati di utilizzo inviati a un server.',
-          status: 'Nessuno raccolto',
+          hint: 'Dati di utilizzo — quali funzioni vengono usate, e quanto spesso — inviati a un server perché un team potesse dare priorità al proprio lavoro.',
         },
         crashReports: {
           label: 'Segnalazioni di arresto anomalo',
-          hint: 'Segnalazioni automatiche inviate da qualche parte quando qualcosa fallisce.',
-          status: 'Nessuna',
+          hint: 'Uno stack trace e una versione di build, inviati automaticamente quando qualcosa fallisce, così da poterlo correggere senza che tu debba segnalarlo.',
         },
         analytics: {
-          label: 'Analisi',
-          hint: 'Modelli di utilizzo, conteggi delle funzionalità o simili.',
-          status: 'Nessuna',
+          label: 'Analisi di utilizzo',
+          hint: 'Conteggi delle funzionalità, durata della sessione, o qualsiasi altra cosa che trasformasse il modo in cui usi questa applicazione in un numero sulla dashboard di qualcun altro.',
         },
-        account: {
-          label: 'Account',
-          hint: 'Un accesso o un abbonamento legato a questa applicazione.',
-          status: 'Nessuno — non c’è alcun server',
+        note: 'Tutte e tre richiederebbero un server a cui inviare i dati. Non ce n’è uno — un interruttore "off" qui implicherebbe un meccanismo che non esiste.',
+      },
+      account: {
+        title: 'Account',
+        signIn: {
+          label: 'Accesso',
+          hint: 'Un’identità legata a questa applicazione, come la maggior parte dei software con server ne richiede una.',
+          status: 'Nessuno — non c’è un server a cui accedere',
         },
       },
       yourData: {
@@ -301,13 +471,94 @@ const it: Messages = {
         },
       },
     },
-    advanced: {
+
+    notifications: {
+      window: {
+        title: 'In questa finestra',
+        toast: {
+          label: 'Notifiche',
+          hint: 'Un flusso di lavoro può chiedere di mostrarne una, usando la stessa capacità system.notify di qualsiasi altro permesso — dichiarata nel suo manifesto e consentita prima che appaia qualcosa.',
+          shown: '{count} mostrate in questa sessione',
+        },
+        note: 'Vengono conservate fino alle 20 più recenti finché la finestra è aperta; ignorarle svuota l’elenco. Chiudere l’applicazione le dimentica, come tutto ciò che non è un progetto salvato.',
+      },
+      notBuilt: {
+        title: 'Non ancora costruito',
+        copy: 'Non c’è un permesso di notifica del sistema operativo, né e-mail, né notifiche push — nulla ti raggiunge al di fuori di questa finestra. Non è costruita nemmeno una cronologia delle notifiche precedenti alla sessione attuale.',
+      },
+    },
+
+    files: {
+      disk: {
+        title: 'Cosa vive sul disco',
+        projects: {
+          term: 'Progetti',
+          detail:
+            'file, ovunque tu scelga di salvarli — vedi Progetti per la cartella predefinita.',
+        },
+        preferences: {
+          term: 'Preferenze',
+          detail:
+            'Archiviazione del browser nell’origine propria di questa applicazione, non un file che puoi aprire direttamente.',
+        },
+        componentData: {
+          term: 'Dati dei componenti',
+          detail:
+            'Nessuno. Ogni componente di questa versione è compilato al suo interno; nulla viene scaricato o memorizzato nella cache.',
+        },
+        logs: {
+          term: 'Registri',
+          detail:
+            'Nessuno scritto sul disco. Un registro di esecuzione è tenuto in memoria finché la finestra è aperta e viene eliminato alla chiusura.',
+        },
+      },
+      notBuilt: {
+        title: 'Non ancora costruito',
+        copy: 'Non c’è importazione o esportazione delle impostazioni, né un modo per spostare le preferenze tra computer se non impostarle di nuovo lì. Un progetto in sé è già portatile — è un solo file — ma le preferenze di questa schermata non lo sono.',
+      },
+    },
+
+    updates: {
+      thisBuild: {
+        title: 'Questa versione',
+        channel: {
+          label: 'Come una più recente arriva su questo computer',
+          hint: 'Cosa succede quando esce una nuova versione.',
+          fact: 'Nessun canale di aggiornamento. Aggiornare significa scaricare un installer nuovo e installarlo sopra questo.',
+        },
+      },
+      verify: {
+        title: 'Verificare cosa installi',
+        copy: 'Le versioni non sono firmate digitalmente, quindi Windows avviserà di un editore non riconosciuto — un avviso corretto, dato che nulla qui dimostra chi ha prodotto il file. Ogni versione pubblica invece un hash SHA-256, per verificare un installer prima di eseguirlo.',
+      },
+      notBuilt: {
+        title: 'Non ancora costruito',
+        copy: 'Il controllo automatico degli aggiornamenti, i canali di aggiornamento come meccanismo funzionante e i download in background non sono costruiti. Oggi, controllare se c’è una nuova versione significa farlo a mano.',
+      },
+    },
+
+    account: {
+      title: 'Nessun account',
+      copy: 'Non c’è accesso, non c’è account, e non c’è un server con cui parlare. Nulla qui ha un abbonamento, un piano, una sessione, o un elenco di dispositivi da gestire — ogni progetto e ogni preferenza di questa schermata vive su questo computer, e solo su questo computer.',
+    },
+
+    developer: {
       internals: {
         title: 'Dettagli interni',
         developerMode: {
           label: 'Modalità sviluppatore',
-          hint: 'Mostra gli id dei componenti, i digest e il registro di esecuzione grezzo per chi li vuole.',
+          hint: 'Mostra i valori grezzi delle preferenze e un riepilogo compatto di ogni componente caricato, qui sotto.',
         },
+      },
+      currentPreferences: {
+        title: 'Preferenze attuali',
+      },
+      loadedComponents: {
+        title: 'Componenti caricati',
+      },
+      hidden: {
+        title: 'Nascosto per ora',
+        copy: 'Attiva la modalità sviluppatore qui sopra per vedere i valori grezzi delle preferenze e un riepilogo di ogni componente caricato.',
       },
       reset: {
         title: 'Ripristino',
@@ -318,6 +569,43 @@ const it: Messages = {
         },
       },
     },
+
+    diagnostics: {
+      rows: {
+        version: 'Versione di Encastra',
+        runtime: 'Runtime',
+        protocolSchema: 'Schema del protocollo dei componenti',
+        projectSchema: 'Schema del formato di progetto',
+        components: 'Componenti installati',
+        platform: 'Piattaforma',
+        architecture: 'Architettura',
+        gpu: 'GPU',
+        userAgent: 'User agent del WebView',
+        gpuUnknown: 'Non rilevabile',
+        platformUnknown: 'Sconosciuta',
+        architectureUnknown: 'Non riportata dal WebView',
+      },
+      machine: {
+        title: 'Questo computer e questa versione',
+      },
+      share: {
+        title: 'Condividilo',
+        copy: {
+          label: 'Copia',
+          hint: 'Copia negli appunti tutte le righe qui sopra.',
+          button: 'Copia',
+          copied: 'Copiato',
+          failed: 'Impossibile copiare',
+        },
+        export: {
+          label: 'Esporta',
+          hint: 'Salva lo stesso report come file di testo.',
+          button: 'Esporta…',
+        },
+        note: 'Nulla qui include un percorso di progetto, un valore di preferenza, o un token — è pensato per poter essere incollato senza rischi in un posto pubblico. Il rapporto viene copiato ed esportato in inglese, così chiunque nel progetto può leggerlo.',
+      },
+    },
+
     about: {
       brand: {
         title: 'Encastra',
@@ -325,29 +613,12 @@ const it: Messages = {
       },
       thisBuild: {
         title: 'Questa versione',
-        version: {
-          label: 'Versione',
-          hint: 'La versione che stai eseguendo.',
-          unknown: 'sconosciuta',
-        },
-        runtime: {
-          label: 'Runtime',
-          hint: 'Se un vero runtime Encastra è collegato a questa finestra.',
-          attached: 'Collegato',
-          notAttached: 'Non collegato — anteprima nel browser',
-        },
         componentProtocol: {
           label: 'Protocollo dei componenti',
           hint: 'Cosa deve rispettare il manifesto di un componente per essere caricato.',
         },
         projectFormat: {
           label: 'Formato del progetto',
-          hint: 'Come viene scritto un file .encastra salvato.',
-        },
-        signing: {
-          label: 'Firma',
-          hint: 'Se questa versione può dimostrare chi l’ha prodotta.',
-          status: 'Non firmata',
         },
         updates: {
           label: 'Aggiornamenti',

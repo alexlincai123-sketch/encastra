@@ -2,72 +2,124 @@
 
 import type { ReactNode } from 'react';
 
+import { Plate, PlateTiles } from '@/components/visual/Plate';
 import { componentNode } from '@/lib/graph-nodes';
+import { handoff, handon, merge, morph, settle, split } from '@/lib/motion-system';
 import { RESULT_AFTER, RESULT_BEFORE, RUN_FLOW_IDS, SCENE_COPY } from '@/lib/scenes';
+import type { SceneCtx } from '@/lib/scroll';
 import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
 
 import { MiniNode } from './MiniNode';
+import local from './Scene06.module.css';
 import styles from './Scenes.module.css';
 
 const COPY = SCENE_COPY.result;
-const NODES = RUN_FLOW_IDS.map((id) => componentNode(id));
 
-/** The category id a real manifest gives a component — same derivation `how-it-works` uses. */
+/** The real pipeline this scene shows resizing the picture — never retyped as a literal. */
+const RESIZE_NODE = componentNode(RUN_FLOW_IDS[1]);
+
 function categoryOf(id: string): string {
   return id.split('.').slice(0, 2).join('.');
 }
 
-const DRIFT_X = [-140, 0, 140] as const;
-const DRIFT_Y = [70, -90, 70] as const;
-const DRIFT_ROTATE = [-14, 6, 16] as const;
+/**
+ * A radiating outward vector per tile, keyed to the tile's own position in the grid rather than a
+ * hash. Corner tiles fly furthest, centre tiles barely move — the picture comes apart the way a
+ * pane of glass does, not the way a hand of cards does.
+ */
+function radiatingVectors(
+  cols: number,
+  rows: number,
+  spreadX: number,
+  spreadY: number,
+): ReadonlyArray<{ x: number; y: number; rotate: number }> {
+  return Array.from({ length: cols * rows }, (_, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const cx = cols > 1 ? col / (cols - 1) - 0.5 : 0;
+    const cy = rows > 1 ? row / (rows - 1) - 0.5 : 0;
+    return { x: cx * 2 * spreadX, y: cy * 2 * spreadY, rotate: cx * 18 };
+  });
+}
 
-function driftX(i: number): number {
-  return DRIFT_X[i % DRIFT_X.length] ?? 0;
+/** Desktop: full spread. Mobile halves it — the mobile matchMedia branch below, halving spread in
+    place of `DEPTH`, since SPLIT's own z-offset per tile is fixed inside `motion-system.ts` and
+    cannot be scaled per breakpoint without editing a frozen file. */
+const DESKTOP_VECTORS = radiatingVectors(4, 3, 150, 100);
+const MOBILE_VECTORS = radiatingVectors(3, 2, 75, 50);
+
+const DESKTOP_MODULE_X = [-210, -70, 70, 210] as const;
+const MOBILE_MODULE_X = [-100, -34, 34, 100] as const;
+
+interface Variant {
+  readonly tilesRoot: Element | null;
+  readonly vectors: ReadonlyArray<{ x: number; y: number; rotate: number }>;
+  readonly moduleX: ReadonlyArray<number>;
+  readonly vh: number;
 }
-function driftY(i: number): number {
-  return DRIFT_Y[i % DRIFT_Y.length] ?? 0;
-}
-function driftRotate(i: number): number {
-  return DRIFT_ROTATE[i % DRIFT_ROTATE.length] ?? 0;
+
+function buildVariant(ctx: SceneCtx, variant: Variant): void {
+  const { gsap } = ctx;
+  const heading = ctx.root.querySelector(`.${styles.headline}`);
+  const body = ctx.root.querySelector(`.${styles.body}`);
+  const depthGroup = ctx.root.querySelector(`.${local.depthGroup}`);
+  const tiles = gsap.utils.toArray<HTMLElement>('[data-tile]', variant.tilesRoot);
+  const moduleRow = ctx.root.querySelector(`.${local.moduleRow}`);
+  const moduleCards = gsap.utils.toArray<HTMLElement>(`.${local.moduleCard}`, ctx.root);
+  const outputLayer = ctx.root.querySelector(`.${local.outputLayer}`);
+
+  gsap.set(targets(heading, body), { autoAlpha: 0, y: 16 });
+  // The module cards start collapsed onto the shared centre point MORPH will reveal them at —
+  // MERGE later animates this same offset back to 0, which is what makes the convergence real
+  // rather than a card sliding a few pixels within its own flex gap.
+  gsap.set(moduleCards, { x: (i: number) => variant.moduleX[i] ?? 0 });
+
+  const tl = pinnedTimeline(ctx, { vh: variant.vh });
+
+  // HANDON — receiving the composition from Scene 05's finished run.
+  handon(tl, targets(depthGroup), { at: 0 });
+  tl.to(targets(heading, body), { autoAlpha: 1, y: 0, duration: 0.14, stagger: 0.04 }, 0);
+
+  // SPLIT — the picture comes apart into its tiles.
+  split(tl, tiles, { at: 0.22, duration: 0.34, vectors: variant.vectors });
+
+  // MORPH — the split picture becomes the four modules: a preview, its metadata, the real
+  // processing step, and the output it will produce.
+  morph(tl, targets(variant.tilesRoot), targets(moduleRow), { at: 0.56, duration: 0.22 });
+
+  // MERGE — the four modules converge on the centre they were already anchored to.
+  merge(tl, moduleCards, { at: 0.68, duration: 0.14 });
+
+  // MORPH — the converged modules become the finished, smaller file.
+  morph(tl, targets(moduleRow), targets(outputLayer), { at: 0.82, duration: 0.14 });
+
+  // SETTLE — the result comes to rest before the scene hands off.
+  settle(tl, targets(outputLayer), { at: 0.94, duration: 0.06 });
+
+  // HANDOFF — Scene 07 picks the composition back up.
+  handoff(tl, targets(depthGroup), { at: 0.94, duration: 0.06 });
 }
 
 export function Scene06Result(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
-    const { gsap } = ctx;
-    const heading = ctx.root.querySelector(`.${styles.headline}`);
-    const body = ctx.root.querySelector(`.${styles.body}`);
-    const row = ctx.root.querySelector(`.${styles.resultRow}`);
-    const before = ctx.root.querySelector(`.${styles.resultFile}[data-file='before']`);
-    const after = ctx.root.querySelector(`.${styles.resultFile}[data-file='after']`);
-    const arrow = ctx.root.querySelector(`.${styles.resultArrow}`);
-    const disassembleNodes = gsap.utils.toArray<HTMLElement>(`.${styles.disassembleNode}`);
+    const mm = ctx.gsap.matchMedia();
 
-    gsap.set(targets(heading, body), { autoAlpha: 0, y: 16 });
-    gsap.set(disassembleNodes, { autoAlpha: 1, x: 0, y: 0, rotate: 0 });
-    gsap.set(targets(before, arrow, after, row), { autoAlpha: 0 });
-    gsap.set(before, { y: 12 });
-    gsap.set(after, { y: 12, scale: 0.7 });
+    mm.add('(min-width: 900px)', () => {
+      const tilesRoot = ctx.root.querySelector('[data-role="tiles-desktop"]');
+      buildVariant(ctx, {
+        tilesRoot,
+        vectors: DESKTOP_VECTORS,
+        moduleX: DESKTOP_MODULE_X,
+        vh: 180,
+      });
+    });
 
-    const tl = pinnedTimeline(ctx, { vh: 180 });
-
-    tl.to(targets(heading, body), { autoAlpha: 1, y: 0, duration: 0.14, stagger: 0.04 }, 0)
-      .to(row, { autoAlpha: 1, duration: 0.1 }, 0.2)
-      .to(before, { autoAlpha: 1, y: 0, duration: 0.22 }, 0.22)
-      .to(arrow, { autoAlpha: 1, duration: 0.14 }, 0.42)
-      .to(after, { autoAlpha: 1, y: 0, scale: 1, duration: 0.24, ease: 'back.out(1.6)' }, 0.48)
-      // The run is over — the graph that made this one file comes apart.
-      .to(
-        disassembleNodes,
-        {
-          autoAlpha: 0,
-          x: driftX,
-          y: driftY,
-          rotate: driftRotate,
-          duration: 0.3,
-          stagger: 0.05,
-        },
-        0.78,
-      );
+    // Fewer tiles, a tighter spread, and a pin no longer than 140vh — not motion switched off,
+    // the same story told with less room to tell it in.
+    mm.add('(max-width: 899px)', () => {
+      const tilesRoot = ctx.root.querySelector('[data-role="tiles-mobile"]');
+      buildVariant(ctx, { tilesRoot, vectors: MOBILE_VECTORS, moduleX: MOBILE_MODULE_X, vh: 130 });
+    });
   });
 
   return (
@@ -84,38 +136,75 @@ export function Scene06Result(): ReactNode {
             {COPY.body}
           </p>
 
-          <div className={styles.resultRow} data-animate>
-            <div className={styles.resultFile} data-file="before">
-              <div
-                className={styles.resultSwatch}
-                style={{ width: 168, height: 84 }}
-                aria-hidden="true"
-              />
-              <span className={styles.resultMeta}>
-                {RESULT_BEFORE.name} · {RESULT_BEFORE.dims}
-              </span>
-            </div>
-            <span className={styles.resultArrow} aria-hidden="true">
-              →
-            </span>
-            <div className={styles.resultFile} data-file="after">
-              <div
-                className={styles.resultSwatch}
-                style={{ width: 42, height: 21 }}
-                aria-hidden="true"
-              />
-              <span className={styles.resultMeta}>
-                {RESULT_AFTER.name} · {RESULT_AFTER.dims}
-              </span>
-            </div>
-          </div>
+          <div className={local.visualStage}>
+            <div className={`${local.compose} u-stage`}>
+              <div className={`${local.depthGroup} u-depth`}>
+                <div className={local.tilesFrame} data-role="tiles-desktop" data-bp="desktop">
+                  <div className={local.tilesInner}>
+                    <PlateTiles cols={4} rows={3} />
+                  </div>
+                </div>
+                <div className={local.tilesFrame} data-role="tiles-mobile" data-bp="mobile">
+                  <div className={local.tilesInner}>
+                    <PlateTiles cols={3} rows={2} />
+                  </div>
+                </div>
 
-          <div className={styles.disassemble} aria-hidden="true">
-            {NODES.map((node) => (
-              <div key={node.id} className={styles.disassembleNode}>
-                <MiniNode name={node.name} category={categoryOf(node.id)} />
+                <div className={local.moduleRow} aria-hidden="true">
+                  <div className={local.moduleCard}>
+                    <span className={local.moduleLabel}>Preview</span>
+                    <Plate className={local.moduleSwatch ?? ''} />
+                  </div>
+                  <div className={local.moduleCard}>
+                    <span className={local.moduleLabel}>Metadata</span>
+                    <span className={local.moduleText}>
+                      {RESULT_BEFORE.name} · {RESULT_BEFORE.dims}
+                    </span>
+                  </div>
+                  <div className={local.moduleCard}>
+                    <span className={local.moduleLabel}>Step</span>
+                    <MiniNode name={RESIZE_NODE.name} category={categoryOf(RESIZE_NODE.id)} />
+                  </div>
+                  <div className={local.moduleCard}>
+                    <span className={local.moduleLabel}>Output</span>
+                    <span className={local.moduleText}>
+                      {RESULT_AFTER.name} · {RESULT_AFTER.dims}
+                    </span>
+                  </div>
+                </div>
+
+                <div className={local.outputLayer}>
+                  <Plate className={local.outputPlate ?? ''} />
+                  <span className={styles.resultMeta}>
+                    {RESULT_AFTER.name} · {RESULT_AFTER.dims}
+                  </span>
+                </div>
               </div>
-            ))}
+            </div>
+
+            <div className={local.staticResult}>
+              <div className={local.staticFile}>
+                <Plate style={{ width: 168 }} />
+                <span className={styles.resultMeta}>
+                  {RESULT_BEFORE.name} · {RESULT_BEFORE.dims}
+                </span>
+              </div>
+              <span className={styles.resultArrow} aria-hidden="true">
+                →
+              </span>
+              <div className={local.staticStep}>
+                <MiniNode name={RESIZE_NODE.name} category={categoryOf(RESIZE_NODE.id)} />
+              </div>
+              <span className={styles.resultArrow} aria-hidden="true">
+                →
+              </span>
+              <div className={local.staticFile}>
+                <Plate style={{ width: 42 }} />
+                <span className={styles.resultMeta}>
+                  {RESULT_AFTER.name} · {RESULT_AFTER.dims}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

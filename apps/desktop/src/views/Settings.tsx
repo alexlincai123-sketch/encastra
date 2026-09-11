@@ -9,6 +9,10 @@
  * it is not a control.** `preferences.ts` lists every preference that exists; nothing here
  * invents one. Where the honest answer is "there is nothing to configure" — telemetry, an
  * update channel, an account — this says so as a status, not a switch wired to nothing.
+ *
+ * Every word on this screen goes through `t()`, the same reactive path `Home.tsx` and
+ * `Palette.tsx` use: `useTranslation()` re-renders this tree whenever the active locale changes,
+ * so switching language in the Language category relabels this screen too, live, with no reload.
  */
 
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
@@ -22,7 +26,9 @@ import {
   type Locale,
   loadLocale,
   PLANNED_LOCALES,
+  translateIn,
   useI18n,
+  useTranslation,
 } from '../i18n';
 import { ipc } from '../ipc';
 import { PREFERENCE_KEYS, usePreferences } from '../preferences';
@@ -55,6 +61,7 @@ import {
   detectGpuRenderer,
   detectPlatform,
   diagnosticsToText,
+  renderDiagnostics,
 } from '../settings/diagnostics';
 import '../settings.css';
 import { useEditor } from '../store';
@@ -80,22 +87,31 @@ function Mark() {
 // --- Category sections -------------------------------------------------------------------
 
 function GeneralSection() {
+  const { t } = useTranslation();
   const startup = usePreferences((p) => p.startup);
   const set = usePreferences((p) => p.set);
 
   return (
-    <SettingCard title="Get started">
-      <SettingRow label="Welcome tour" hint="The guided first workflow, shown once on first run.">
-        <Button onClick={() => set('welcomeSeen', false)}>Show the welcome again</Button>
+    <SettingCard title={t('settings.general.title')}>
+      <SettingRow
+        label={t('settings.general.welcomeTour.label')}
+        hint={t('settings.general.welcomeTour.hint')}
+      >
+        <Button onClick={() => set('welcomeSeen', false)}>
+          {t('settings.general.welcomeTour.button')}
+        </Button>
       </SettingRow>
-      <SettingRow label="On startup" hint="What this application shows you when it opens.">
+      <SettingRow
+        label={t('settings.shared.startup.label')}
+        hint={t('settings.shared.startup.hint')}
+      >
         <Segmented
-          legend="On startup"
+          legend={t('settings.shared.startup.label')}
           value={startup}
           onChange={(value) => set('startup', value)}
           options={[
-            { value: 'home', label: 'Home' },
-            { value: 'last-project', label: 'Last project' },
+            { value: 'home', label: t('settings.shared.startup.options.home') },
+            { value: 'last-project', label: t('settings.shared.startup.options.lastProject') },
           ]}
         />
       </SettingRow>
@@ -104,38 +120,39 @@ function GeneralSection() {
 }
 
 function AppearanceSection() {
+  const { t } = useTranslation();
   const theme = usePreferences((p) => p.theme);
   const motion = usePreferences((p) => p.motion);
   const set = usePreferences((p) => p.set);
 
   return (
-    <SettingCard title="Appearance">
+    <SettingCard title={t('settings.appearance.title')}>
       <SettingRow
-        label="Theme"
-        hint="System follows your operating system. Light and dark stay fixed regardless of it."
+        label={t('settings.appearance.theme.label')}
+        hint={t('settings.appearance.theme.hint')}
       >
         <Segmented
-          legend="Theme"
+          legend={t('settings.appearance.theme.label')}
           value={theme}
           onChange={(value) => set('theme', value)}
           options={[
-            { value: 'system', label: 'System' },
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
+            { value: 'system', label: t('settings.appearance.theme.options.system') },
+            { value: 'light', label: t('settings.appearance.theme.options.light') },
+            { value: 'dark', label: t('settings.appearance.theme.options.dark') },
           ]}
         />
       </SettingRow>
       <SettingRow
-        label="Motion"
-        hint="Reduced turns transitions off entirely rather than shortening them, regardless of what your system prefers."
+        label={t('settings.appearance.motion.label')}
+        hint={t('settings.appearance.motion.hint')}
       >
         <Segmented
-          legend="Motion"
+          legend={t('settings.appearance.motion.label')}
           value={motion}
           onChange={(value) => set('motion', value)}
           options={[
-            { value: 'system', label: 'System' },
-            { value: 'reduced', label: 'Reduced' },
+            { value: 'system', label: t('settings.appearance.motion.options.system') },
+            { value: 'reduced', label: t('settings.appearance.motion.options.reduced') },
           ]}
         />
       </SettingRow>
@@ -145,7 +162,8 @@ function AppearanceSection() {
 
 /** Display names for the locales the architecture is ready for but nobody has translated yet.
  * `i18n/index.ts` has no reason to name a locale it cannot render — these live here, next to the
- * only place that shows them. */
+ * only place that shows them. Native-script proper nouns, the same as `LOCALE_NAMES` itself, so
+ * neither is translated. */
 const PLANNED_LOCALE_NAMES: Record<string, string> = {
   ja: '日本語',
   ko: '한국어',
@@ -153,7 +171,7 @@ const PLANNED_LOCALE_NAMES: Record<string, string> = {
 };
 
 function LanguageSection() {
-  const locale = useI18n((s) => s.locale);
+  const { t, locale } = useTranslation();
   const setLocale = useI18n((s) => s.setLocale);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +182,9 @@ function LanguageSection() {
     setError(null);
     loadLocale(next)
       .then(() => setLocale(next))
-      .catch(() => setError(`Could not load ${LOCALE_NAMES[next]}. Staying on the current one.`))
+      .catch(() =>
+        setError(t('settings.language.interface.loadError', { name: LOCALE_NAMES[next] })),
+      )
       .finally(() => setPending(false));
   };
 
@@ -172,24 +192,24 @@ function LanguageSection() {
 
   return (
     <>
-      <SettingCard title="Language">
+      <SettingCard title={t('settings.language.interface.title')}>
         <SettingRow
-          label="Interface language"
-          hint="Translates this application. English is always the fallback for anything not yet translated in the language you pick."
+          label={t('settings.language.interface.picker.label')}
+          hint={t('settings.language.interface.picker.hint')}
         >
           <Segmented
-            legend="Language"
+            legend={t('settings.language.interface.picker.label')}
             value={locale}
             onChange={choose}
             disabled={pending}
             options={LOCALES.map((code) => ({ value: code, label: LOCALE_NAMES[code] }))}
           />
         </SettingRow>
-        {pending ? <p className="s-note">Loading…</p> : null}
+        {pending ? <p className="s-note">{t('settings.language.interface.loading')}</p> : null}
         {error ? <p className="s-note">{error}</p> : null}
         <SettingRow
-          label="Coming later"
-          hint="The interface is structured to support these; nobody has translated them yet."
+          label={t('settings.language.interface.comingLater.label')}
+          hint={t('settings.language.interface.comingLater.hint')}
         >
           {PLANNED_LOCALES.map((code) => (
             <StatusPill key={code} tone="muted">
@@ -199,55 +219,61 @@ function LanguageSection() {
         </SettingRow>
       </SettingCard>
 
-      <SettingCard title="How this locale writes things">
-        <SettingRow label="Dates" hint="Today, in this locale's own order and words.">
+      <SettingCard title={t('settings.language.formatting.title')}>
+        <SettingRow
+          label={t('settings.language.formatting.dates.label')}
+          hint={t('settings.language.formatting.dates.hint')}
+        >
           <code>{formatDate(locale, now)}</code>
         </SettingRow>
-        <SettingRow label="Times" hint="The current time, in this locale's own convention.">
+        <SettingRow
+          label={t('settings.language.formatting.times.label')}
+          hint={t('settings.language.formatting.times.hint')}
+        >
           <code>{formatTime(locale, now)}</code>
         </SettingRow>
         <SettingRow
-          label="Numbers"
-          hint="An example number, grouped the way this locale groups them."
+          label={t('settings.language.formatting.numbers.label')}
+          hint={t('settings.language.formatting.numbers.hint')}
         >
           <code>{formatNumber(locale, 1234567.89)}</code>
         </SettingRow>
-        <p className="s-note">
-          Every date, time and number this application shows follows the language above — there is
-          no separate format to choose, the same way there is not in most software that gets this
-          right.
-        </p>
+        <p className="s-note">{t('settings.language.formatting.note')}</p>
       </SettingCard>
     </>
   );
 }
 
 function WorkspaceSection() {
+  const { t } = useTranslation();
   const startup = usePreferences((p) => p.startup);
   const lastProjectPath = usePreferences((p) => p.lastProjectPath);
   const set = usePreferences((p) => p.set);
 
   return (
-    <SettingCard title="Startup">
-      <SettingRow label="On startup" hint="What this application shows you when it opens.">
+    <SettingCard title={t('settings.workspace.title')}>
+      <SettingRow
+        label={t('settings.shared.startup.label')}
+        hint={t('settings.shared.startup.hint')}
+      >
         <Segmented
-          legend="On startup"
+          legend={t('settings.shared.startup.label')}
           value={startup}
           onChange={(value) => set('startup', value)}
           options={[
-            { value: 'home', label: 'Home' },
-            { value: 'last-project', label: 'Last project' },
+            { value: 'home', label: t('settings.shared.startup.options.home') },
+            { value: 'last-project', label: t('settings.shared.startup.options.lastProject') },
           ]}
         />
       </SettingRow>
       <SettingRow
-        label="Last project"
-        hint="Recorded automatically whenever you open or save one. Used when On startup is set to Last project — one that has since moved or been deleted is quietly forgotten rather than shown as an error."
+        label={t('settings.workspace.lastProject.label')}
+        hint={t('settings.workspace.lastProject.hint')}
       >
         {lastProjectPath ? (
           <code>{lastProjectPath}</code>
         ) : (
-          <StatusPill tone="muted">None yet</StatusPill>
+          <StatusPill tone="muted">{t('settings.workspace.lastProject.none')}</StatusPill>
         )}
       </SettingRow>
     </SettingCard>
@@ -255,6 +281,7 @@ function WorkspaceSection() {
 }
 
 function ProjectsSection() {
+  const { t } = useTranslation();
   const projectFolder = usePreferences((p) => p.projectFolder);
   const set = usePreferences((p) => p.set);
   const about = useEditor((s) => s.about);
@@ -267,70 +294,72 @@ function ProjectsSection() {
 
   return (
     <>
-      <SettingCard title="Where they open from">
+      <SettingCard title={t('settings.projects.location.title')}>
         <SettingRow
-          label="Default project folder"
-          hint="Where the save dialog starts. Left empty, it opens wherever the system last was."
+          label={t('settings.projects.location.label')}
+          hint={t('settings.projects.location.hint')}
           htmlFor="pref-project-folder"
         >
           <FolderField
             id="pref-project-folder"
             value={projectFolder}
-            placeholder="No default folder set"
+            placeholder={t('settings.projects.location.placeholder')}
             onChange={(value) => set('projectFolder', value)}
             onBrowse={browse}
             browseDisabled={!ipc.live}
-            browseTitle={
-              ipc.live ? undefined : 'Needs the desktop runtime, not this browser preview'
-            }
+            browseLabel={t('settings.projects.location.browse')}
+            browseTitle={ipc.live ? undefined : t('settings.projects.location.browseUnavailable')}
           />
         </SettingRow>
       </SettingCard>
 
-      <SettingCard title="Format">
-        <SettingRow label="Project file format" hint="What a saved .encastra file is written as.">
-          <code>schema {about?.projectSchema ?? '?'}</code>
+      <SettingCard title={t('settings.projects.format.title')}>
+        <SettingRow
+          label={t('settings.projects.format.label')}
+          hint={t('settings.shared.projectFormatHint')}
+        >
+          <code>{t('settings.shared.schemaValue', { value: about?.projectSchema ?? '?' })}</code>
         </SettingRow>
       </SettingCard>
 
-      <SettingCard title="Not built yet">
-        <p className="s-copy">
-          There is no recent-projects list. Settings are per machine rather than per project — a
-          project opened on a different machine does not carry its own preferences with it, only the
-          graph itself.
-        </p>
+      <SettingCard title={t('settings.projects.notBuilt.title')}>
+        <p className="s-copy">{t('settings.projects.notBuilt.copy')}</p>
       </SettingCard>
     </>
   );
 }
 
-const SHORTCUTS: readonly { readonly keys: string; readonly action: string }[] = [
-  {
-    keys: 'Ctrl / Cmd + Enter',
-    action: 'Run the workflow, or start watching if it opens with a trigger',
-  },
-  { keys: 'Ctrl / Cmd + S', action: 'Save' },
-  { keys: 'Ctrl / Cmd + Shift + S', action: 'Save as' },
-  { keys: 'Ctrl / Cmd + O', action: 'Open a project' },
-  { keys: 'Ctrl / Cmd + Z', action: 'Undo' },
-  { keys: 'Ctrl / Cmd + Shift + Z', action: 'Redo' },
-  { keys: 'Ctrl / Cmd + Y', action: 'Redo' },
-  { keys: 'Ctrl / Cmd + C', action: 'Copy the selection' },
-  { keys: 'Ctrl / Cmd + V', action: 'Paste' },
-  { keys: 'Ctrl / Cmd + D', action: 'Duplicate the selection' },
-  { keys: 'Ctrl / Cmd + A', action: 'Select all' },
-  { keys: 'Delete / Backspace', action: 'Delete the selection' },
+/** One entry per row of the shortcuts table. `keys` is a literal key combination, not natural
+ * language, and stays as written in every locale — the same reasoning that keeps `.encastra` and
+ * file paths untranslated elsewhere on this screen. `actionKey` is looked up in
+ * `settings.editor.shortcuts.actions` at render time, so the description of what the shortcut
+ * does is translated like everything else. */
+const SHORTCUTS: readonly { readonly keys: string; readonly actionKey: string }[] = [
+  { keys: 'Ctrl / Cmd + Enter', actionKey: 'runOrWatch' },
+  { keys: 'Ctrl / Cmd + S', actionKey: 'save' },
+  { keys: 'Ctrl / Cmd + Shift + S', actionKey: 'saveAs' },
+  { keys: 'Ctrl / Cmd + O', actionKey: 'openProject' },
+  { keys: 'Ctrl / Cmd + Z', actionKey: 'undo' },
+  { keys: 'Ctrl / Cmd + Shift + Z', actionKey: 'redo' },
+  { keys: 'Ctrl / Cmd + Y', actionKey: 'redo' },
+  { keys: 'Ctrl / Cmd + C', actionKey: 'copySelection' },
+  { keys: 'Ctrl / Cmd + V', actionKey: 'paste' },
+  { keys: 'Ctrl / Cmd + D', actionKey: 'duplicateSelection' },
+  { keys: 'Ctrl / Cmd + A', actionKey: 'selectAll' },
+  { keys: 'Delete / Backspace', actionKey: 'deleteSelection' },
 ];
 
 function EditorSection() {
+  const { t } = useTranslation();
+
   return (
     <>
-      <SettingCard title="Keyboard shortcuts">
+      <SettingCard title={t('settings.editor.shortcuts.title')}>
         <table className="table">
           <thead>
             <tr>
-              <th>Shortcut</th>
-              <th>Action</th>
+              <th>{t('settings.editor.shortcuts.table.shortcut')}</th>
+              <th>{t('settings.editor.shortcuts.table.action')}</th>
             </tr>
           </thead>
           <tbody>
@@ -339,67 +368,62 @@ function EditorSection() {
                 <td>
                   <code>{shortcut.keys}</code>
                 </td>
-                <td>{shortcut.action}</td>
+                <td>{t(`settings.editor.shortcuts.actions.${shortcut.actionKey}`)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <p className="s-note">
-          Fixed today rather than remappable. None of these fire while you are typing into a text
-          field.
-        </p>
+        <p className="s-note">{t('settings.editor.shortcuts.note')}</p>
       </SettingCard>
 
-      <SettingCard title="Not built yet">
-        <p className="s-copy">
-          Autosave, a configurable save interval, and customising the shortcuts above are not built
-          yet.
-        </p>
+      <SettingCard title={t('settings.editor.notBuilt.title')}>
+        <p className="s-copy">{t('settings.editor.notBuilt.copy')}</p>
       </SettingCard>
     </>
   );
 }
 
 function CanvasSection() {
+  const { t } = useTranslation();
   const showGrid = usePreferences((p) => p.showGrid);
   const snapToGrid = usePreferences((p) => p.snapToGrid);
   const showMinimap = usePreferences((p) => p.showMinimap);
   const set = usePreferences((p) => p.set);
 
   return (
-    <SettingCard title="Canvas">
+    <SettingCard title={t('settings.canvas.title')}>
       <SettingRow
-        label="Grid"
-        hint="Shows the alignment grid behind nodes on the canvas."
+        label={t('settings.canvas.grid.label')}
+        hint={t('settings.canvas.grid.hint')}
         htmlFor="pref-show-grid"
       >
         <Toggle
           id="pref-show-grid"
-          label="Grid"
+          label={t('settings.canvas.grid.label')}
           checked={showGrid}
           onChange={(value) => set('showGrid', value)}
         />
       </SettingRow>
       <SettingRow
-        label="Snap to grid"
-        hint="Nodes settle onto the grid as you drag them, instead of landing free."
+        label={t('settings.canvas.snapToGrid.label')}
+        hint={t('settings.canvas.snapToGrid.hint')}
         htmlFor="pref-snap-to-grid"
       >
         <Toggle
           id="pref-snap-to-grid"
-          label="Snap to grid"
+          label={t('settings.canvas.snapToGrid.label')}
           checked={snapToGrid}
           onChange={(value) => set('snapToGrid', value)}
         />
       </SettingRow>
       <SettingRow
-        label="Minimap"
-        hint="A small overview of the whole graph in the corner of the canvas."
+        label={t('settings.canvas.minimap.label')}
+        hint={t('settings.canvas.minimap.hint')}
         htmlFor="pref-show-minimap"
       >
         <Toggle
           id="pref-show-minimap"
-          label="Minimap"
+          label={t('settings.canvas.minimap.label')}
           checked={showMinimap}
           onChange={(value) => set('showMinimap', value)}
         />
@@ -409,85 +433,93 @@ function CanvasSection() {
 }
 
 function RuntimeSection() {
+  const { t } = useTranslation();
   const openRunPanelOnRun = usePreferences((p) => p.openRunPanelOnRun);
   const set = usePreferences((p) => p.set);
 
   return (
     <>
-      <SettingCard title="Runs">
+      <SettingCard title={t('settings.runtime.runs.title')}>
         <SettingRow
-          label="Open the run panel"
-          hint="Bring the execution panel forward automatically the moment a run starts."
+          label={t('settings.runtime.runs.openRunPanel.label')}
+          hint={t('settings.runtime.runs.openRunPanel.hint')}
           htmlFor="pref-run-panel"
         >
           <Toggle
             id="pref-run-panel"
-            label="Open the run panel on run"
+            label={t('settings.runtime.runs.openRunPanel.toggleLabel')}
             checked={openRunPanelOnRun}
             onChange={(value) => set('openRunPanelOnRun', value)}
           />
         </SettingRow>
         <SettingRow
-          label="Runtime"
-          hint="Whether a real Encastra runtime is attached to this window."
+          label={t('settings.shared.runtimeStatus.label')}
+          hint={t('settings.shared.runtimeStatus.hint')}
         >
           <StatusPill tone={ipc.live ? 'ok' : 'warn'}>
-            {ipc.live ? 'Attached' : 'Not attached — browser preview'}
+            {ipc.live
+              ? t('settings.shared.runtimeStatus.attached')
+              : t('settings.shared.runtimeStatus.notAttached')}
           </StatusPill>
         </SettingRow>
       </SettingCard>
 
-      <SettingCard title="Not built yet">
-        <p className="s-copy">
-          Running steps in parallel, execution timeouts, retry limits and per-run resource limits
-          are not configurable. A workflow runs its steps in the order validation settled on, to
-          completion or failure, with whatever time and memory the machine gives it.
-        </p>
+      <SettingCard title={t('settings.runtime.notBuilt.title')}>
+        <p className="s-copy">{t('settings.runtime.notBuilt.copy')}</p>
       </SettingCard>
     </>
   );
 }
 
 function ComponentsSection({ onOpenSecurity }: { onOpenSecurity: () => void }) {
+  const { t } = useTranslation();
   const manifests = useEditor((s) => s.manifests);
   const summary = summarizeComponents(manifests);
   const all = Object.values(manifests).sort((a, b) => a.id.localeCompare(b.id));
 
   return (
     <>
-      <SettingCard title="Installed">
+      <SettingCard title={t('settings.components.installed.title')}>
         <SettingRow
-          label="Components"
-          hint="Everything this build ships with, built in rather than downloaded."
+          label={t('settings.components.installed.components.label')}
+          hint={t('settings.components.installed.components.hint')}
         >
-          <StatusPill tone="ok">{summary.core} built in</StatusPill>
+          <StatusPill tone="ok">
+            {t('settings.components.installed.components.builtIn', { count: summary.core })}
+          </StatusPill>
         </SettingRow>
         <SettingRow
-          label="Third-party"
-          hint="Components from outside this application, run in a sandbox with no ambient authority."
+          label={t('settings.components.installed.thirdParty.label')}
+          hint={t('settings.components.installed.thirdParty.hint')}
         >
           {summary.thirdParty > 0 ? (
-            <StatusPill tone="ok">{summary.thirdParty} installed</StatusPill>
+            <StatusPill tone="ok">
+              {t('settings.components.installed.thirdParty.installed', {
+                count: summary.thirdParty,
+              })}
+            </StatusPill>
           ) : (
-            <StatusPill tone="muted">Sandbox not built yet</StatusPill>
+            <StatusPill tone="muted">
+              {t('settings.components.installed.thirdParty.notBuilt')}
+            </StatusPill>
           )}
         </SettingRow>
         <SettingRow
-          label="Full permission table"
-          hint="Every installed component, its version, and exactly what it can reach."
+          label={t('settings.components.installed.permissionTable.label')}
+          hint={t('settings.components.installed.permissionTable.hint')}
         >
-          <Button onClick={onOpenSecurity}>Open Security</Button>
+          <Button onClick={onOpenSecurity}>{t('settings.shared.openSecurity')}</Button>
         </SettingRow>
       </SettingCard>
 
-      <SettingCard title="Every component, and what it can reach">
+      <SettingCard title={t('settings.components.table.title')}>
         <table className="table">
           <thead>
             <tr>
-              <th>Component</th>
-              <th>Version</th>
-              <th>Source</th>
-              <th>Can reach</th>
+              <th>{t('settings.components.table.headers.component')}</th>
+              <th>{t('settings.components.table.headers.version')}</th>
+              <th>{t('settings.components.table.headers.source')}</th>
+              <th>{t('settings.components.table.headers.canReach')}</th>
             </tr>
           </thead>
           <tbody>
@@ -503,12 +535,14 @@ function ComponentsSection({ onOpenSecurity }: { onOpenSecurity: () => void }) {
                   <td>{manifest.version}</td>
                   <td>
                     <span className="badge badge--ok">
-                      {manifest.kind === 'core' ? 'built in' : 'third-party'}
+                      {manifest.kind === 'core'
+                        ? t('settings.components.table.kind.core')
+                        : t('settings.components.table.kind.thirdParty')}
                     </span>
                   </td>
                   <td>
                     {reach.length === 0 ? (
-                      <span className="table__none">nothing</span>
+                      <span className="table__none">{t('settings.components.table.none')}</span>
                     ) : (
                       reach.map((capability) => (
                         <span
@@ -516,7 +550,7 @@ function ComponentsSection({ onOpenSecurity }: { onOpenSecurity: () => void }) {
                           key={capability.kind}
                           title={capability.reason}
                         >
-                          {capabilityLabel(capability.kind)}
+                          {capabilityLabel(capability.kind, t)}
                         </span>
                       ))
                     )}
@@ -526,19 +560,18 @@ function ComponentsSection({ onOpenSecurity }: { onOpenSecurity: () => void }) {
             })}
           </tbody>
         </table>
-        <p className="s-note">
-          Nothing outside this list is installed, and nothing here can reach anything its own row
-          does not name — no arbitrary file access, no shell, no network beyond what is listed.
-        </p>
+        <p className="s-note">{t('settings.components.table.note')}</p>
       </SettingCard>
 
-      <SettingCard title="Install more">
-        <SettingRow label="Install from a file" hint="Add a third-party component to this build.">
-          <StatusPill tone="muted">Not built yet</StatusPill>
+      <SettingCard title={t('settings.components.installMore.title')}>
+        <SettingRow
+          label={t('settings.components.installMore.installFromFile.label')}
+          hint={t('settings.components.installMore.installFromFile.hint')}
+        >
+          <StatusPill tone="muted">{t('settings.shared.notBuilt')}</StatusPill>
         </SettingRow>
         <p className="s-note">
-          The sandbox this would run components in is designed and documented but not built, so
-          nothing outside the {summary.total} listed above can be installed yet.
+          {t('settings.components.installMore.note', { count: summary.total })}
         </p>
       </SettingCard>
     </>
@@ -546,92 +579,93 @@ function ComponentsSection({ onOpenSecurity }: { onOpenSecurity: () => void }) {
 }
 
 function SecuritySection({ onOpenSecurity }: { onOpenSecurity: () => void }) {
+  const { t } = useTranslation();
   const grants = useEditor((s) => s.grants);
   const grantCount = countGrants(grants);
 
   return (
-    <SettingCard title="Permission model">
-      <p className="s-copy">
-        A component cannot reach your files, your network, or your clipboard unless its manifest
-        declares it and you allow it — once per run. Every request, allowed or refused, is recorded
-        where you can read it.
-      </p>
-      <SettingRow label="Signing" hint="Whether this build can prove who produced it.">
-        <StatusPill tone="warn">Not signed</StatusPill>
-      </SettingRow>
+    <SettingCard title={t('settings.security.title')}>
+      <p className="s-copy">{t('settings.security.copy')}</p>
       <SettingRow
-        label="Third-party components"
-        hint="Whether anything outside this build can be installed and run."
+        label={t('settings.shared.signing.label')}
+        hint={t('settings.shared.signing.hint')}
       >
-        <StatusPill tone="muted">Not possible yet — the sandbox is not built</StatusPill>
+        <StatusPill tone="warn">{t('settings.shared.signing.status')}</StatusPill>
       </SettingRow>
       <SettingRow
-        label="Allowed in the open workflow"
-        hint="Cleared the moment this application closes."
+        label={t('settings.security.thirdParty.label')}
+        hint={t('settings.security.thirdParty.hint')}
+      >
+        <StatusPill tone="muted">{t('settings.security.thirdParty.status')}</StatusPill>
+      </SettingRow>
+      <SettingRow
+        label={t('settings.security.allowedInOpenWorkflow.label')}
+        hint={t('settings.security.allowedInOpenWorkflow.hint')}
       >
         <StatusPill tone={grantCount > 0 ? 'warn' : 'ok'}>
-          {grantCount === 0 ? 'Nothing allowed' : `${grantCount} allowed`}
+          {grantCount === 0
+            ? t('settings.security.allowedInOpenWorkflow.nothingAllowed')
+            : t('settings.security.allowedInOpenWorkflow.allowed', { count: grantCount })}
         </StatusPill>
       </SettingRow>
       <SettingRow
-        label="Full detail"
-        hint="What was allowed, to what, and what this does not protect against."
+        label={t('settings.security.fullDetail.label')}
+        hint={t('settings.security.fullDetail.hint')}
       >
-        <Button onClick={onOpenSecurity}>Open Security</Button>
+        <Button onClick={onOpenSecurity}>{t('settings.shared.openSecurity')}</Button>
       </SettingRow>
     </SettingCard>
   );
 }
 
 function PrivacySection() {
+  const { t } = useTranslation();
+
   return (
     <>
-      <SettingCard title="What this application could collect, and does not">
+      <SettingCard title={t('settings.privacy.collect.title')}>
         <SettingRow
-          label="Telemetry"
-          hint="Usage data — which features get used, how often — sent to a server so a team could prioritise its work."
+          label={t('settings.privacy.collect.telemetry.label')}
+          hint={t('settings.privacy.collect.telemetry.hint')}
         >
-          <StatusPill tone="ok">None collected</StatusPill>
+          <StatusPill tone="ok">{t('settings.shared.noneCollected')}</StatusPill>
         </SettingRow>
         <SettingRow
-          label="Crash reports"
-          hint="A stack trace and a build version, sent automatically when something fails, so it could be fixed without you filing it yourself."
+          label={t('settings.privacy.collect.crashReports.label')}
+          hint={t('settings.privacy.collect.crashReports.hint')}
         >
-          <StatusPill tone="ok">None collected</StatusPill>
+          <StatusPill tone="ok">{t('settings.shared.noneCollected')}</StatusPill>
         </SettingRow>
         <SettingRow
-          label="Usage analytics"
-          hint="Feature counts, session length, or anything else that would turn how you use this application into a number on someone else's dashboard."
+          label={t('settings.privacy.collect.analytics.label')}
+          hint={t('settings.privacy.collect.analytics.hint')}
         >
-          <StatusPill tone="ok">None collected</StatusPill>
+          <StatusPill tone="ok">{t('settings.shared.noneCollected')}</StatusPill>
         </SettingRow>
-        <p className="s-note">
-          All three would need a server to send to. There is none — an "off" switch here would imply
-          a mechanism that does not exist.
-        </p>
+        <p className="s-note">{t('settings.privacy.collect.note')}</p>
       </SettingCard>
 
-      <SettingCard title="Account">
+      <SettingCard title={t('settings.privacy.account.title')}>
         <SettingRow
-          label="Sign-in"
-          hint="An identity tied to this application, the way most software with a server asks for one."
+          label={t('settings.privacy.account.signIn.label')}
+          hint={t('settings.privacy.account.signIn.hint')}
         >
-          <StatusPill tone="ok">None — there is no server to sign in to</StatusPill>
+          <StatusPill tone="ok">{t('settings.privacy.account.signIn.status')}</StatusPill>
         </SettingRow>
       </SettingCard>
 
-      <SettingCard title="Your data">
+      <SettingCard title={t('settings.privacy.yourData.title')}>
         <SettingRow
-          label="Projects"
-          hint="Kept as .encastra files wherever you save them. No hidden second copy."
+          label={t('settings.privacy.yourData.projects.label')}
+          hint={t('settings.privacy.yourData.projects.hint')}
         >
-          <StatusPill tone="ok">Stays on this machine</StatusPill>
+          <StatusPill tone="ok">{t('settings.privacy.yourData.projects.status')}</StatusPill>
         </SettingRow>
         <SettingRow
-          label="Run journals"
-          hint="Record sizes and shapes, never file contents. Held in memory while the window is open."
+          label={t('settings.privacy.yourData.runJournals.label')}
+          hint={t('settings.privacy.yourData.runJournals.hint')}
         >
-          <StatusPill tone="ok">Discarded on close</StatusPill>
+          <StatusPill tone="ok">{t('settings.privacy.yourData.runJournals.status')}</StatusPill>
         </SettingRow>
       </SettingCard>
     </>
@@ -639,122 +673,101 @@ function PrivacySection() {
 }
 
 function NotificationsSection() {
+  const { t } = useTranslation();
   const notifications = useEditor((s) => s.notifications);
 
   return (
     <>
-      <SettingCard title="In this window">
+      <SettingCard title={t('settings.notifications.window.title')}>
         <SettingRow
-          label="Toast notifications"
-          hint="A workflow can ask to show one, using the same system.notify capability as any other permission — declared in its manifest and allowed before anything appears."
+          label={t('settings.notifications.window.toast.label')}
+          hint={t('settings.notifications.window.toast.hint')}
         >
-          <StatusPill tone="ok">{notifications.length} shown this session</StatusPill>
+          <StatusPill tone="ok">
+            {t('settings.notifications.window.toast.shown', { count: notifications.length })}
+          </StatusPill>
         </SettingRow>
-        <p className="s-note">
-          Up to the most recent 20 are kept while the window is open; dismissing them clears the
-          list. Closing the application forgets them, the same as everything else that is not a
-          saved project.
-        </p>
+        <p className="s-note">{t('settings.notifications.window.note')}</p>
       </SettingCard>
 
-      <SettingCard title="Not built yet">
-        <p className="s-copy">
-          There is no operating-system notification permission, no email, and no push notification —
-          nothing reaches you outside this window. A history of past notifications beyond the
-          current session is not built either.
-        </p>
+      <SettingCard title={t('settings.notifications.notBuilt.title')}>
+        <p className="s-copy">{t('settings.notifications.notBuilt.copy')}</p>
       </SettingCard>
     </>
   );
 }
 
 function FilesSection() {
+  const { t } = useTranslation();
+
   return (
     <>
-      <SettingCard title="What lives on disk">
+      <SettingCard title={t('settings.files.disk.title')}>
         <dl className="kv kv--wide">
-          <dt>Projects</dt>
+          <dt>{t('settings.files.disk.projects.term')}</dt>
           <dd>
-            <code>.encastra</code> files, wherever you choose to save them — see Projects for the
-            default folder.
+            <code>.encastra</code> {t('settings.files.disk.projects.detail')}
           </dd>
-          <dt>Preferences</dt>
-          <dd>
-            Browser storage in this application's own origin, not a file you can open directly.
-          </dd>
-          <dt>Component data</dt>
-          <dd>
-            None. Every component in this build is compiled in; nothing is downloaded or cached.
-          </dd>
-          <dt>Logs</dt>
-          <dd>
-            None written to disk. A run journal is held in memory while the window is open and
-            discarded when it closes.
-          </dd>
+          <dt>{t('settings.files.disk.preferences.term')}</dt>
+          <dd>{t('settings.files.disk.preferences.detail')}</dd>
+          <dt>{t('settings.files.disk.componentData.term')}</dt>
+          <dd>{t('settings.files.disk.componentData.detail')}</dd>
+          <dt>{t('settings.files.disk.logs.term')}</dt>
+          <dd>{t('settings.files.disk.logs.detail')}</dd>
         </dl>
       </SettingCard>
 
-      <SettingCard title="Not built yet">
-        <p className="s-copy">
-          There is no import or export of settings, and no way to move preferences between machines
-          short of setting them again there. A project itself is already portable — it is one file —
-          but the preferences on this screen are not.
-        </p>
+      <SettingCard title={t('settings.files.notBuilt.title')}>
+        <p className="s-copy">{t('settings.files.notBuilt.copy')}</p>
       </SettingCard>
     </>
   );
 }
 
 function UpdatesSection() {
+  const { t } = useTranslation();
   const about = useEditor((s) => s.about);
 
   return (
     <>
-      <SettingCard title="This build">
-        <SettingRow label="Version" hint="The build you are running.">
-          <code>{about?.version ?? 'unknown'}</code>
+      <SettingCard title={t('settings.updates.thisBuild.title')}>
+        <SettingRow
+          label={t('settings.shared.version.label')}
+          hint={t('settings.shared.version.hint')}
+        >
+          <code>{about?.version ?? t('settings.shared.version.unknown')}</code>
         </SettingRow>
         <SettingRow
-          label="How a newer one reaches this machine"
-          hint="What happens when a new version ships."
+          label={t('settings.updates.thisBuild.channel.label')}
+          hint={t('settings.updates.thisBuild.channel.hint')}
         >
-          <span className="s-fact">
-            No update channel. Updating means downloading a fresh installer and replacing this one.
-          </span>
+          <span className="s-fact">{t('settings.updates.thisBuild.channel.fact')}</span>
         </SettingRow>
       </SettingCard>
 
-      <SettingCard title="Verifying what you install">
-        <p className="s-copy">
-          Builds are not code-signed, so Windows will warn about an unrecognised publisher — an
-          accurate warning, since nothing here proves who produced the file. Each release publishes
-          a SHA-256 hash instead, to check an installer against before running it.
-        </p>
+      <SettingCard title={t('settings.updates.verify.title')}>
+        <p className="s-copy">{t('settings.updates.verify.copy')}</p>
       </SettingCard>
 
-      <SettingCard title="Not built yet">
-        <p className="s-copy">
-          Automatic update checks, update channels as a working mechanism, and background downloads
-          are not built. Checking for a new version today means checking by hand.
-        </p>
+      <SettingCard title={t('settings.updates.notBuilt.title')}>
+        <p className="s-copy">{t('settings.updates.notBuilt.copy')}</p>
       </SettingCard>
     </>
   );
 }
 
 function AccountSection() {
+  const { t } = useTranslation();
+
   return (
-    <SettingCard title="No accounts">
-      <p className="s-copy">
-        There is no sign-in, no account, and no server for one to talk to. Nothing here has a
-        subscription, a plan, a session, or a list of devices to manage — every project and every
-        preference on this screen lives on this machine, and only on this machine.
-      </p>
+    <SettingCard title={t('settings.account.title')}>
+      <p className="s-copy">{t('settings.account.copy')}</p>
     </SettingCard>
   );
 }
 
 function DeveloperSection() {
+  const { t } = useTranslation();
   const developerMode = usePreferences((p) => p.developerMode);
   const set = usePreferences((p) => p.set);
   const resetAll = usePreferences((p) => p.resetAll);
@@ -775,15 +788,15 @@ function DeveloperSection() {
 
   return (
     <>
-      <SettingCard title="Internals">
+      <SettingCard title={t('settings.developer.internals.title')}>
         <SettingRow
-          label="Developer mode"
-          hint="Surfaces the raw preference values and a compact summary of every loaded component, below."
+          label={t('settings.developer.internals.developerMode.label')}
+          hint={t('settings.developer.internals.developerMode.hint')}
           htmlFor="pref-developer-mode"
         >
           <Toggle
             id="pref-developer-mode"
-            label="Developer mode"
+            label={t('settings.developer.internals.developerMode.label')}
             checked={developerMode}
             onChange={(value) => set('developerMode', value)}
           />
@@ -792,28 +805,27 @@ function DeveloperSection() {
 
       {developerMode ? (
         <>
-          <SettingCard title="Current preferences">
+          <SettingCard title={t('settings.developer.currentPreferences.title')}>
             <Pre>{JSON.stringify(preferenceValues, null, 2)}</Pre>
           </SettingCard>
-          <SettingCard title="Loaded components">
+          <SettingCard title={t('settings.developer.loadedComponents.title')}>
             <Pre>{JSON.stringify(componentSummary, null, 2)}</Pre>
           </SettingCard>
         </>
       ) : (
-        <SettingCard title="Currently hidden">
-          <p className="s-copy">
-            Turn on developer mode above to see the raw preference values and a summary of every
-            loaded component.
-          </p>
+        <SettingCard title={t('settings.developer.hidden.title')}>
+          <p className="s-copy">{t('settings.developer.hidden.copy')}</p>
         </SettingCard>
       )}
 
-      <SettingCard title="Reset">
+      <SettingCard title={t('settings.developer.reset.title')}>
         <SettingRow
-          label="Restore defaults"
-          hint="Puts every setting on this screen back to how it was on first run. Does not touch your projects, grants, or installed components."
+          label={t('settings.developer.reset.restoreDefaults.label')}
+          hint={t('settings.developer.reset.restoreDefaults.hint')}
         >
-          <DangerButton onClick={resetAll}>Reset all settings</DangerButton>
+          <DangerButton onClick={resetAll}>
+            {t('settings.developer.reset.restoreDefaults.button')}
+          </DangerButton>
         </SettingRow>
       </SettingCard>
     </>
@@ -821,6 +833,7 @@ function DeveloperSection() {
 }
 
 function DiagnosticsSection() {
+  const { t } = useTranslation();
   const about = useEditor((s) => s.about);
   const manifests = useEditor((s) => s.manifests);
   const [gpu] = useState<string | null>(() => detectGpuRenderer());
@@ -833,6 +846,18 @@ function DiagnosticsSection() {
   }, [copyState]);
 
   const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  // The card says two different things at once, on purpose.
+  //
+  // What is on screen is in the reader's language, like every other category — a table of
+  // English rows under translated headings would have been the one part of Settings that never
+  // changed. What the Copy and Export buttons hand over is English, because a diagnostics report
+  // is pasted into a bug tracker where anybody on the project has to be able to read it, and a
+  // report nobody can read is worse than one in a language the reporter did not choose.
+  //
+  // `assembleDiagnostics` returns keys rather than text so the same rows can be rendered twice,
+  // and the note under the buttons says plainly that the report is in English. Both of those
+  // matter: a promise of "exactly as shown" that had quietly stopped being true would be worse
+  // than either behaviour on its own.
   const rows = assembleDiagnostics({
     about,
     manifests,
@@ -842,7 +867,8 @@ function DiagnosticsSection() {
     architecture: detectArchitecture(userAgent),
     gpu,
   });
-  const text = diagnosticsToText(rows);
+  const shown = renderDiagnostics(rows, t);
+  const text = diagnosticsToText(renderDiagnostics(rows, (key) => translateIn('en', key)));
 
   const onCopy = () => {
     if (typeof navigator === 'undefined' || !navigator.clipboard) {
@@ -871,9 +897,9 @@ function DiagnosticsSection() {
 
   return (
     <>
-      <SettingCard title="This machine and this build">
+      <SettingCard title={t('settings.diagnostics.machine.title')}>
         <dl className="kv kv--wide">
-          {rows.map((row) => (
+          {shown.map((row) => (
             <Fragment key={row.label}>
               <dt>{row.label}</dt>
               <dd>{row.value}</dd>
@@ -882,84 +908,107 @@ function DiagnosticsSection() {
         </dl>
       </SettingCard>
 
-      <SettingCard title="Share it">
-        <SettingRow label="Copy" hint="Copies every line above to the clipboard, exactly as shown.">
-          <Button onClick={onCopy}>Copy</Button>
-          {copyState === 'copied' ? <StatusPill tone="ok">Copied</StatusPill> : null}
-          {copyState === 'failed' ? <StatusPill tone="warn">Could not copy</StatusPill> : null}
+      <SettingCard title={t('settings.diagnostics.share.title')}>
+        <SettingRow
+          label={t('settings.diagnostics.share.copy.label')}
+          hint={t('settings.diagnostics.share.copy.hint')}
+        >
+          <Button onClick={onCopy}>{t('settings.diagnostics.share.copy.button')}</Button>
+          {copyState === 'copied' ? (
+            <StatusPill tone="ok">{t('settings.diagnostics.share.copy.copied')}</StatusPill>
+          ) : null}
+          {copyState === 'failed' ? (
+            <StatusPill tone="warn">{t('settings.diagnostics.share.copy.failed')}</StatusPill>
+          ) : null}
         </SettingRow>
-        <SettingRow label="Export" hint="Saves the same report as a text file.">
-          <Button onClick={onExport}>Export…</Button>
+        <SettingRow
+          label={t('settings.diagnostics.share.export.label')}
+          hint={t('settings.diagnostics.share.export.hint')}
+        >
+          <Button onClick={onExport}>{t('settings.diagnostics.share.export.button')}</Button>
         </SettingRow>
-        <p className="s-note">
-          Nothing here includes a project path, a preference value, or a token — it is meant to be
-          safe to paste somewhere public.
-        </p>
+        <p className="s-note">{t('settings.diagnostics.share.note')}</p>
       </SettingCard>
     </>
   );
 }
 
 function AboutSection() {
+  const { t } = useTranslation();
   const about = useEditor((s) => s.about);
 
   return (
     <>
-      <SettingCard title="Encastra">
+      <SettingCard title={t('settings.about.brand.title')}>
         <div className="s-brand">
           <Mark />
           <div>
-            <p className="s-brand__name">Encastra</p>
-            <p className="s-brand__tagline">Build software from parts that actually fit.</p>
+            <p className="s-brand__name">{t('settings.about.brand.title')}</p>
+            <p className="s-brand__tagline">{t('settings.about.brand.tagline')}</p>
           </div>
         </div>
       </SettingCard>
 
-      <SettingCard title="This build">
-        <SettingRow label="Version" hint="The build you are running.">
-          <code>{about?.version ?? 'unknown'}</code>
+      <SettingCard title={t('settings.about.thisBuild.title')}>
+        <SettingRow
+          label={t('settings.shared.version.label')}
+          hint={t('settings.shared.version.hint')}
+        >
+          <code>{about?.version ?? t('settings.shared.version.unknown')}</code>
         </SettingRow>
         <SettingRow
-          label="Runtime"
-          hint="Whether a real Encastra runtime is attached to this window."
+          label={t('settings.shared.runtimeStatus.label')}
+          hint={t('settings.shared.runtimeStatus.hint')}
         >
           <StatusPill tone={ipc.live ? 'ok' : 'warn'}>
-            {ipc.live ? 'Attached' : 'Not attached — browser preview'}
+            {ipc.live
+              ? t('settings.shared.runtimeStatus.attached')
+              : t('settings.shared.runtimeStatus.notAttached')}
           </StatusPill>
         </SettingRow>
-        <SettingRow label="Component protocol" hint="What a component manifest must match to load.">
-          <code>schema {about?.protocolSchema ?? '?'}</code>
+        <SettingRow
+          label={t('settings.about.thisBuild.componentProtocol.label')}
+          hint={t('settings.about.thisBuild.componentProtocol.hint')}
+        >
+          <code>{t('settings.shared.schemaValue', { value: about?.protocolSchema ?? '?' })}</code>
         </SettingRow>
-        <SettingRow label="Project format" hint="What a saved .encastra file is written as.">
-          <code>schema {about?.projectSchema ?? '?'}</code>
+        <SettingRow
+          label={t('settings.about.thisBuild.projectFormat.label')}
+          hint={t('settings.shared.projectFormatHint')}
+        >
+          <code>{t('settings.shared.schemaValue', { value: about?.projectSchema ?? '?' })}</code>
         </SettingRow>
-        <SettingRow label="Signing" hint="Whether this build can prove who produced it.">
-          <StatusPill tone="warn">Not signed</StatusPill>
+        <SettingRow
+          label={t('settings.shared.signing.label')}
+          hint={t('settings.shared.signing.hint')}
+        >
+          <StatusPill tone="warn">{t('settings.shared.signing.status')}</StatusPill>
         </SettingRow>
-        <SettingRow label="Updates" hint="How a newer version reaches this machine.">
-          <span className="s-fact">
-            No update channel. Updating means downloading a new installer.
-          </span>
+        <SettingRow
+          label={t('settings.about.thisBuild.updates.label')}
+          hint={t('settings.about.thisBuild.updates.hint')}
+        >
+          <span className="s-fact">{t('settings.about.thisBuild.updates.fact')}</span>
         </SettingRow>
       </SettingCard>
 
-      <SettingCard title="Read more">
+      <SettingCard title={t('settings.about.readMore.title')}>
         <ul className="s-links">
           <li>
             <code>README.md</code>
-            what Encastra is
+            {t('settings.about.readMore.readme')}
           </li>
           <li>
             <code>docs/SECURITY.md</code>
-            the permission model, in full
+            {t('settings.about.readMore.security')}
           </li>
           <li>
             <code>docs/RELEASE.md</code>
-            how a build is produced and verified
+            {t('settings.about.readMore.release')}
           </li>
           <li>
             <code>docs/PRODUCT-ROADMAP.md</code>
-            what is built, and what is not yet
+            {t('settings.about.readMore.roadmap')}
           </li>
         </ul>
       </SettingCard>
@@ -1011,6 +1060,7 @@ function sectionFor(id: CategoryId, onOpenSecurity: () => void) {
 }
 
 export function Settings() {
+  const { t } = useTranslation();
   const [categoryId, setCategoryId] = useState<CategoryId>(DEFAULT_CATEGORY);
   const setView = useEditor((s) => s.setView);
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -1031,7 +1081,7 @@ export function Settings() {
   return (
     <main className="view view--settings">
       <div className="settings">
-        <nav className="settings__nav" aria-label="Settings categories">
+        <nav className="settings__nav" aria-label={t('settings.nav.ariaLabel')}>
           {CATEGORIES.map((item, index) => (
             <button
               type="button"
@@ -1044,16 +1094,16 @@ export function Settings() {
               onClick={() => setCategoryId(item.id)}
               onKeyDown={(event) => onNavKeyDown(event, index)}
             >
-              {item.label}
+              {t(`settings.categories.${item.id}.label`)}
             </button>
           ))}
         </nav>
 
         <div className="settings__content">
           <header className="view__header">
-            <p className="settings__eyebrow">Settings</p>
-            <h1>{category.label}</h1>
-            <p>{category.description}</p>
+            <p className="settings__eyebrow">{t('settings.eyebrow')}</p>
+            <h1>{t(`settings.categories.${category.id}.label`)}</h1>
+            <p>{t(`settings.categories.${category.id}.description`)}</p>
           </header>
 
           {sectionFor(category.id, openSecurity)}

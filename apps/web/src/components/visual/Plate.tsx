@@ -67,7 +67,13 @@ export const PLATE_URI = `url("data:image/svg+xml,${encodeURIComponent(SVG)}")`;
 export const PLATE_SIZE = { width: W, height: H } as const;
 
 /** The whole picture, at whatever size the caller's box gives it. */
-export function Plate({ className, style }: { className?: string; style?: CSSProperties }): ReactNode {
+export function Plate({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: CSSProperties;
+}): ReactNode {
   return (
     <div
       className={`${styles.plate} ${className ?? ''}`}

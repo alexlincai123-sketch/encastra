@@ -2,92 +2,154 @@
 
 import type { ReactNode } from 'react';
 
-import { GraphNode } from '@/components/graph/Graph';
+import { GraphNode, Wire } from '@/components/graph/Graph';
 import { componentNode } from '@/lib/graph-nodes';
-import { SCENE_COPY, WHAT_IF_IDS } from '@/lib/scenes';
-import { pinnedTimeline, sunflowerLayout, useScrollScene } from '@/lib/scroll';
+import { assemble, handoff, handon, snap } from '@/lib/motion-system';
+import { CONNECT_ACCEPTED_LABEL, SCENE_COPY, WHAT_IF_IDS } from '@/lib/scenes';
+import { pinnedTimeline, targets, useScrollScene } from '@/lib/scroll';
 
+import scene from './Scene02.module.css';
 import styles from './Scenes.module.css';
 
 const COPY = SCENE_COPY.whatIf;
 
-/** Real manifests, never retyped — the same `componentNode()` every other page on the site uses. */
-const NODES = WHAT_IF_IDS.map((id) => componentNode(id));
-const LAYOUT = sunflowerLayout(NODES.length, 0.4);
+/**
+ * The pair that gets a wire: `encastra.file.watch` and `encastra.image.resize`, the same real
+ * FILE → IMAGE conversion `lib/scenes.ts` names for scene 3 — this scene does not invent a second
+ * connection to make the point, it previews the one the page teaches properly two scenes later.
+ */
+const PAIR_SOURCE_ID = WHAT_IF_IDS[0];
+const PAIR_TARGET_ID = WHAT_IF_IDS[1];
+const LOOSE_IDS = WHAT_IF_IDS.slice(2);
+
+const PAIR_SOURCE = componentNode(PAIR_SOURCE_ID);
+const PAIR_TARGET = componentNode(PAIR_TARGET_ID);
+const LOOSE_NODES = LOOSE_IDS.map((id) => componentNode(id));
+
+/** Hand-placed, not `sunflowerLayout` — four corners read as "separate modules" more plainly
+    than an organic scatter does, which is what "align" in the brief is asking this scene to show
+    against scene 1's looser field. */
+const LOOSE_LAYOUT = [
+  { x: 0.12, y: 0.16 },
+  { x: 0.88, y: 0.18 },
+  { x: 0.1, y: 0.64 },
+  { x: 0.9, y: 0.62 },
+] as const;
 
 export function Scene02WhatIf(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
-    const chips = gsap.utils.toArray<HTMLElement>(`.${styles.clusterChip}`);
-    const intro = ctx.root.querySelector(`.${styles.clusterIntro}`);
+    const composition = ctx.root.querySelector(`.${styles.stageFull}`);
+    const modules = gsap.utils.toArray<HTMLElement>('[data-module]', ctx.root);
+    const looseModules = gsap.utils.toArray<HTMLElement>('[data-loose]', ctx.root);
+    const pairModules = gsap.utils.toArray<HTMLElement>('[data-pair-node]', ctx.root);
+    const wireSlot = ctx.root.querySelector(`.${scene.wireSlot}`);
+    const joint = ctx.root.querySelector(`.${scene.joint}`);
+    const index = ctx.root.querySelector(`.${styles.index}`);
+    const headline = ctx.root.querySelector(`.${styles.headlineMd}`);
+    const body = ctx.root.querySelector(`.${styles.body}`);
 
-    gsap.set(intro, { autoAlpha: 0, y: 16 });
-    chips.forEach((chip, i) => {
-      const point = LAYOUT[i];
-      const angle = point === undefined ? 0 : Math.atan2(point.y - 0.5, point.x - 0.5);
-      gsap.set(chip, {
-        x: Math.cos(angle) * 240,
-        y: Math.sin(angle) * 240,
-        opacity: 0,
-        scale: 0.82,
-        rotate: (point?.rotate ?? 0) * 2.2,
+    gsap.set(targets(index, headline, body), { autoAlpha: 0, y: 14 });
+
+    const mm = gsap.matchMedia();
+
+    mm.add('(min-width: 900px)', () => {
+      const tl = pinnedTimeline(ctx, { vh: 190 });
+
+      // Receiving scene 1's handoff: the whole composition arrives from just past the glass.
+      handon(tl, composition, { at: 0, duration: 0.22 });
+      // Six separate modules, one beat: they travel in from scatter and align onto the grid this
+      // scene lays out for them (four corners plus the pair's shared spot). A tight stagger
+      // (0.03 x 5 gaps = 0.15) keeps the whole arrival inside a 0.57 window, so the snap below
+      // never has to grab a pair node that is still mid-flight.
+      assemble(tl, modules, { at: 0.1, duration: 0.32, stagger: 0.03 });
+      tl.to(
+        targets(index, headline, body),
+        { autoAlpha: 1, y: 0, duration: 0.2, stagger: 0.05 },
+        0.14,
+      );
+      // Only once file.watch and image.resize have arrived does the wire between them latch.
+      snap(tl, wireSlot, joint, {
+        at: 0.64,
+        duration: 0.16,
+        from: { y: -36, autoAlpha: 0.35 },
       });
+
+      handoff(tl, composition, { at: 0.94, duration: 0.28 });
     });
 
-    const tl = pinnedTimeline(ctx, { vh: 190 });
+    // Fewer pieces animated: two of the four loose modules are set straight to rest, and only
+    // the pair plus the remaining two travel in — the snap itself, the point of the scene, still
+    // plays in full.
+    mm.add('(max-width: 899px)', () => {
+      const staticLoose = looseModules.slice(2);
+      const animatedLoose = looseModules.slice(0, 2);
+      gsap.set(staticLoose, { x: 0, y: 0, scale: 1, autoAlpha: 1 });
 
-    tl.to(intro, { autoAlpha: 1, y: 0, duration: 0.16 }, 0).to(
-      chips,
-      {
-        x: 0,
-        y: 0,
-        opacity: 1,
-        scale: 1,
-        // A per-target function value — GSAP calls this once per chip with its index, so each
-        // one settles on its own `sunflowerLayout` rotation rather than sharing a single value.
-        rotate: (index: number) => LAYOUT[index]?.rotate ?? 0,
-        duration: 0.5,
-        stagger: 0.07,
-      },
-      0.1,
-    );
+      const tl = pinnedTimeline(ctx, { vh: 132 });
 
-    // Outro: the cluster tightens toward the centre and dims — the scatter is about to become a
-    // single wire in scene 3.
-    tl.to(chips, { scale: 0.9, opacity: 0.35, duration: 0.22 }, 0.76).to(
-      intro,
-      { autoAlpha: 0, duration: 0.16 },
-      0.78,
-    );
+      handon(tl, composition, { at: 0, duration: 0.2 });
+      assemble(tl, targets(...animatedLoose, ...pairModules), {
+        at: 0.1,
+        duration: 0.28,
+        spread: 0.6,
+        stagger: 0.03,
+      });
+      tl.to(
+        targets(index, headline, body),
+        { autoAlpha: 1, y: 0, duration: 0.18, stagger: 0.04 },
+        0.14,
+      );
+      snap(tl, wireSlot, joint, { at: 0.56, duration: 0.14, from: { y: -28, autoAlpha: 0.35 } });
+
+      handoff(tl, composition, { at: 0.86, duration: 0.24 });
+    });
   });
 
   return (
     <section ref={ref} className={styles.scene} aria-label="What if" data-scene="what-if">
-      <div className={styles.pin} data-pin>
-        <div className={styles.stageFull}>
+      <div className={`${styles.pin} u-stage`} data-pin>
+        <div className={`${styles.stageFull} u-depth`}>
           <div className={styles.cluster}>
-            {NODES.map((node, i) => {
-              const point = LAYOUT[i];
+            {LOOSE_NODES.map((node, i) => {
+              const point = LOOSE_LAYOUT[i] ?? { x: 0.5, y: 0.5 };
               return (
                 <div
                   key={node.id}
                   className={styles.clusterChip}
-                  style={{
-                    left: `${(point?.x ?? 0.5) * 100}%`,
-                    top: `${(point?.y ?? 0.5) * 100}%`,
-                  }}
+                  data-module
+                  data-loose
+                  style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }}
                 >
                   <GraphNode node={node} />
                 </div>
               );
             })}
-            <div className={styles.clusterIntro}>
-              <span className={styles.index} data-animate>
-                {COPY.index} — {COPY.eyebrow}
-              </span>
-              <h2 className={styles.headlineMd}>{COPY.headline}</h2>
-              <p className="lead">{COPY.body}</p>
+
+            <div className={scene.pairWrap}>
+              <div className={scene.pairNode} data-module data-pair-node>
+                <GraphNode node={PAIR_SOURCE} />
+              </div>
+              <div className={scene.wireSlot}>
+                <Wire type="file" label={CONNECT_ACCEPTED_LABEL} active />
+                <span className={scene.joint} aria-hidden="true" />
+              </div>
+              <div className={scene.pairNode} data-module data-pair-node>
+                <GraphNode node={PAIR_TARGET} highlighted />
+              </div>
             </div>
+          </div>
+
+          <div className={scene.copyLayer}>
+            <span className={styles.index} data-animate>
+              {COPY.index} — {COPY.eyebrow}
+            </span>
+            <h2 className={styles.headlineMd} data-animate>
+              {COPY.headline}
+            </h2>
+            <p className={`lead ${styles.body}`} data-animate>
+              {COPY.body}
+            </p>
           </div>
         </div>
       </div>

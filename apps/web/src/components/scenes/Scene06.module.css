@@ -1,0 +1,173 @@
+/*
+ * Scene 06 — Result. Own module: the layered stage a picture passes through as it becomes
+ * components and back again (SPLIT → MORPH → MERGE → MORPH), plus the static, non-animated
+ * fallback a reduced-motion visitor sees instead. `Scenes.module.css` is still imported by the
+ * component for the chrome every scene shares (`.headline`, `.body`, `.resultMeta`, `.resultArrow`)
+ * — nothing here duplicates a class that already exists there.
+ */
+
+/* --- The animated stage ------------------------------------------------------------------- */
+
+/* An explicit height, not `100%` — its parent is the plain `.stage`/`.centerCol` div `Scenes.
+   module.css` gives every scene, which has no height of its own, so a percentage here would
+   resolve to nothing and collapse every absolutely-positioned child to zero size. */
+.visualStage {
+  position: relative;
+  width: 100%;
+  height: min(56vh, 440px);
+  margin-block-start: var(--space-6);
+}
+
+.compose {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.depthGroup {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  will-change: transform, opacity;
+}
+
+/* The picture, seamless at rest — this stands in for the "whole image" beat: `PlateTiles` already
+   reconstructs the whole picture with no gap when nothing has moved it, so there is no separate
+   `<Plate>` layer underneath for the animated path to manage or hide. */
+.tilesFrame {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Two grids exist in the DOM at once — 4×3 and 3×2 — and CSS picks which is visible; the matching
+   `ctx.gsap.matchMedia()` branch in the component picks the same breakpoint to animate. Deciding
+   the split in one place (900px) that both CSS and JS read keeps them from ever disagreeing. */
+.tilesFrame[data-bp="mobile"] {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .tilesFrame[data-bp="desktop"] {
+    display: none;
+  }
+
+  .tilesFrame[data-bp="mobile"] {
+    display: flex;
+  }
+}
+
+.tilesInner {
+  width: min(420px, 82vw);
+}
+
+/* The four modules the split picture becomes. Absolutely centred on the same point the tiles
+   occupy, so MORPH's crossfade reads as "this became that" rather than two unrelated events. */
+.moduleRow {
+  position: absolute;
+  inset: 0;
+  will-change: transform, opacity;
+}
+
+.moduleCard {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 130px;
+  height: fit-content;
+  padding: var(--space-3);
+  background: var(--site-card);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  will-change: transform, opacity;
+}
+
+@media (max-width: 899px) {
+  .moduleCard {
+    width: 104px;
+    padding: var(--space-2);
+  }
+}
+
+.moduleLabel {
+  display: block;
+  margin-block-end: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.moduleSwatch {
+  width: 100%;
+}
+
+.moduleText {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  overflow-wrap: break-word;
+}
+
+/* The finished, smaller file — same picture, same aspect ratio, deliberately rendered small: a
+   resize is the one transform in this build whose "after" is honestly just a smaller "before". */
+.outputLayer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  will-change: transform, opacity;
+}
+
+.outputPlate {
+  width: min(190px, 42vw);
+}
+
+/* --- Reduced motion: the complete, static story ---------------------------------------------
+ * Not a fallback for the same DOM with the timeline switched off — a different, simpler tree.
+ * Split tiles, four intermediate modules and a converging cluster are all *how the transform
+ * happens*; a visitor who never sees it happen only needs to see that it did: one file, its real
+ * processing step, and the smaller file it became.
+ */
+
+.staticResult {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compose {
+    display: none;
+  }
+
+  .visualStage {
+    height: auto;
+  }
+
+  .staticResult {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-5);
+    margin-block-start: var(--space-6);
+  }
+}
+
+.staticFile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.staticStep {
+  width: 150px;
+}

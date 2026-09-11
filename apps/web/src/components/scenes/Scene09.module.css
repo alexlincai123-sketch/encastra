@@ -1,0 +1,59 @@
+/*
+ * Scene 09 — Terminal.
+ *
+ * `Terminal.tsx` already renders the transcript beside a live `GraphFlow` as one `.demo` grid
+ * (see `Terminal.module.css`) — this file only shapes the surrounding entrance: the terminal card
+ * and the graph card arrive from opposite sides and converge (MERGE), and a small traveller
+ * crosses a short, fixed track between them once they have landed, reading as "the command's
+ * effect arrives at the workflow" without claiming to be synchronised with the transcript itself
+ * — the transcript runs on its own timers and its own controls, which this file never touches.
+ */
+
+.pair {
+  position: relative;
+}
+
+/* --- The bridge -------------------------------------------------------------------------------
+ * Only shown once the product's own grid is actually two columns side by side (`Terminal.module.
+ * css`'s own breakpoint, 60rem) — below that the terminal and the graph stack vertically, and a
+ * horizontal connector between them would sit over nothing.
+ */
+.bridge {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  z-index: 2;
+  width: 56px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+@media (min-width: 60rem) {
+  .bridge {
+    display: block;
+  }
+}
+
+.bridgeLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1.5px;
+  margin-top: -0.75px;
+  background: var(--edge);
+}
+
+.bridgeDot {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  will-change: transform, opacity;
+}

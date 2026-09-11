@@ -207,6 +207,23 @@ export function translate(
   return interpolate(found ?? key, vars);
 }
 
+/**
+ * Translates a key in a named locale, whatever the active one happens to be.
+ *
+ * There is exactly one thing that needs this, and it is worth the export: the diagnostics report
+ * a person copies out of Settings has to read the same for everybody on the project, so it is
+ * built in English while the card above it is rendered in whatever language they are using. Any
+ * other use is almost certainly a mistake — the interface should speak the reader's language.
+ */
+export function translateIn(
+  locale: Locale,
+  key: string,
+  vars?: Record<string, string | number>,
+): string {
+  const { messages } = useI18n.getState();
+  return translate(key, vars, { ...useI18n.getState(), locale, messages });
+}
+
 export function useTranslation() {
   const locale = useI18n((s) => s.locale);
   const messages = useI18n((s) => s.messages);

@@ -3,43 +3,78 @@
 import type { ReactNode } from 'react';
 
 import { TerminalDemo } from '@/components/terminal/Terminal';
+import terminal from '@/components/terminal/Terminal.module.css';
+import { BEAT, flow, handoff, handon, merge } from '@/lib/motion-system';
 import { SCENE_COPY } from '@/lib/scenes';
 import { targets, useScrollScene } from '@/lib/scroll';
 
+import scene from './Scene09.module.css';
 import styles from './Scenes.module.css';
 
 const COPY = SCENE_COPY.terminal;
 
 /**
- * Deliberately not pinned. The terminal replays a transcript on real timers and already has its
- * own play/pause/restart/speed controls — a scrub-driven pin would fight that contract, and the
- * terminal plus the graph card beside it can be taller than one viewport, which `pin: true`
- * cannot show correctly anyway. Instead the whole scene reveals once, normally, as it scrolls
- * into view — still tied to scroll, just not scrubbed or pinned.
+ * Deliberately not pinned — see the original note this scene shipped with: the transcript in
+ * `TerminalDemo` runs on real timers with its own play/pause/speed controls, a scrub-driven pin
+ * would fight that, and the terminal plus graph card can be taller than one viewport. The scene
+ * still reveals on scroll, just not scrubbed-and-pinned.
+ *
+ * What changed: the terminal card and the graph card — both rendered by `TerminalDemo`, which
+ * this file may read from via `Terminal.module.css` but may not edit — now arrive as one paired
+ * composition (MERGE) rather than two unrelated boxes that happen to share a grid row, and a
+ * short FLOW crosses the gap between them once they land, standing for "the command's effect
+ * reaches the workflow" without pretending to track *which* command. Real per-line
+ * synchronisation — lighting this connector exactly when a given transcript line prints — would
+ * need `Terminal.tsx` to expose its `revealCount`/active step outward (a prop callback or a ref),
+ * which this brief rules out touching; this scene does not attempt it.
  */
 export function Scene09Terminal(): ReactNode {
   const ref = useScrollScene<HTMLElement>((ctx) => {
     const { gsap } = ctx;
     const heading = ctx.root.querySelector(`.${styles.headline}`);
     const body = ctx.root.querySelector(`.${styles.body}`);
-    const stage = ctx.root.querySelector(`.${styles.terminalStage}`);
+    const pair = ctx.root.querySelector<HTMLElement>(`.${scene.pair}`);
+    const terminalCard = ctx.root.querySelector<HTMLElement>(`.${terminal.terminalCard}`);
+    const graphCard = ctx.root.querySelector<HTMLElement>(`.${terminal.graphCard}`);
+    const bridgeDot = ctx.root.querySelector<HTMLElement>(`.${scene.bridgeDot}`);
 
     gsap.set(targets(heading, body), { autoAlpha: 0, y: 18 });
-    gsap.set(stage, { autoAlpha: 0, y: 28 });
+    if (bridgeDot != null) gsap.set(bridgeDot, { xPercent: 0, autoAlpha: 0 });
 
-    gsap
-      .timeline({
-        scrollTrigger: {
-          trigger: ctx.root,
-          start: 'top 78%',
-          end: 'top 30%',
-          scrub: 0.6,
-        },
-      })
-      .to(targets(heading, body), { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.1 }, 0)
-      .to(stage, { autoAlpha: 1, y: 0, duration: 0.5 }, 0.3);
-    // Cleanup: `useScrollScene` reverts the whole GSAP context on unmount, which kills this
-    // ScrollTrigger and its timeline the same way it does for every other scene's pinned one.
+    // Tracked and reverted automatically by the surrounding `gsap.context()` (see
+    // `useScrollScene`) along with everything else it creates.
+    const mm = gsap.matchMedia();
+
+    mm.add({ desktop: '(min-width: 900px)', mobile: '(max-width: 899px)' }, (context) => {
+      const conditions = context.conditions as { desktop?: boolean } | undefined;
+      const desktop = conditions?.desktop ?? true;
+
+      gsap.set(targets(terminalCard), { x: -70 });
+      gsap.set(targets(graphCard), { x: 70 });
+
+      const tl = gsap.timeline({
+        scrollTrigger: { trigger: ctx.root, start: 'top 78%', end: 'top 30%', scrub: 0.6 },
+      });
+
+      // The pair arrives as one unit (HANDON, receiving from scene 8's own handoff) — `pair` is
+      // a direct child of `.stage`, which is the element carrying `u-stage`'s perspective, so its
+      // Z motion actually renders. `terminalCard`/`graphCard` sit several layers inside
+      // `TerminalDemo`'s own markup, past an intermediate flat container this file cannot touch,
+      // so their own arrival is X-only (MERGE) rather than reaching for depth it cannot deliver.
+      handon(tl, targets(heading, body, pair), { at: 0 });
+      merge(tl, targets(terminalCard, graphCard), { at: 0.16, duration: BEAT.long });
+
+      // FLOW, desktop only — fewer pieces animated on a narrow screen, where the product's own
+      // grid stacks the two cards vertically and a horizontal connector has nothing to sit on.
+      if (desktop && bridgeDot != null) {
+        flow(tl, bridgeDot, { at: 0.58, duration: BEAT.base, fromPercent: 0, toPercent: 600 });
+      }
+
+      const exit = gsap.timeline({
+        scrollTrigger: { trigger: ctx.root, start: 'bottom 45%', end: 'bottom 5%', scrub: 0.6 },
+      });
+      handoff(exit, targets(heading, body, pair), { at: 0, duration: 1 });
+    });
   });
 
   return (
@@ -49,7 +84,7 @@ export function Scene09Terminal(): ReactNode {
       aria-label="Terminal"
       data-scene="terminal"
     >
-      <div className={styles.stage}>
+      <div className={`${styles.stage} u-stage`}>
         <div className={styles.terminalIntro}>
           <span className={styles.index} data-animate>
             {COPY.index} — {COPY.eyebrow}
@@ -62,7 +97,11 @@ export function Scene09Terminal(): ReactNode {
           </p>
         </div>
 
-        <div className={styles.terminalStage} data-animate>
+        <div className={`${styles.terminalStage} ${scene.pair}`} data-animate>
+          <div className={scene.bridge} aria-hidden="true">
+            <span className={scene.bridgeLine} />
+            <span className={scene.bridgeDot} />
+          </div>
           <TerminalDemo />
         </div>
       </div>

@@ -135,6 +135,10 @@ interface FolderFieldProps {
   onChange: (value: string) => void;
   onBrowse: () => void;
   browseDisabled: boolean;
+  /** The Browse button's own text — passed in, like every other label here, rather than this file
+   * importing `useTranslation` itself: this stays a plain presentational control, and the caller
+   * (which already has `t`) decides the words. */
+  browseLabel: string;
   browseTitle?: string | undefined;
 }
 
@@ -146,6 +150,7 @@ export function FolderField({
   onChange,
   onBrowse,
   browseDisabled,
+  browseLabel,
   browseTitle,
 }: FolderFieldProps) {
   return (
@@ -166,7 +171,7 @@ export function FolderField({
         disabled={browseDisabled}
         title={browseTitle}
       >
-        Browse…
+        {browseLabel}
       </button>
     </div>
   );

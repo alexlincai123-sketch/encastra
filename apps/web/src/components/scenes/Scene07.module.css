@@ -1,0 +1,147 @@
+/*
+ * Scene 07 — Reuse. Own module: the stage the three-step workflow collapses on, and the pile of
+ * saved templates that follows it. `Scenes.module.css` is still imported for the chrome every
+ * scene shares and for `.reuseCard`/`.reuseSteps`/`.reuseStep`, which already describe exactly
+ * the shell this scene reveals and the four-word step row underneath it — nothing here repeats
+ * either.
+ */
+
+.visualStage {
+  position: relative;
+  width: 100%;
+  height: min(50vh, 380px);
+  margin-block-start: var(--space-6);
+}
+
+.compose {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.depthGroup {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  will-change: transform, opacity;
+}
+
+/* The three real steps of the Image Processor flow, before ENCAPSULATE. Each member is anchored
+   to the same centre point the shell will grow into — the initial x-offset that spreads them into
+   a readable row is applied in the component, so `encapsulate`'s built-in convergence to `x: 0`
+   is a real journey back to a shared point, not a no-op on an already-centred element. */
+.memberRow {
+  position: absolute;
+  inset: 0;
+}
+
+.memberNode {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 140px;
+  height: fit-content;
+  will-change: transform, opacity;
+}
+
+@media (max-width: 899px) {
+  .memberNode {
+    width: 112px;
+  }
+}
+
+/* The stack of saved templates MORPH reveals in the shell's place. Its own children start
+   perfectly overlapped on this same centre point; STACK is what gives them their pile offsets. */
+.stackGroup {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 210px;
+  height: 64px;
+  will-change: transform, opacity;
+}
+
+.templateCard {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 210px;
+  height: fit-content;
+  padding: var(--space-2) var(--space-4);
+  background: var(--site-card);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--site-step--1);
+  font-weight: var(--weight-medium);
+  text-align: center;
+  will-change: transform, opacity;
+}
+
+@media (max-width: 899px) {
+  .templateCard,
+  .stackGroup {
+    width: 176px;
+  }
+}
+
+/* --- Reduced motion: the complete, static story -----------------------------------------------
+ * Encapsulation and a physical pile are both *how* three steps become one keepable thing; a
+ * visitor who never sees the motion only needs to see that it happened — the three real steps,
+ * the one template they collapsed into, and that it now sits among the app's other templates.
+ */
+
+.staticReuse {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compose {
+    display: none;
+  }
+
+  .visualStage {
+    height: auto;
+  }
+
+  .staticReuse {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-5);
+    margin-block-start: var(--space-6);
+  }
+}
+
+.staticMembers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.staticMember {
+  width: 130px;
+}
+
+.staticStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.staticStackItem {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--site-step--1);
+  font-weight: var(--weight-medium);
+  text-align: center;
+  background: var(--site-card);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+.staticStackItem[data-current="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}

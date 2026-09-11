@@ -1,0 +1,14 @@
+/*
+ * Scene 10 — Try.
+ *
+ * The closing scene reuses the shared word-mask headline, the shared CTA component and the
+ * shared reading chrome almost entirely as-is — the brief for this one is explicitly to keep it
+ * simple. The one bespoke need: each headline word carries a small rotation/scale wobble that the
+ * closing SETTLE beat resolves (see Scene10Try.tsx), and that wobble should pivot from a word's
+ * own baseline rather than its centre — the way a tile dropping into a slot pivots from where it
+ * lands, not from its middle.
+ */
+
+.settleWord {
+  transform-origin: 50% 100%;
+}

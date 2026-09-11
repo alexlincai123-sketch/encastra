@@ -1,0 +1,93 @@
+/*
+ * Scene 04 — Build. Own module: the depth group the machine assembles inside, and the three
+ * groups of node — slot, pile, field — that arrive at three different sizes and three different
+ * distances from the camera. `Scenes.module.css` still supplies `.buildStage`/`.buildField`/
+ * `.buildResolve`/`.buildCaption`/`.miniNode`, which already describe this scene's stage and
+ * already carry the reduced-motion swap (`.buildField` hidden, `.buildResolve` static) — nothing
+ * here repeats them. What is new here is purely the per-node sizing `.buildNode` cannot give three
+ * differently-scaled groups at once, and the chain wire the growing workflow needs and the product
+ * canvas's own `<Wire>` cannot supply outside its 720px container query.
+ */
+
+.depthGroup {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  will-change: transform, opacity;
+}
+
+/* The five parts that assemble one at a time into the visible chain — the largest, closest group,
+   since this is what the eye is meant to follow first. */
+.slotNode {
+  position: absolute;
+  width: 132px;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+/* The three that physically pile rather than scatter — a little smaller, since a pile reads as a
+   held-in-reserve group rather than the thing currently being built. */
+.pileNode {
+  position: absolute;
+  width: 112px;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+/* The wider palette, received far behind everything else — smallest, and z-receded in the
+   component so perspective itself does most of the shrinking. */
+.fieldNode {
+  position: absolute;
+  width: 86px;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+@media (max-width: 899px) {
+  .slotNode {
+    width: 104px;
+  }
+
+  .pileNode {
+    width: 90px;
+  }
+
+  .fieldNode {
+    width: 64px;
+  }
+}
+
+/* --- The chain wire ---------------------------------------------------------------------------
+ * Two elements for SNAP's two parameters: `.chainWire` is the joint — a bar between one slot and
+ * the next, scaleX-revealed with a pulse; `.chainPin` is the part — a small connector head that
+ * travels the last few pixels into the join. Positioned by inline `left`/`top`/`width` from the
+ * same percentages the slots themselves use, so the wire always spans exactly the gap between the
+ * two cards it joins regardless of viewport width.
+ */
+
+.chainWire {
+  position: absolute;
+  height: 2px;
+  background: var(--edge);
+  will-change: transform, opacity;
+}
+
+.chainPin {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  margin-left: -4px;
+  border-radius: var(--radius-full);
+  background: var(--focus);
+  will-change: transform, opacity;
+}
+
+@media (max-width: 899px) {
+  .chainPin {
+    width: 6px;
+    height: 6px;
+    margin-top: -3px;
+    margin-left: -3px;
+  }
+}

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { lookup, type Messages } from '../src/i18n';
+import en from '../src/i18n/locales/en';
 import {
   CATEGORIES,
   type CategoryId,
@@ -18,6 +20,7 @@ import {
   detectGpuRenderer,
   detectPlatform,
   diagnosticsToText,
+  renderDiagnostics,
 } from '../src/settings/diagnostics';
 import type { Capability, ComponentManifest } from '../src/types';
 
@@ -26,7 +29,27 @@ import type { Capability, ComponentManifest } from '../src/types';
  * sidebar, and the counts shown in the Components category. Nothing here touches React, because
  * none of it needs to — a wrong wrap-around or a hardcoded count is a bug whether or not anyone
  * ever clicks through the sidebar to see it.
+ *
+ * `categories.ts` itself no longer carries English label/description text — that lives once, in
+ * `i18n/locales/en.ts`, under `settings.categories.<id>` — so every assertion below that used to
+ * read `category.label` reads the English locale directly instead. `en` doubles as a translation
+ * fixture and as a plain object every `t()` call can be checked against without mounting React.
  */
+
+/** The English text for a category, the same way `Settings.tsx` would fetch it via `t()` — just
+ * against the English tree directly, since none of this file touches the store or React. */
+function categoryText(id: CategoryId): { label: string; description: string } {
+  return {
+    label: lookup(en, `settings.categories.${id}.label`) ?? '',
+    description: lookup(en, `settings.categories.${id}.description`) ?? '',
+  };
+}
+
+/** A minimal stand-in for `useTranslation().t`, backed by the English locale — enough to exercise
+ * `capabilityLabel`'s lookup without mounting a component. */
+function englishT(key: string): string {
+  return lookup(en as Messages, key) ?? key;
+}
 
 function manifest(overrides: Partial<ComponentManifest> & { id: string }): ComponentManifest {
   return {
@@ -50,12 +73,13 @@ describe('CATEGORIES', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('gives every category a non-empty label and description', () => {
+  it('gives every category a non-empty label and description in English', () => {
     for (const category of CATEGORIES) {
-      expect(category.label.trim()).not.toBe('');
-      expect(category.description.trim()).not.toBe('');
+      const { label, description } = categoryText(category.id);
+      expect(label.trim()).not.toBe('');
+      expect(description.trim()).not.toBe('');
       // The description is meant to say more than the label repeats.
-      expect(category.description.toLowerCase()).not.toBe(category.label.toLowerCase());
+      expect(description.toLowerCase()).not.toBe(label.toLowerCase());
     }
   });
 
@@ -112,7 +136,8 @@ describe('isCategoryId', () => {
 
 describe('findCategory', () => {
   it('finds the category for a valid id', () => {
-    expect(findCategory('editor').label).toBe('Editor');
+    expect(findCategory('editor').id).toBe('editor');
+    expect(categoryText('editor').label).toBe('Editor');
   });
 
   it('falls back to General rather than throwing for a stale id', () => {
@@ -215,12 +240,18 @@ describe('countGrants', () => {
 
 describe('capabilityLabel', () => {
   it('gives a plain-language name to a known capability kind', () => {
-    expect(capabilityLabel('fs.read')).toBe('Read files');
-    expect(capabilityLabel('net.http')).toBe('Use the network');
+    expect(capabilityLabel('fs.read', englishT)).toBe('Read files');
+    expect(capabilityLabel('net.http', englishT)).toBe('Use the network');
   });
 
   it('falls back to the raw kind for one it does not recognise, rather than hiding it', () => {
-    expect(capabilityLabel('gpu.compute')).toBe('gpu.compute');
+    expect(capabilityLabel('gpu.compute', englishT)).toBe('gpu.compute');
+  });
+
+  it('goes through the translator it is given, not a hardcoded string', () => {
+    // `capabilityLabel` must not carry its own English text — if it did, this would still say
+    // "Read files" no matter what `t` returned.
+    expect(capabilityLabel('fs.read', () => 'Leer archivos')).toBe('Leer archivos');
   });
 });
 
@@ -293,85 +324,92 @@ describe('diagnostics detection', () => {
 describe('assembleDiagnostics', () => {
   const about = { version: '0.3.0', runtime: '1.2.0', protocolSchema: 3, projectSchema: 2 };
 
-  function rowValue(
-    rows: ReturnType<typeof assembleDiagnostics>,
-    label: string,
-  ): string | undefined {
-    return rows.find((row) => row.label === label)?.value;
+  const input = {
+    about: null as typeof about | null,
+    manifests: {} as Record<string, ReturnType<typeof manifest>>,
+    runtimeAttached: false,
+    userAgent: 'ua',
+    platform: 'Windows',
+    architecture: 'x64',
+    gpu: null as string | null,
+  };
+
+  /**
+   * What a row resolves to, without a language.
+   *
+   * A row is now either a datum (the same characters in every language) or a key pointing at a
+   * sentence. Asserting on whichever one it carries keeps these tests about the *logic* —
+   * which branch a given input takes — and leaves the wording to the locale files, where it
+   * belongs and where a separate suite already checks all six agree.
+   */
+  function resolve(rows: ReturnType<typeof assembleDiagnostics>, key: string): string | undefined {
+    const row = rows.find((candidate) => candidate.key === `settings.diagnostics.rows.${key}`);
+    return row?.literal ?? row?.valueKey ?? undefined;
   }
 
   it('reports unknown rather than throwing when About has not loaded yet', () => {
-    const rows = assembleDiagnostics({
-      about: null,
-      manifests: {},
-      runtimeAttached: false,
-      userAgent: 'ua',
-      platform: 'Windows',
-      architecture: 'x64',
-      gpu: null,
-    });
-    expect(rowValue(rows, 'Encastra version')).toBe('unknown');
-    expect(rowValue(rows, 'Component protocol schema')).toBe('unknown');
+    const rows = assembleDiagnostics({ ...input });
+    expect(resolve(rows, 'version')).toBe('settings.shared.version.unknown');
+    expect(resolve(rows, 'protocolSchema')).toBe('settings.shared.version.unknown');
   });
 
   it('says browser preview rather than the runtime string when nothing is attached', () => {
-    const rows = assembleDiagnostics({
-      about,
-      manifests: {},
-      runtimeAttached: false,
-      userAgent: 'ua',
-      platform: 'Windows',
-      architecture: 'x64',
-      gpu: null,
-    });
-    expect(rowValue(rows, 'Runtime')).toBe('not attached — browser preview');
+    const rows = assembleDiagnostics({ ...input, about });
+    expect(resolve(rows, 'runtime')).toBe('settings.shared.runtimeStatus.notAttached');
   });
 
   it('reports the real build values once About has loaded and a runtime is attached', () => {
     const rows = assembleDiagnostics({
+      ...input,
       about,
       manifests: { a: manifest({ id: 'a' }), b: manifest({ id: 'b' }) },
       runtimeAttached: true,
-      userAgent: 'ua',
-      platform: 'Windows',
-      architecture: 'x64',
       gpu: 'Example Renderer',
     });
-    expect(rowValue(rows, 'Encastra version')).toBe('0.3.0');
-    expect(rowValue(rows, 'Runtime')).toBe('1.2.0');
-    expect(rowValue(rows, 'Component protocol schema')).toBe('3');
-    expect(rowValue(rows, 'Project format schema')).toBe('2');
-    expect(rowValue(rows, 'Installed components')).toBe('2');
-    expect(rowValue(rows, 'GPU')).toBe('Example Renderer');
+    expect(resolve(rows, 'version')).toBe('0.3.0');
+    expect(resolve(rows, 'runtime')).toBe('1.2.0');
+    expect(resolve(rows, 'protocolSchema')).toBe('3');
+    expect(resolve(rows, 'projectSchema')).toBe('2');
+    expect(resolve(rows, 'components')).toBe('2');
+    expect(resolve(rows, 'gpu')).toBe('Example Renderer');
   });
 
   it('says GPU is not discoverable rather than leaving it blank', () => {
+    const rows = assembleDiagnostics({ ...input });
+    expect(resolve(rows, 'gpu')).toBe('settings.diagnostics.rows.gpuUnknown');
+  });
+
+  it('marks a platform the WebView did not disclose as a sentence, not as the word itself', () => {
     const rows = assembleDiagnostics({
-      about: null,
-      manifests: {},
-      runtimeAttached: false,
-      userAgent: 'ua',
-      platform: 'Windows',
-      architecture: 'x64',
-      gpu: null,
+      ...input,
+      platform: detectPlatform('nothing recognisable'),
+      architecture: detectArchitecture('nothing recognisable'),
     });
-    expect(rowValue(rows, 'GPU')).toBe('Not discoverable');
+    expect(resolve(rows, 'platform')).toBe('settings.diagnostics.rows.platformUnknown');
+    expect(resolve(rows, 'architecture')).toBe('settings.diagnostics.rows.architectureUnknown');
   });
 
   it('never includes a project path, a preference key or anything that looks like a secret', () => {
-    const rows = assembleDiagnostics({
-      about,
-      manifests: {},
-      runtimeAttached: true,
-      userAgent: 'ua',
-      platform: 'Windows',
-      architecture: 'x64',
-      gpu: null,
-    });
-    const text = diagnosticsToText(rows).toLowerCase();
+    const rows = assembleDiagnostics({ ...input, about, runtimeAttached: true });
+    const text = diagnosticsToText(renderDiagnostics(rows, (key) => key)).toLowerCase();
     expect(text).not.toContain('c:\\');
     expect(text).not.toContain('token');
-    expect(text).not.toContain('key');
+  });
+});
+
+describe('renderDiagnostics', () => {
+  it('translates the label and a prose value, and leaves a datum alone', () => {
+    const rendered = renderDiagnostics(
+      [
+        { key: 'label.key', literal: '0.3.0', valueKey: null },
+        { key: 'other.key', literal: null, valueKey: 'value.key' },
+      ],
+      (key) => `[${key}]`,
+    );
+    expect(rendered).toEqual([
+      { label: '[label.key]', value: '0.3.0' },
+      { label: '[other.key]', value: '[value.key]' },
+    ]);
   });
 });
 

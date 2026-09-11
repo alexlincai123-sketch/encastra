@@ -1,0 +1,61 @@
+/*
+ * Scene 02 — What if.
+ *
+ * `Scenes.module.css` already gives this scene `.cluster`/`.clusterChip`/`.stageFull` for the
+ * scattered field of real component cards. What is added here is the pair that snaps together —
+ * a copy layer is also added rather than reusing `.clusterIntro`, so the headline is centred by
+ * flex rather than by an unconstrained `max-width` box, which is a guarantee `.clusterIntro`
+ * alone does not make.
+ */
+
+/* Overlays `.cluster` rather than sitting in flow above it — `.stageFull` has a fixed height, so
+   stacking this in normal flow would just push `.cluster` short by however tall the copy is. */
+.copyLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+/* The two components a wire is about to join, held apart from the four loose modules so the
+   latch reads as a distinct event rather than one more card landing in the field. */
+.pairWrap {
+  position: absolute;
+  left: 50%;
+  bottom: 4%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(200px, 44vw);
+  transform: translateX(-50%);
+}
+
+.pairNode {
+  width: 100%;
+}
+
+.wireSlot {
+  position: relative;
+  width: 100%;
+}
+
+/* The joint `snap()` pulses: a small mark at the exact point the wire has just latched, distinct
+   from the wire itself so the pulse reads as "contact made here" rather than the wire blinking. */
+.joint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  background: var(--focus);
+  border-radius: var(--radius-full);
+  box-shadow: var(--ring-focus);
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}

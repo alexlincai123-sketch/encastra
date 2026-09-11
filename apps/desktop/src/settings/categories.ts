@@ -29,144 +29,42 @@ export type CategoryId =
   | 'diagnostics'
   | 'about';
 
+/**
+ * A category is just its id here. The label and description a person actually reads live in
+ * `i18n/locales/en.ts` under `settings.categories.<id>`, and every other locale translates them
+ * from there — this file owning a second, English-only copy is exactly how the label in
+ * `categories.ts` and the one in the locale files drifted apart before. A caller wanting the text
+ * for a category calls `t(\`settings.categories.${id}.label\`)` (and `.description`) itself.
+ */
 export interface Category {
   readonly id: CategoryId;
-  readonly label: string;
-  /** One line, shown under the category title. Not a repeat of the label. */
-  readonly description: string;
 }
 
-const GENERAL: Category = {
-  id: 'general',
-  label: 'General',
-  description: 'Get started, and what this application shows you when it opens.',
-};
-
-const APPEARANCE: Category = {
-  id: 'appearance',
-  label: 'Appearance',
-  description: 'Theme and motion.',
-};
-
-const LANGUAGE: Category = {
-  id: 'language',
-  label: 'Language & Region',
-  description: 'The language this interface speaks, and how it shows dates and numbers.',
-};
-
-const WORKSPACE: Category = {
-  id: 'workspace',
-  label: 'Workspace',
-  description: 'Where your projects live on disk.',
-};
-
-const PROJECTS: Category = {
-  id: 'projects',
-  label: 'Projects',
-  description: 'How a project opens, and the format it is saved in.',
-};
-
-const EDITOR: Category = {
-  id: 'editor',
-  label: 'Editor',
-  description: 'Shortcuts and behaviour while you build a graph.',
-};
-
-const CANVAS: Category = {
-  id: 'canvas',
-  label: 'Canvas',
-  description: 'Aids drawn on the canvas itself: the grid, snapping, the minimap.',
-};
-
-const RUNTIME: Category = {
-  id: 'runtime',
-  label: 'Runtime',
-  description: 'What happens on screen while a workflow runs.',
-};
-
-const COMPONENTS: Category = {
-  id: 'components',
-  label: 'Components',
-  description: 'What is installed in this build, and exactly what each one can reach.',
-};
-
-const SECURITY: Category = {
-  id: 'security',
-  label: 'Security',
-  description: 'The permission model, in short. The full detail lives on its own screen.',
-};
-
-const PRIVACY: Category = {
-  id: 'privacy',
-  label: 'Privacy',
-  description: 'What this application collects and sends, stated as fact.',
-};
-
-const NOTIFICATIONS: Category = {
-  id: 'notifications',
-  label: 'Notifications',
-  description: "Where a workflow's notifications appear, and where they do not.",
-};
-
-const FILES: Category = {
-  id: 'files',
-  label: 'Files',
-  description: 'What Encastra writes to disk, and what it does not.',
-};
-
-const UPDATES: Category = {
-  id: 'updates',
-  label: 'Updates',
-  description: 'How a newer version reaches this machine.',
-};
-
-const ACCOUNT: Category = {
-  id: 'account',
-  label: 'Account',
-  description: 'Sign-in, subscriptions, and why there are none.',
-};
-
-const DEVELOPER: Category = {
-  id: 'developer',
-  label: 'Developer',
-  description: 'Internals for people who want them, and a way back to the defaults.',
-};
-
-const DIAGNOSTICS: Category = {
-  id: 'diagnostics',
-  label: 'Diagnostics',
-  description: 'What this build and this machine report, ready to paste into a bug report.',
-};
-
-const ABOUT: Category = {
-  id: 'about',
-  label: 'About',
-  description: 'Build, versions, and where the fuller documentation lives.',
-};
-
 /** Sidebar order. `about` last is deliberate — it is where people look once they are oriented. */
-export const CATEGORIES: readonly Category[] = [
-  GENERAL,
-  APPEARANCE,
-  LANGUAGE,
-  WORKSPACE,
-  PROJECTS,
-  EDITOR,
-  CANVAS,
-  RUNTIME,
-  COMPONENTS,
-  SECURITY,
-  PRIVACY,
-  NOTIFICATIONS,
-  FILES,
-  UPDATES,
-  ACCOUNT,
-  DEVELOPER,
-  DIAGNOSTICS,
-  ABOUT,
+const CATEGORY_IDS: readonly CategoryId[] = [
+  'general',
+  'appearance',
+  'language',
+  'workspace',
+  'projects',
+  'editor',
+  'canvas',
+  'runtime',
+  'components',
+  'security',
+  'privacy',
+  'notifications',
+  'files',
+  'updates',
+  'account',
+  'developer',
+  'diagnostics',
+  'about',
 ];
 
-export const DEFAULT_CATEGORY: CategoryId = GENERAL.id;
+export const CATEGORIES: readonly Category[] = CATEGORY_IDS.map((id) => ({ id }));
+
+export const DEFAULT_CATEGORY: CategoryId = CATEGORY_IDS[0] ?? 'general';
 
 export function isCategoryId(value: string): value is CategoryId {
   return CATEGORIES.some((category) => category.id === value);
@@ -174,7 +72,7 @@ export function isCategoryId(value: string): value is CategoryId {
 
 /** Falls back to General for an id that does not (or no longer) match anything — never throws. */
 export function findCategory(id: CategoryId): Category {
-  return CATEGORIES.find((category) => category.id === id) ?? GENERAL;
+  return CATEGORIES.find((category) => category.id === id) ?? { id: DEFAULT_CATEGORY };
 }
 
 export type NavKey = 'ArrowUp' | 'ArrowDown' | 'Home' | 'End';
@@ -217,21 +115,29 @@ export function countGrants(grants: readonly GrantSpec[]): number {
 }
 
 /**
- * A plain-language name for a capability kind, for anywhere that shows what a component can
- * reach. Mirrors the map `views/Security.tsx` keeps for the same purpose — duplicated rather
- * than imported, since that file sits outside this feature's edit boundary, but small enough
- * that the two are easy to keep in step by hand.
+ * The `settings.components.capabilityLabels.*` key for a capability kind, for anywhere that shows
+ * what a component can reach. Mirrors the map `views/Security.tsx` keeps for the same purpose —
+ * duplicated rather than imported, since that file sits outside this feature's edit boundary, but
+ * small enough that the two are easy to keep in step by hand.
  */
-export const CAPABILITY_LABELS: Record<string, string> = {
-  'fs.read': 'Read files',
-  'fs.write': 'Write files',
-  'net.http': 'Use the network',
-  'system.notify': 'Show notifications',
-  'system.clipboard': 'Use the clipboard',
+const CAPABILITY_LABEL_KEYS: Record<string, string> = {
+  'fs.read': 'settings.components.capabilityLabels.fsRead',
+  'fs.write': 'settings.components.capabilityLabels.fsWrite',
+  'net.http': 'settings.components.capabilityLabels.netHttp',
+  'system.notify': 'settings.components.capabilityLabels.systemNotify',
+  'system.clipboard': 'settings.components.capabilityLabels.systemClipboard',
 };
 
-export function capabilityLabel(kind: string): string {
-  return CAPABILITY_LABELS[kind] ?? kind;
+/**
+ * A plain-language, translated name for a capability kind.
+ *
+ * Takes the translator rather than importing `useTranslation` itself, so this file — and the test
+ * that exercises it — stay free of React: the caller already has a `t`, from its own render or
+ * from the English locale directly in a test.
+ */
+export function capabilityLabel(kind: string, t: (key: string) => string): string {
+  const key = CAPABILITY_LABEL_KEYS[kind];
+  return key ? t(key) : kind;
 }
 
 /**

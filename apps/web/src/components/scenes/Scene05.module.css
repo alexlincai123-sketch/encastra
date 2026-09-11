@@ -1,0 +1,164 @@
+/*
+ * Scene 05 — Run. Own module: a chain that is always horizontal, at both breakpoints, and the
+ * static reduced-motion fallback. `Scenes.module.css` still supplies `.runLog`'s container and the
+ * scene's shared chrome (`.headline`, `.body`, `.stage`, `.centerCol`).
+ *
+ * The product canvas's own `<Wire>` (`components/graph/Graph.tsx`) switches between a vertical and
+ * a horizontal line via its own 720px *container* query, which this scene deliberately does not
+ * opt into: FLOW travels along `xPercent`, a horizontal measure, and a wire that can silently
+ * become vertical under it would send the traveller sideways off the line it is meant to be
+ * following. Building a plain, always-horizontal wire here keeps FLOW's maths honest at every
+ * width instead of fighting a responsive rule that exists for a different, non-animated context.
+ */
+
+.visualStage {
+  position: relative;
+  width: 100%;
+}
+
+.compose {
+  position: relative;
+  width: 100%;
+}
+
+.depthGroup {
+  position: relative;
+  width: 100%;
+  will-change: transform, opacity;
+}
+
+.chainRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+/* One per step: a `display: contents` box that keys a step's optional leading wire and its node
+   together in React without adding a level `.chainRow`'s flex layout would otherwise have to
+   account for — its children flatten straight into the row, same as if this element were not
+   there at all. */
+.stepFragment {
+  display: contents;
+}
+
+.chainNode {
+  flex: 0 0 auto;
+  width: 190px;
+  will-change: transform, opacity;
+}
+
+@media (max-width: 899px) {
+  .chainNode {
+    width: 108px;
+  }
+}
+
+/* The wire: a plain line and arrowhead, the type-badge from the product canvas, and a traveller
+   sized to the wire's own width so `flow()`'s `xPercent` — a percentage of the *target's own* box,
+   not its parent's — measures the full crossing rather than a few pixels of a small dot. */
+.chainWireWrap {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 48px;
+  height: 24px;
+}
+
+@media (max-width: 899px) {
+  .chainWireWrap {
+    min-width: 22px;
+  }
+}
+
+.chainLine {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 1.5px;
+  background: var(--edge);
+  transform: translateY(-50%);
+}
+
+.chainHead {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--edge);
+  transform: translateY(-50%);
+}
+
+.chainBadge {
+  position: absolute;
+  left: 50%;
+  top: -20px;
+  transform: translateX(-50%);
+  padding: 1px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-label);
+  color: var(--ink-muted);
+  background: var(--ground-3);
+  border: var(--border-strong);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+@media (max-width: 899px) {
+  .chainBadge {
+    display: none;
+  }
+}
+
+/* One small dot, drawn at the left edge of a box spanning the whole wire, so `xPercent: 0 -> 100`
+   carries it the wire's full length rather than its own few pixels. No glow, no trail — FLOW's own
+   fade at the fromTo's tail is the only emphasis it gets. */
+.traveller {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle 4px at 0% 50%,
+    var(--dot-color, var(--focus)) 0 4px,
+    transparent 4.6px
+  );
+  will-change: transform, opacity;
+}
+
+/* --- Reduced motion: the complete, static story -----------------------------------------------
+ * EXECUTE's lift and FLOW's travelling dot are both *how* a run is visible while it happens; a
+ * visitor who never sees it happen only needs to see that it finished — three real steps, each
+ * already marked done, and the transcript already printed below.
+ */
+
+.staticRun {
+  display: none;
+}
+
+/* `Scenes.module.css`'s own `.runLogLine` bakes `opacity: 0` into its base rule with no reduced-
+   motion override — correct for a line this component reveals itself via GSAP, wrong for a line
+   that must already be visible when the timeline never runs at all. A line here is styled instead,
+   left at its default opacity, and hidden only by the `gsap.set` inside `buildVariant`, which
+   reduced motion skips along with the rest of the build function. */
+.logLine {
+  color: var(--ink-faint);
+}
+
+.logLine[data-tone="ok"] {
+  color: var(--ok);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compose {
+    display: none;
+  }
+
+  .staticRun {
+    display: flex;
+    justify-content: center;
+  }
+}

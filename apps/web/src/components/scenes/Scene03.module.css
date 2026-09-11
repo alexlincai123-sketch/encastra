@@ -1,0 +1,18 @@
+/*
+ * Scene 03 — Connect.
+ *
+ * Reuses `.connectGrid`/`.connectAttempt`/`.connectPair`/`.connectNode` wholesale from
+ * `Scenes.module.css` — the two-attempt comparison it already lays out is exactly this scene's
+ * shape. What is added here is the `u-depth` wrapper `handon`/`handoff` need, and a named slot
+ * for the wire so `snap()`/`breakApart()` have a stable element to grab that is not an inline
+ * style.
+ */
+
+.composition {
+  position: relative;
+}
+
+.wireSlot {
+  position: relative;
+  width: 100%;
+}
