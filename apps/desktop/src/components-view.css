@@ -1,0 +1,194 @@
+/*
+ * The component catalogue.
+ *
+ * Every card carries the same four things in the same order — purpose, ports, reach, what it
+ * does not reach — because a catalogue you can scan is one where the same fact is always in the
+ * same place. No card gets a coloured accent stripe down its side: colour here is reserved for
+ * what a port's data type actually is, so it stays meaningful instead of decorative. Every
+ * value is a token from packages/ui/src/tokens.css.
+ */
+
+.catalogue__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.catalogue__filters .input {
+  max-width: 260px;
+}
+
+.catalogue__categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+.catalogue__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-4);
+}
+
+.catalogue__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--ground-2);
+  border: var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.catalogue__card-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.catalogue__name {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+
+.catalogue__version {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.catalogue__trigger-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  line-height: var(--leading-normal);
+}
+
+.catalogue__description {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  line-height: var(--leading-normal);
+}
+
+/* --- Ports ------------------------------------------------------------------------------- */
+
+.catalogue__ports {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: var(--border);
+  border-bottom: var(--border);
+}
+
+.catalogue__port-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
+.catalogue__port-label {
+  flex: none;
+  min-width: 40px;
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+.catalogue__port-list {
+  display: contents;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* --- Reach --------------------------------------------------------------------------------
+ * The permission story, told in full: what a component asks for and why, in its own words, and
+ * what it never touches. The "cannot" half reuses `.cannot` from styles.css on purpose — it is
+ * the exact language the permission dialog itself uses, so nothing learned here is contradicted
+ * later when the same component actually asks for a grant.
+ * ------------------------------------------------------------------------------------------ */
+
+.catalogue__safe {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--ok);
+}
+
+.catalogue__safe-mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--ok);
+}
+
+.catalogue__reach-label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.catalogue__reach-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.catalogue__reach-kind {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--warn);
+}
+
+.catalogue__reach-reason {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  line-height: var(--leading-normal);
+}
+
+/* --- Footer -------------------------------------------------------------------------------- */
+
+.catalogue__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: var(--border);
+}
+
+.catalogue__id {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1333,3 +1333,52 @@ select.input {
   grid-area: auto;
   min-height: 0;
 }
+
+/* ---------------------------------------------------------------------------------------
+ * A refused connection
+ *
+ * Appears when a drag ends without landing. Not a toast in the corner: it belongs to the
+ * canvas, because that is where the thing that failed happened. It stays until dismissed —
+ * a message that vanishes on a timer is a message somebody reading the wire misses.
+ * ------------------------------------------------------------------------------------ */
+
+.refusal {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-4);
+  z-index: 5;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: min(520px, calc(100% - var(--space-5)));
+  padding: var(--space-3);
+  background: var(--ground-2);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.refusal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.refusal__headline {
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.refusal__detail,
+.refusal__bridge {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--ink-muted);
+}
+
+.refusal__bridge code {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}

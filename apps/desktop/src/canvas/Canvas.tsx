@@ -7,7 +7,6 @@
  * drawn in the first place. That is the difference between a validator and a promise.
  */
 
-import { checkCompatibility } from '@encastra/protocol';
 import {
   Background,
   BackgroundVariant,
@@ -19,10 +18,11 @@ import {
   type ReactFlowInstance,
   useReactFlow,
 } from '@xyflow/react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { usePreferences } from '../preferences';
 import { type EditorNode, useEditor } from '../store';
 import { ComponentNode } from './ComponentNode';
+import { explainConnection, type RefusalNo } from './refusal';
 import { Wire } from './Wire';
 import { indexOf, step, walkOrder } from './walk';
 
@@ -127,20 +127,41 @@ export function Canvas() {
     [ordered, selectedNodeId, go, select],
   );
 
+  /**
+   * Why the last attempted connection was refused, so the drag can end with an explanation.
+   *
+   * Held in a ref rather than in state because `isValidConnection` runs on every pointer move
+   * while a wire is being dragged; putting it in state would re-render the canvas continuously
+   * for the whole drag. It is read once, at `onConnectEnd`.
+   */
+  const lastRefusal = useRef<RefusalNo | null>(null);
+  const [refusal, setRefusal] = useState<RefusalNo | null>(null);
+
   const isConnectionLegal: IsValidConnection = useCallback((connection) => {
     const { source, target, sourceHandle, targetHandle } = connection;
     if (!source || !target || !sourceHandle || !targetHandle) return false;
 
     // A node feeding itself is a cycle of one. Validation would refuse it; refusing here means
     // the user never draws it.
-    if (source === target) return false;
+    if (source === target) {
+      lastRefusal.current = {
+        ok: false,
+        headline: 'A step cannot feed itself.',
+        detail:
+          'A workflow runs forwards. To do the same work repeatedly, start it from a trigger — ' +
+          'Watch Folder or Timer — which runs it once per event.',
+      };
+      return false;
+    }
 
     const state = useEditor.getState();
     const from = state.portType(source, sourceHandle, 'outputs');
     const to = state.portType(target, targetHandle, 'inputs');
     if (!from || !to) return false;
 
-    return checkCompatibility(from, to).ok;
+    const verdict = explainConnection(from, to);
+    lastRefusal.current = verdict.ok ? null : verdict;
+    return verdict.ok;
   }, []);
 
   const onDrop = useCallback(
@@ -181,6 +202,14 @@ export function Canvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={connect}
+        onConnectStart={() => {
+          lastRefusal.current = null;
+          setRefusal(null);
+        }}
+        // The moment worth explaining. React Flow simply declines to complete an illegal
+        // connection, which leaves somebody holding a wire that will not land and no idea
+        // why — the most common moment of confusion in a node editor.
+        onConnectEnd={() => setRefusal(lastRefusal.current)}
         isValidConnection={isConnectionLegal}
         onNodeClick={(_, node) => select(node.id)}
         onPaneClick={() => select(null)}
@@ -236,6 +265,28 @@ export function Canvas() {
             Every component says what it can reach before it runs, and nothing touches your files
             until you allow it.
           </p>
+        </div>
+      ) : null}
+
+      {refusal ? (
+        <div className="refusal" role="status" aria-live="polite">
+          <div className="refusal__body">
+            <strong className="refusal__headline">{refusal.headline}</strong>
+            <span className="refusal__detail">{refusal.detail}</span>
+            {refusal.bridge ? (
+              <span className="refusal__bridge">
+                A step producing <code>{refusal.bridge}</code> in between would join them.
+              </span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setRefusal(null)}
+            aria-label="Dismiss"
+          >
+            Close
+          </button>
         </div>
       ) : null}
 

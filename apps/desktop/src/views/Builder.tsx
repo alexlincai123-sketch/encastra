@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { Canvas } from '../canvas/Canvas';
 import { Inspector } from '../panels/Inspector';
 import { Palette } from '../panels/Palette';
+import { RunPanel } from '../panels/RunPanel';
 import { useEditor } from '../store';
 
 /** True when the keystroke belongs to whatever the person is typing in. */
@@ -79,9 +80,15 @@ export function Builder() {
   return (
     <>
       <Palette />
-      <ReactFlowProvider>
-        <Canvas />
-      </ReactFlowProvider>
+      {/* Canvas and execution panel share the middle column. Keeping them in one wrapper rather
+          than adding a row to the shell grid means the panel can come and go without the
+          palette and inspector resizing around it. */}
+      <div className="workarea">
+        <ReactFlowProvider>
+          <Canvas />
+        </ReactFlowProvider>
+        <RunPanel />
+      </div>
       <Inspector />
     </>
   );
