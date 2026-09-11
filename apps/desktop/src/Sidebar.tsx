@@ -6,13 +6,8 @@
  * application is decoration.
  */
 
+import { useTranslation } from './i18n';
 import { useEditor, type View } from './store';
-
-interface Item {
-  readonly id: View;
-  readonly label: string;
-  readonly icon: React.ReactNode;
-}
 
 /** Simple geometric glyphs, drawn from the same vocabulary as the mark: blocks and joints. */
 const ICONS: Record<View, React.ReactNode> = {
@@ -50,44 +45,42 @@ const ICONS: Record<View, React.ReactNode> = {
   ),
 };
 
-const ITEMS: Item[] = (
-  [
-    ['home', 'Home'],
-    ['builder', 'Builder'],
-    ['components', 'Components'],
-    ['security', 'Security'],
-    ['settings', 'Settings'],
-  ] as const
-).map(([id, label]) => ({ id, label, icon: ICONS[id] }));
+/** Sidebar order. Labels come from `sidebar.items.*`, translated at render time so a locale
+ * switch updates the labels without touching this order. */
+const ITEM_IDS: readonly View[] = ['home', 'builder', 'components', 'security', 'settings'];
 
 export function Sidebar() {
   const view = useEditor((s) => s.view);
   const setView = useEditor((s) => s.setView);
   const running = useEditor((s) => s.running);
+  const { t } = useTranslation();
 
   return (
-    <nav className="sidebar" aria-label="Sections">
-      {ITEMS.map((item) => (
-        <button
-          type="button"
-          key={item.id}
-          className="sidebar__item"
-          aria-current={view === item.id ? 'page' : undefined}
-          onClick={() => setView(item.id)}
-          title={item.label}
-        >
-          <svg viewBox="0 0 22 22" fill="currentColor" stroke="none" aria-hidden="true">
-            {item.icon}
-          </svg>
-          <span className="sidebar__label">{item.label}</span>
-          {item.id === 'builder' && running ? (
-            <span className="visually-hidden">, running</span>
-          ) : null}
-          {item.id === 'builder' && running ? (
-            <span className="sidebar__running" aria-hidden="true" />
-          ) : null}
-        </button>
-      ))}
+    <nav className="sidebar" aria-label={t('sidebar.ariaLabel')}>
+      {ITEM_IDS.map((id) => {
+        const label = t(`sidebar.items.${id}`);
+        return (
+          <button
+            type="button"
+            key={id}
+            className="sidebar__item"
+            aria-current={view === id ? 'page' : undefined}
+            onClick={() => setView(id)}
+            title={label}
+          >
+            <svg viewBox="0 0 22 22" fill="currentColor" stroke="none" aria-hidden="true">
+              {ICONS[id]}
+            </svg>
+            <span className="sidebar__label">{label}</span>
+            {id === 'builder' && running ? (
+              <span className="visually-hidden">{t('sidebar.running')}</span>
+            ) : null}
+            {id === 'builder' && running ? (
+              <span className="sidebar__running" aria-hidden="true" />
+            ) : null}
+          </button>
+        );
+      })}
     </nav>
   );
 }

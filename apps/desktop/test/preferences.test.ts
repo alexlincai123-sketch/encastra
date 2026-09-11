@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULTS, load } from '../src/preferences';
+import { DEFAULTS, load, PREFERENCE_KEYS } from '../src/preferences';
 
 /**
  * Preferences have to survive being wrong.
@@ -75,5 +75,25 @@ describe('load', () => {
   it('starts with the welcome unseen, so a first run is a first run', () => {
     withStorage({ getItem: () => null });
     expect(load().welcomeSeen).toBe(false);
+  });
+});
+
+describe('PREFERENCE_KEYS', () => {
+  it('lists exactly the keys DEFAULTS has, in either direction', () => {
+    // The Developer category's raw dump (and anything else that enumerates preferences without
+    // wanting a second hand-typed list) reads this instead of `Object.keys(DEFAULTS)` directly —
+    // this is what would catch the two falling out of step.
+    expect(new Set(PREFERENCE_KEYS)).toEqual(new Set(Object.keys(DEFAULTS)));
+  });
+
+  it('has no duplicate keys', () => {
+    expect(new Set(PREFERENCE_KEYS).size).toBe(PREFERENCE_KEYS.length);
+  });
+
+  it('indexes every key into a loaded Preferences object without a wrong type', () => {
+    const loaded = load();
+    for (const key of PREFERENCE_KEYS) {
+      expect(loaded[key]).not.toBeUndefined();
+    }
   });
 });

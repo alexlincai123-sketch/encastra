@@ -184,8 +184,7 @@ export const useI18n = create<I18nStore>((set) => ({
     persistLocale(locale);
     void loadLocale(locale);
   },
-  register: (locale, messages) =>
-    set((s) => ({ messages: { ...s.messages, [locale]: messages } })),
+  register: (locale, messages) => set((s) => ({ messages: { ...s.messages, [locale]: messages } })),
 }));
 
 /**

@@ -20,6 +20,7 @@
  * touching React or the DOM; see `../../test/run-panel.test.ts`.
  */
 
+import { usePreferences } from '../preferences';
 import { useEditor } from '../store';
 import type { NodeRecord, NodeStatus, RunJournal } from '../types';
 import './run-panel.css';
@@ -200,6 +201,18 @@ export function RunPanel() {
   const selectedNodeId = useEditor((s) => s.selectedNodeId);
   const select = useEditor((s) => s.select);
   const nameOf = useStepName();
+
+  /**
+   * Whether the panel is present before there is anything to report.
+   *
+   * The preference existed and nothing read it, which made it precisely the decorative control
+   * the settings screen is built to have none of. Turned off, the panel stays out of the way
+   * until there is something to show — a run that has happened, or one being watched for —
+   * rather than taking a strip off the canvas from the moment the editor opens.
+   */
+  const openOnRun = usePreferences((p) => p.openRunPanelOnRun);
+  const somethingToShow = journal !== null || watching || running;
+  if (!openOnRun && !somethingToShow) return null;
 
   const steps = selectSteps({ journal, liveNodes, running });
   const outcome = outcomeSummary({ journal, running, watching });

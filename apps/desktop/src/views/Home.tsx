@@ -6,6 +6,7 @@
  */
 
 import { DEMOS } from '../demos';
+import { selectPlural, useTranslation } from '../i18n';
 import { ipc } from '../ipc';
 import { useEditor } from '../store';
 
@@ -34,6 +35,7 @@ export function Home() {
   const projectName = useEditor((s) => s.projectName);
   const projectPath = useEditor((s) => s.projectPath);
   const nodeCount = useEditor((s) => s.nodes.length);
+  const { t, locale } = useTranslation();
 
   const installed = Object.keys(manifests).length;
 
@@ -42,11 +44,8 @@ export function Home() {
       <header className="home__intro">
         <Mark />
         <div>
-          <h1>Build software from parts that fit.</h1>
-          <p>
-            Put components on a canvas, connect them, and press start. Everything runs on this
-            machine, and nothing reaches your files without being asked.
-          </p>
+          <h1>{t('home.intro.heading')}</h1>
+          <p>{t('home.intro.body')}</p>
         </div>
       </header>
 
@@ -59,8 +58,8 @@ export function Home() {
             setView('builder');
           }}
         >
-          <span className="action__title">New workflow</span>
-          <span className="action__detail">Start from an empty canvas</span>
+          <span className="action__title">{t('home.actions.new.title')}</span>
+          <span className="action__detail">{t('home.actions.new.detail')}</span>
         </button>
 
         <button
@@ -69,44 +68,48 @@ export function Home() {
           disabled={!ipc.live}
           onClick={() => void openProject()}
         >
-          <span className="action__title">Open</span>
+          <span className="action__title">{t('home.actions.open.title')}</span>
           <span className="action__detail">
-            {ipc.live ? 'A .encastra file you saved earlier' : 'Needs the desktop application'}
+            {ipc.live
+              ? t('home.actions.open.detailReady')
+              : t('home.actions.open.detailUnavailable')}
           </span>
         </button>
 
         <button type="button" className="action" onClick={() => setView('components')}>
-          <span className="action__title">Browse components</span>
-          <span className="action__detail">{installed} installed, and what each one can reach</span>
+          <span className="action__title">{t('home.actions.browse.title')}</span>
+          <span className="action__detail">
+            {t(`home.actions.browse.detail.${selectPlural(locale, installed)}`, {
+              count: installed,
+            })}
+          </span>
         </button>
       </section>
 
       {nodeCount > 0 ? (
         <section className="home__section">
-          <h2>Where you left off</h2>
+          <h2>{t('home.continue.heading')}</h2>
           <button type="button" className="card" onClick={() => setView('builder')}>
             <span className="card__title">{projectName}</span>
             <span className="card__detail">
-              {nodeCount} step{nodeCount === 1 ? '' : 's'}
-              {projectPath ? '' : ' · not saved yet'}
+              {t(`home.continue.steps.${selectPlural(locale, nodeCount)}`, { count: nodeCount })}
+              {projectPath ? '' : t('home.continue.unsaved')}
             </span>
           </button>
         </section>
       ) : null}
 
       <section className="home__section">
-        <h2>Samples</h2>
-        <p className="home__note">
-          Real workflows on the real runtime. Each one needs you to choose its folders before it can
-          start — a sample that wrote somewhere you had not picked would be the opposite of the
-          point.
-        </p>
+        <h2>{t('home.samples.heading')}</h2>
+        <p className="home__note">{t('home.samples.note')}</p>
         <div className="home__grid">
           {DEMOS.map((demo) => (
             <button type="button" className="card" key={demo.id} onClick={() => loadDemo(demo)}>
               <span className="card__title">{demo.name}</span>
               <span className="card__detail">{demo.summary}</span>
-              <span className="card__needs">Needs: {demo.needs.join(' · ')}</span>
+              <span className="card__needs">
+                {t('home.samples.needs', { list: demo.needs.join(' · ') })}
+              </span>
             </button>
           ))}
         </div>

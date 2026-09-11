@@ -6,28 +6,33 @@
  * mid-run is how people learn to click through dialogs.
  */
 
+import { useTranslation } from '../i18n';
 import { useEditor } from '../store';
 import type { ComponentManifest } from '../types';
 
-const CAPABILITY_LABELS: Record<string, string> = {
-  'fs.read': 'reads files',
-  'fs.write': 'writes files',
-  'net.http': 'uses the network',
-  'system.notify': 'shows notifications',
-  'system.clipboard': 'uses the clipboard',
+const CAPABILITY_KEYS: Record<string, string> = {
+  'fs.read': 'palette.capabilities.fsRead',
+  'fs.write': 'palette.capabilities.fsWrite',
+  'net.http': 'palette.capabilities.netHttp',
+  'system.notify': 'palette.capabilities.systemNotify',
+  'system.clipboard': 'palette.capabilities.systemClipboard',
 };
 
 /** What this component will ask for beyond what the graph already grants it. */
-function asks(manifest: ComponentManifest): string[] {
+function asks(manifest: ComponentManifest, t: (key: string) => string): string[] {
   return manifest.capabilities
     .filter((c) => c.scope !== 'input-handles')
-    .map((c) => CAPABILITY_LABELS[c.kind] ?? c.kind);
+    .map((c) => {
+      const key = CAPABILITY_KEYS[c.kind];
+      return key ? t(key) : c.kind;
+    });
 }
 
 function PaletteItem({ manifest }: { manifest: ComponentManifest }) {
   const addNode = useEditor((s) => s.addNode);
+  const { t } = useTranslation();
   const reference = `${manifest.id}@${manifest.version}`;
-  const wants = asks(manifest);
+  const wants = asks(manifest, t);
 
   return (
     <button
@@ -48,7 +53,9 @@ function PaletteItem({ manifest }: { manifest: ComponentManifest }) {
         <span className="palette-item__desc">{manifest.description}</span>
       ) : null}
       {wants.length > 0 ? (
-        <span className="palette-item__needs">Asks to: {wants.join(', ')}</span>
+        <span className="palette-item__needs">
+          {t('palette.asksTo', { list: wants.join(', ') })}
+        </span>
       ) : null}
     </button>
   );
@@ -56,13 +63,14 @@ function PaletteItem({ manifest }: { manifest: ComponentManifest }) {
 
 export function Palette() {
   const manifests = useEditor((s) => s.manifests);
+  const { t } = useTranslation();
   const entries = Object.values(manifests);
 
   if (entries.length === 0) {
     return (
       <aside className="panel panel--palette">
-        <h2 className="panel__title">Components</h2>
-        <p className="empty">No components are installed.</p>
+        <h2 className="panel__title">{t('palette.title')}</h2>
+        <p className="empty">{t('palette.empty')}</p>
       </aside>
     );
   }
@@ -77,7 +85,7 @@ export function Palette() {
 
   return (
     <aside className="panel panel--palette">
-      <h2 className="panel__title">Components</h2>
+      <h2 className="panel__title">{t('palette.title')}</h2>
       <div className="panel__section">
         {[...byCategory.entries()]
           .sort(([a], [b]) => a.localeCompare(b))

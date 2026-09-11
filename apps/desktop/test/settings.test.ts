@@ -1,15 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   CATEGORIES,
+  type CategoryId,
+  capabilityLabel,
   countGrants,
   DEFAULT_CATEGORY,
   findCategory,
   isCategoryId,
   isNavKey,
   moveIndex,
+  reachOf,
   summarizeComponents,
 } from '../src/settings/categories';
-import type { ComponentManifest } from '../src/types';
+import {
+  assembleDiagnostics,
+  detectArchitecture,
+  detectGpuRenderer,
+  detectPlatform,
+  diagnosticsToText,
+} from '../src/settings/diagnostics';
+import type { Capability, ComponentManifest } from '../src/types';
 
 /**
  * The pure logic behind the Settings screen: the category list, roving-focus arithmetic in the
@@ -56,6 +66,34 @@ describe('CATEGORIES', () => {
 
   it('defaults to the first category in the list', () => {
     expect(DEFAULT_CATEGORY).toBe(CATEGORIES[0]?.id);
+  });
+
+  it('covers exactly the architecture the product asked for', () => {
+    // Order-independent on purpose — the sidebar order is a design decision (About last,
+    // General first) asserted separately above; this only guards against a category being
+    // silently dropped or duplicated under a different id while the screen is reorganised.
+    const expected: CategoryId[] = [
+      'general',
+      'appearance',
+      'language',
+      'workspace',
+      'projects',
+      'editor',
+      'canvas',
+      'runtime',
+      'components',
+      'security',
+      'privacy',
+      'notifications',
+      'files',
+      'updates',
+      'account',
+      'developer',
+      'diagnostics',
+      'about',
+    ];
+    expect(new Set(CATEGORIES.map((c) => c.id))).toEqual(new Set(expected));
+    expect(CATEGORIES.length).toBe(expected.length);
   });
 });
 
@@ -172,5 +210,181 @@ describe('countGrants', () => {
         { node: 'n1', kind: 'fs.write' },
       ]),
     ).toBe(2);
+  });
+});
+
+describe('capabilityLabel', () => {
+  it('gives a plain-language name to a known capability kind', () => {
+    expect(capabilityLabel('fs.read')).toBe('Read files');
+    expect(capabilityLabel('net.http')).toBe('Use the network');
+  });
+
+  it('falls back to the raw kind for one it does not recognise, rather than hiding it', () => {
+    expect(capabilityLabel('gpu.compute')).toBe('gpu.compute');
+  });
+});
+
+describe('reachOf', () => {
+  function capability(overrides: Partial<Capability> & { kind: string }): Capability {
+    return { scope: 'workflow', reason: 'because the workflow asked for it', ...overrides };
+  }
+
+  it('reports nothing for a component with no capabilities', () => {
+    expect(reachOf(manifest({ id: 'a', capabilities: [] }))).toEqual([]);
+  });
+
+  it('passes through a real capability untouched', () => {
+    const read = capability({ kind: 'fs.read' });
+    expect(reachOf(manifest({ id: 'a', capabilities: [read] }))).toEqual([read]);
+  });
+
+  it('filters out input-handles bookkeeping, the same way the Security screen does', () => {
+    const read = capability({ kind: 'fs.read' });
+    const handles = capability({ kind: 'fs.read', scope: 'input-handles' });
+    const reach = reachOf(manifest({ id: 'a', capabilities: [read, handles] }));
+    expect(reach).toEqual([read]);
+  });
+});
+
+describe('diagnostics detection', () => {
+  describe('detectPlatform', () => {
+    it('recognises Windows', () => {
+      expect(detectPlatform('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('Windows');
+    });
+
+    it('recognises macOS', () => {
+      expect(detectPlatform('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('macOS');
+    });
+
+    it('recognises Linux', () => {
+      expect(detectPlatform('Mozilla/5.0 (X11; Linux x86_64)')).toBe('Linux');
+    });
+
+    it('says Unknown rather than guessing', () => {
+      expect(detectPlatform('something nobody has seen before')).toBe('Unknown');
+    });
+  });
+
+  describe('detectArchitecture', () => {
+    it('recognises 64-bit Windows', () => {
+      expect(detectArchitecture('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('x64');
+    });
+
+    it('recognises Apple Silicon', () => {
+      expect(detectArchitecture('Mozilla/5.0 (Macintosh; ARM64 Mac OS X 14_0)')).toBe('ARM64');
+    });
+
+    it('says so rather than guessing when the WebView does not report it', () => {
+      expect(detectArchitecture('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe(
+        'Not reported by the WebView',
+      );
+    });
+  });
+
+  describe('detectGpuRenderer', () => {
+    it('comes back empty rather than throwing when there is no DOM', () => {
+      // vitest runs this suite with `environment: 'node'` — there is no `document` here, which
+      // is exactly the case a locked-down or headless machine looks like too.
+      expect(detectGpuRenderer()).toBeNull();
+    });
+  });
+});
+
+describe('assembleDiagnostics', () => {
+  const about = { version: '0.3.0', runtime: '1.2.0', protocolSchema: 3, projectSchema: 2 };
+
+  function rowValue(
+    rows: ReturnType<typeof assembleDiagnostics>,
+    label: string,
+  ): string | undefined {
+    return rows.find((row) => row.label === label)?.value;
+  }
+
+  it('reports unknown rather than throwing when About has not loaded yet', () => {
+    const rows = assembleDiagnostics({
+      about: null,
+      manifests: {},
+      runtimeAttached: false,
+      userAgent: 'ua',
+      platform: 'Windows',
+      architecture: 'x64',
+      gpu: null,
+    });
+    expect(rowValue(rows, 'Encastra version')).toBe('unknown');
+    expect(rowValue(rows, 'Component protocol schema')).toBe('unknown');
+  });
+
+  it('says browser preview rather than the runtime string when nothing is attached', () => {
+    const rows = assembleDiagnostics({
+      about,
+      manifests: {},
+      runtimeAttached: false,
+      userAgent: 'ua',
+      platform: 'Windows',
+      architecture: 'x64',
+      gpu: null,
+    });
+    expect(rowValue(rows, 'Runtime')).toBe('not attached — browser preview');
+  });
+
+  it('reports the real build values once About has loaded and a runtime is attached', () => {
+    const rows = assembleDiagnostics({
+      about,
+      manifests: { a: manifest({ id: 'a' }), b: manifest({ id: 'b' }) },
+      runtimeAttached: true,
+      userAgent: 'ua',
+      platform: 'Windows',
+      architecture: 'x64',
+      gpu: 'Example Renderer',
+    });
+    expect(rowValue(rows, 'Encastra version')).toBe('0.3.0');
+    expect(rowValue(rows, 'Runtime')).toBe('1.2.0');
+    expect(rowValue(rows, 'Component protocol schema')).toBe('3');
+    expect(rowValue(rows, 'Project format schema')).toBe('2');
+    expect(rowValue(rows, 'Installed components')).toBe('2');
+    expect(rowValue(rows, 'GPU')).toBe('Example Renderer');
+  });
+
+  it('says GPU is not discoverable rather than leaving it blank', () => {
+    const rows = assembleDiagnostics({
+      about: null,
+      manifests: {},
+      runtimeAttached: false,
+      userAgent: 'ua',
+      platform: 'Windows',
+      architecture: 'x64',
+      gpu: null,
+    });
+    expect(rowValue(rows, 'GPU')).toBe('Not discoverable');
+  });
+
+  it('never includes a project path, a preference key or anything that looks like a secret', () => {
+    const rows = assembleDiagnostics({
+      about,
+      manifests: {},
+      runtimeAttached: true,
+      userAgent: 'ua',
+      platform: 'Windows',
+      architecture: 'x64',
+      gpu: null,
+    });
+    const text = diagnosticsToText(rows).toLowerCase();
+    expect(text).not.toContain('c:\\');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('key');
+  });
+});
+
+describe('diagnosticsToText', () => {
+  it('renders nothing as an empty string', () => {
+    expect(diagnosticsToText([])).toBe('');
+  });
+
+  it('renders one label: value pair per line, in order', () => {
+    const text = diagnosticsToText([
+      { label: 'A', value: '1' },
+      { label: 'B', value: '2' },
+    ]);
+    expect(text).toBe('A: 1\nB: 2');
   });
 });

@@ -39,8 +39,9 @@ export interface Preferences {
   /** Keep the execution panel open while a workflow runs. */
   openRunPanelOnRun: boolean;
 
-  // --- Advanced -------------------------------------------------------------------------
-  /** Surfaces internals — component ids, digests, raw journal — for people who want them. */
+  // --- Developer ------------------------------------------------------------------------
+  /** Surfaces a raw dump of these preferences and a summary of every loaded component in the
+   * Developer category, for people who want them. */
   developerMode: boolean;
 
   // --- First run ------------------------------------------------------------------------
@@ -61,6 +62,12 @@ export const DEFAULTS: Preferences = {
   developerMode: false,
   welcomeSeen: false,
 };
+
+/** Every preference key, derived from `DEFAULTS` rather than hand-listed a second time —
+ * anywhere that needs to enumerate preferences without needing to know in advance what they all
+ * are (the raw dump Settings shows in developer mode, for one) reads this instead of typing the
+ * list out again and risking it drifting from `DEFAULTS`. */
+export const PREFERENCE_KEYS = Object.keys(DEFAULTS) as readonly (keyof Preferences)[];
 
 const STORAGE_KEY = 'encastra.preferences';
 

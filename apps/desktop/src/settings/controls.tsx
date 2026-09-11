@@ -1,10 +1,12 @@
 /**
  * The handful of control shapes the Settings screen needs that nothing else in the app has.
  *
- * Not a general component library — reach for what already exists (`.btn`, `.pill`, `.input`
- * from `styles.css`) wherever it already fits, which is most places. These four are new because
- * nothing today renders a labelled switch, a status that reads as fact rather than control, or a
- * row layout with a label, an explanatory sentence, and a control aligned to the right of both.
+ * Not a general component library — reach for what already exists (`.btn`, `.pill`, `.input`,
+ * `.table`, `.kv` from `styles.css`) wherever it already fits, which is most places. What is
+ * here is new because nothing today renders a labelled switch, a status that reads as fact
+ * rather than control, a row layout with a label, an explanatory sentence and a control aligned
+ * to the right of both, or a block of text — a raw preferences dump, a diagnostics report —
+ * meant to be read verbatim rather than styled as prose.
  */
 
 import type { ReactNode } from 'react';
@@ -96,6 +98,9 @@ interface SegmentedProps<Value extends string> {
   value: Value;
   options: readonly SegmentedOption<Value>[];
   onChange: (value: Value) => void;
+  /** For a choice mid-flight — a language still loading its file, say — where letting a second
+   * click land part way through would race the first. */
+  disabled?: boolean;
 }
 
 export function Segmented<Value extends string>({
@@ -103,9 +108,10 @@ export function Segmented<Value extends string>({
   value,
   options,
   onChange,
+  disabled = false,
 }: SegmentedProps<Value>) {
   return (
-    <fieldset className="s-segmented">
+    <fieldset className="s-segmented" disabled={disabled}>
       <legend className="visually-hidden">{legend}</legend>
       {options.map((option) => (
         <button
@@ -188,4 +194,10 @@ type StatusTone = 'ok' | 'warn' | 'muted';
  * than offer a switch for something that does not exist. */
 export function StatusPill({ tone, children }: { tone: StatusTone; children: ReactNode }) {
   return <span className={`s-status s-status--${tone}`}>{children}</span>;
+}
+
+/** A block of text meant to be read, copied or exported verbatim — a diagnostics report, a raw
+ * preferences dump — never edited in place, so a `<pre>` rather than a `<textarea>`. */
+export function Pre({ children }: { children: ReactNode }) {
+  return <pre className="s-pre">{children}</pre>;
 }

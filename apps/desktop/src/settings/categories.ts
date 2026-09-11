@@ -7,17 +7,26 @@
  * hardcoded) instead of only ever being exercised by clicking through the sidebar by hand.
  */
 
-import type { ComponentManifest, GrantSpec } from '../types';
+import type { Capability, ComponentManifest, GrantSpec } from '../types';
 
 export type CategoryId =
   | 'general'
+  | 'appearance'
+  | 'language'
   | 'workspace'
+  | 'projects'
   | 'editor'
+  | 'canvas'
   | 'runtime'
   | 'components'
   | 'security'
   | 'privacy'
-  | 'advanced'
+  | 'notifications'
+  | 'files'
+  | 'updates'
+  | 'account'
+  | 'developer'
+  | 'diagnostics'
   | 'about';
 
 export interface Category {
@@ -30,19 +39,43 @@ export interface Category {
 const GENERAL: Category = {
   id: 'general',
   label: 'General',
-  description: 'Appearance, motion, and the first-run tour.',
+  description: 'Get started, and what this application shows you when it opens.',
+};
+
+const APPEARANCE: Category = {
+  id: 'appearance',
+  label: 'Appearance',
+  description: 'Theme and motion.',
+};
+
+const LANGUAGE: Category = {
+  id: 'language',
+  label: 'Language & Region',
+  description: 'The language this interface speaks, and how it shows dates and numbers.',
 };
 
 const WORKSPACE: Category = {
   id: 'workspace',
   label: 'Workspace',
-  description: 'Where projects live, and what this application opens to.',
+  description: 'Where your projects live on disk.',
+};
+
+const PROJECTS: Category = {
+  id: 'projects',
+  label: 'Projects',
+  description: 'How a project opens, and the format it is saved in.',
 };
 
 const EDITOR: Category = {
   id: 'editor',
   label: 'Editor',
-  description: 'Aids shown on the canvas while you build a graph.',
+  description: 'Shortcuts and behaviour while you build a graph.',
+};
+
+const CANVAS: Category = {
+  id: 'canvas',
+  label: 'Canvas',
+  description: 'Aids drawn on the canvas itself: the grid, snapping, the minimap.',
 };
 
 const RUNTIME: Category = {
@@ -54,7 +87,7 @@ const RUNTIME: Category = {
 const COMPONENTS: Category = {
   id: 'components',
   label: 'Components',
-  description: 'What is installed in this build, and what each one can reach.',
+  description: 'What is installed in this build, and exactly what each one can reach.',
 };
 
 const SECURITY: Category = {
@@ -69,10 +102,40 @@ const PRIVACY: Category = {
   description: 'What this application collects and sends, stated as fact.',
 };
 
-const ADVANCED: Category = {
-  id: 'advanced',
-  label: 'Advanced',
+const NOTIFICATIONS: Category = {
+  id: 'notifications',
+  label: 'Notifications',
+  description: "Where a workflow's notifications appear, and where they do not.",
+};
+
+const FILES: Category = {
+  id: 'files',
+  label: 'Files',
+  description: 'What Encastra writes to disk, and what it does not.',
+};
+
+const UPDATES: Category = {
+  id: 'updates',
+  label: 'Updates',
+  description: 'How a newer version reaches this machine.',
+};
+
+const ACCOUNT: Category = {
+  id: 'account',
+  label: 'Account',
+  description: 'Sign-in, subscriptions, and why there are none.',
+};
+
+const DEVELOPER: Category = {
+  id: 'developer',
+  label: 'Developer',
   description: 'Internals for people who want them, and a way back to the defaults.',
+};
+
+const DIAGNOSTICS: Category = {
+  id: 'diagnostics',
+  label: 'Diagnostics',
+  description: 'What this build and this machine report, ready to paste into a bug report.',
 };
 
 const ABOUT: Category = {
@@ -84,13 +147,22 @@ const ABOUT: Category = {
 /** Sidebar order. `about` last is deliberate — it is where people look once they are oriented. */
 export const CATEGORIES: readonly Category[] = [
   GENERAL,
+  APPEARANCE,
+  LANGUAGE,
   WORKSPACE,
+  PROJECTS,
   EDITOR,
+  CANVAS,
   RUNTIME,
   COMPONENTS,
   SECURITY,
   PRIVACY,
-  ADVANCED,
+  NOTIFICATIONS,
+  FILES,
+  UPDATES,
+  ACCOUNT,
+  DEVELOPER,
+  DIAGNOSTICS,
   ABOUT,
 ];
 
@@ -142,4 +214,33 @@ export function summarizeComponents(
 
 export function countGrants(grants: readonly GrantSpec[]): number {
   return grants.length;
+}
+
+/**
+ * A plain-language name for a capability kind, for anywhere that shows what a component can
+ * reach. Mirrors the map `views/Security.tsx` keeps for the same purpose — duplicated rather
+ * than imported, since that file sits outside this feature's edit boundary, but small enough
+ * that the two are easy to keep in step by hand.
+ */
+export const CAPABILITY_LABELS: Record<string, string> = {
+  'fs.read': 'Read files',
+  'fs.write': 'Write files',
+  'net.http': 'Use the network',
+  'system.notify': 'Show notifications',
+  'system.clipboard': 'Use the clipboard',
+};
+
+export function capabilityLabel(kind: string): string {
+  return CAPABILITY_LABELS[kind] ?? kind;
+}
+
+/**
+ * What a component actually reaches, for display.
+ *
+ * `input-handles` is bookkeeping the runtime uses to resolve which port an input came from, not
+ * a real capability anyone granted — the Security screen filters it out for the same reason, and
+ * Settings has to agree with it or the two screens would describe the same component differently.
+ */
+export function reachOf(manifest: ComponentManifest): readonly Capability[] {
+  return manifest.capabilities.filter((capability) => capability.scope !== 'input-handles');
 }

@@ -19,6 +19,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { splitOnPlaceholder, translate, useTranslation } from '../i18n';
 import { usePreferences } from '../preferences';
 import { type EditorNode, useEditor } from '../store';
 import { ComponentNode } from './ComponentNode';
@@ -40,6 +41,7 @@ export function Canvas() {
   const addNode = useEditor((s) => s.addNode);
   const journal = useEditor((s) => s.journal);
   const manifests = useEditor((s) => s.manifests);
+  const { t } = useTranslation();
 
   // Read one at a time rather than as an object: a selector returning a fresh object would
   // re-render the canvas on every unrelated preference change.
@@ -164,13 +166,16 @@ export function Canvas() {
 
     // A node feeding itself is a cycle of one. Validation would refuse it; refusing here means
     // the user never draws it.
+    //
+    // Uses the plain `translate` rather than the `t` from `useTranslation()` so this callback's
+    // dependency array — deliberately `[]`, since it must stay identical across renders while a
+    // wire is being dragged — never has to change with it: `translate` reads the current locale
+    // itself at call time instead of closing over one captured when the callback was created.
     if (source === target) {
       lastRefusal.current = {
         ok: false,
-        headline: 'A step cannot feed itself.',
-        detail:
-          'A workflow runs forwards. To do the same work repeatedly, start it from a trigger — ' +
-          'Watch Folder or Timer — which runs it once per event.',
+        headline: translate('canvas.refusal.selfCycle.headline'),
+        detail: translate('canvas.refusal.selfCycle.detail'),
       };
       return false;
     }
@@ -195,13 +200,21 @@ export function Canvas() {
     [addNode, screenToFlowPosition],
   );
 
+  // Rendered once as `{bridge}` intact — see `splitOnPlaceholder` — so the `<code>` element can
+  // be dropped in wherever the translated sentence actually puts the placeholder, rather than
+  // the two halves being separately-translated fragments whose order silently assumes English.
+  const bridge = refusal?.bridge ?? null;
+  const [bridgeBefore, bridgeAfter] = bridge
+    ? splitOnPlaceholder(t('canvas.refusal.bridge'), 'bridge')
+    : ['', ''];
+
   return (
     <div
       className="canvas"
       // A canvas is a composite widget, not a document region: it owns its own keyboard and
       // pointer model, which is exactly what role="application" tells assistive technology.
       role="application"
-      aria-label="Workflow canvas"
+      aria-label={t('canvas.ariaLabel')}
       aria-describedby="canvas-keys"
       aria-activedescendant={selectedNodeId ? `node-${selectedNodeId}` : undefined}
       /* role="application" is precisely the case this rule cannot see. An application region
@@ -282,15 +295,9 @@ export function Canvas() {
 
       {nodes.length === 0 ? (
         <div className="canvas__empty">
-          <h2>Your canvas is empty</h2>
-          <p>
-            A workflow is a few components joined together. Pick one from the left to place your
-            first step, connect its output to the next, and press Run.
-          </p>
-          <p className="canvas__empty-hint">
-            Every component says what it can reach before it runs, and nothing touches your files
-            until you allow it.
-          </p>
+          <h2>{t('canvas.empty.heading')}</h2>
+          <p>{t('canvas.empty.body')}</p>
+          <p className="canvas__empty-hint">{t('canvas.empty.hint')}</p>
         </div>
       ) : null}
 
@@ -299,9 +306,11 @@ export function Canvas() {
           <div className="refusal__body">
             <strong className="refusal__headline">{refusal.headline}</strong>
             <span className="refusal__detail">{refusal.detail}</span>
-            {refusal.bridge ? (
+            {bridge ? (
               <span className="refusal__bridge">
-                A step producing <code>{refusal.bridge}</code> in between would join them.
+                {bridgeBefore}
+                <code>{bridge}</code>
+                {bridgeAfter}
               </span>
             ) : null}
           </div>
@@ -309,9 +318,9 @@ export function Canvas() {
             type="button"
             className="btn"
             onClick={() => setRefusal(null)}
-            aria-label="Dismiss"
+            aria-label={t('common.dismiss')}
           >
-            Close
+            {t('common.close')}
           </button>
         </div>
       ) : null}
@@ -319,8 +328,7 @@ export function Canvas() {
       {/* Named by aria-describedby, so the keys are announced on entering the canvas rather
           than having to be discovered. Visible to screen readers only. */}
       <p id="canvas-keys" className="visually-hidden">
-        Use the arrow keys to move between steps, Enter to open a step in the inspector, Escape to
-        deselect, and Delete to remove the selected step.
+        {t('canvas.keysHint')}
       </p>
 
       {/* What changed, for somebody who cannot see the selection move. Polite: it should not
@@ -330,7 +338,13 @@ export function Canvas() {
           ? (() => {
               const at = indexOf(ordered, selectedNodeId);
               const node = ordered[at];
-              return node ? `${nameOf(node)}, step ${at + 1} of ${ordered.length}, selected.` : '';
+              return node
+                ? t('canvas.a11y.selected', {
+                    name: nameOf(node),
+                    index: at + 1,
+                    total: ordered.length,
+                  })
+                : '';
             })()
           : ''}
       </p>

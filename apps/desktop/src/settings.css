@@ -173,6 +173,16 @@
   border: none;
 }
 
+/* A `<fieldset disabled>` already disables every button it contains natively — this only makes
+   that state visible, for a choice mid-flight (a language still loading its file). */
+.s-segmented:disabled {
+  opacity: 0.6;
+}
+
+.s-segmented:disabled .pill {
+  cursor: not-allowed;
+}
+
 .s-toggle {
   position: relative;
   flex: none;
@@ -323,4 +333,24 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Verbatim text: a diagnostics report, a raw preferences dump
+ * ------------------------------------------------------------------------------------ */
+
+.s-pre {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--ink-muted);
+  background: var(--ground-1);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
