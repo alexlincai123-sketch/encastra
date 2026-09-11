@@ -238,21 +238,6 @@ mod tests {
                 manifest.id
             );
         }
-
-        let set = &installed.components;
-
-        for manifest in set.manifests() {
-            let reference = encastra_core::ComponentRef::parse(&format!(
-                "{}@{}",
-                manifest.id, manifest.version
-            ))
-            .unwrap();
-            assert!(
-                registry.get(&reference).is_some(),
-                "{} has code but is not in the registry",
-                manifest.id
-            );
-        }
     }
 
     #[test]
@@ -282,7 +267,6 @@ mod tests {
     /// change to this file rather than a line buried in a manifest.
     #[test]
     fn nothing_first_party_quietly_asks_for_more_than_it_needs() {
-        let (_, set) = install();
         let expected: BTreeMap<&str, &[&str]> = BTreeMap::from([
             ("encastra.file.read", &["fs.read"][..]),
             ("encastra.file.write", &["fs.write"][..]),

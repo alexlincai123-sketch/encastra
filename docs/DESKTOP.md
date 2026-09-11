@@ -56,8 +56,8 @@ state. Building it per call would let two calls disagree about what is installed
 | `list_components` | every manifest this build offers, for the palette |
 | `type_graph` | the coercion table, served by the runtime that enforces it |
 | `validate_graph` | validation for a graph plus the ports the application will supply |
-| `run_graph` | one-shot: assemble grants, import the picked files, run, return a journal |
-| `start_workflow` / `stop_workflow` / `workflow_status` | the session path, for a graph that starts itself |
+| `run_graph` | one-shot and synchronous: assemble grants, import the picked files, run, return a journal |
+| `start_workflow` / `stop_workflow` / `workflow_status` | the session path — runs on a worker thread and reports progress as events |
 | `save_project` / `open_project` | the `.encastra` container |
 | `restore_version` / `compare_versions` | version history |
 | `about` | versions, taken from the build rather than typed anywhere |
@@ -71,7 +71,10 @@ nobody can see why.
 
 **`run_graph` reports a refused graph and a failed run as different shapes.** The result is a
 tagged union: `Invalid { validation }` or `Ran { journal }`. They are different outcomes, and the
-UI cannot accidentally render one as the other.
+UI cannot accidentally render one as the other. It is the simpler path and it stays available,
+but the editor no longer reaches it — everything the toolbar starts goes through
+`start_workflow`, so a graph with a trigger and a graph without one take the same route and the
+interface does not have two shapes of "running" to keep in step.
 
 **Grants arrive per run.** A `GrantSpec` names a node, a capability kind, and either a folder or
 a list of hosts. Capabilities declared with an `input-handles` scope are admitted from the
@@ -117,15 +120,44 @@ the user has already closed.
 
 The runtime does not draw a notification. `encastra.system.notify` asks the broker for
 permission, records the request, and returns. The side of the application that owns a screen
-delivers it — the desktop app listens for `node-finished` from that component and emits
-`encastra://notification`; the CLI prints it. A runtime that reached for a windowing API would be
-a runtime that cannot run headless, and the same code has to serve both.
+delivers it — the Rust side watches `node_finished` for that component and emits
+`encastra://notification`, the store collects them, and the shell renders them as toasts; the
+CLI prints them instead. A runtime that reached for a windowing API would be a runtime that
+cannot run headless, and the same code has to serve both.
+
+The store holds one subscription for the whole application and keeps its teardown, so a hot
+reload in development does not leave a second set of listeners writing into the same state. Node
+status during a run comes from the event stream (`liveNodes`); the journal replaces it when the
+run finishes. The status bar prefers the live map when there is one, so a node shows as running
+while it is running rather than only in retrospect.
 
 ---
 
 ## 4. The editor
 
-`App.tsx` is one screen: a topbar, the palette, the canvas, the inspector, and a status bar.
+`App.tsx` is a shell: a sidebar, one view at a time, a toolbar that changes with the view, and a
+status bar that is the same everywhere. There are five places — Home, Builder, Components,
+Security, Settings — and no more. Marketplace and Community are not in the sidebar because they
+do not exist, and a navigation item that opens an empty "coming soon" page teaches people that
+half the application is decoration.
+
+**Home** answers one question, what do I do now: start something, open something, or load one of
+the demo graphs. No statistics nobody has earned yet and no activity feed with one entry in it.
+
+**Builder** is the editor, and the only view with a three-panel layout of its own: palette,
+canvas, inspector.
+
+**Components** is the library. Every component states what it can reach, in the same words the
+permission dialog will use — learning that after a workflow is built is how people end up
+clicking through dialogs.
+
+**Security** makes the permission model legible rather than reassuring: what is installed, what
+each thing can reach, what has actually been allowed in the open workflow, what is collected
+(nothing), and a plain list of what the product does *not* protect against. It says in as many
+words that the Wasm sandbox is designed and documented but not built, so third-party components
+cannot be installed.
+
+**Settings** is short on purpose: theme, and About. No toggle writes a preference nothing reads.
 
 **The canvas** uses `@xyflow/react` as a *substrate* — pan, zoom, selection, marquee, minimap,
 edge routing, viewport virtualisation. It provides no pixels the user sees: node rendering, port
@@ -147,12 +179,16 @@ duration, logs, error, and every capability call the broker saw, with refusals m
 > Watch Folder cannot currently be granted what they need from the editor. The runtime supports
 > both grant shapes; the UI does not yet express them. See [SECURITY](SECURITY.md) §9.7.
 
-**Keyboard.** Ctrl/Cmd+Enter runs, Ctrl/Cmd+S saves (Shift for Save As), Ctrl/Cmd+O opens.
+**The toolbar reads the graph.** If any node is a trigger, the primary button says "Start
+watching" rather than "Run", and while a session is live it becomes Stop with a pulse beside it.
+That is the whole difference: both go through `start_workflow`, and the status bar reports runs
+completed and events waiting for the watching case.
 
-**In the tree but not yet mounted.** `src/Sidebar.tsx`, `src/views/{Home,Components,Security,
-Settings}.tsx`, `src/demos.ts` and `src/history.ts` exist and are not imported by `App.tsx`. The
-navigation shell they belong to is in progress; today the application is the single screen
-described above. This paragraph should disappear when they are wired in.
+**Keyboard.** The shell owns Ctrl/Cmd+Enter (start), Ctrl/Cmd+S (save, Shift for Save As) and
+Ctrl/Cmd+O (open). Editing shortcuts — undo, redo, copy, paste, duplicate, select all, delete —
+are owned by the Builder rather than by the window, so they belong to the canvas and do not fire
+while somebody is typing a folder name three panels away. The Builder's handler ignores a
+keystroke whose target is an input, textarea, select, or anything contenteditable.
 
 ---
 
@@ -276,8 +312,9 @@ node.
 
 ## 9. What the desktop application does not do yet
 
-- **Remember a grant.** Permissions are answered per run and discarded. There is no Security
-  Center listing what has been allowed.
+- **Remember a grant.** Permissions are answered per session and discarded when the application
+  closes. The Security view lists what has been allowed in the open workflow; nothing is written
+  down, and there is no distinction between "allowed once" and "allowed always".
 - **Resolve a secret.** `variables.json` records names and types; nothing reads them and there
   is no keystore integration. See [PROJECT-FORMAT](PROJECT-FORMAT.md) §5.
 - **Install a component.** The palette shows what is compiled in. There is no registry, no
@@ -285,5 +322,5 @@ node.
   [COMPONENT-SDK](COMPONENT-SDK.md).
 - **Update itself.** [ADR-0008](adr/0008-signing-and-revocation.md) specifies the updater's
   verification rules; there is no updater.
-- **Show a run's history.** A journal lives as long as the window holds it.
-- **Offer navigation.** See the note at the end of §4.
+- **Show a run's history.** A journal lives as long as the window holds it. Nothing is written to
+  disk, so closing the application forgets every run that ever happened.

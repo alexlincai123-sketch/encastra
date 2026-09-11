@@ -356,7 +356,7 @@ Four gates run on every pull request (`.github/workflows/ci.yml`):
 
 - `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --check`, and the full
   Rust test suite on Linux, Windows and macOS;
-- `cargo deny check advisories bans licences sources` — an unpatched advisory fails the build,
+- `cargo deny check advisories bans licenses sources` — an unpatched advisory fails the build,
   licences are an *allowlist* so an unexpected one fails loudly rather than slipping through,
   wildcard version requirements are denied, and only crates.io is an accepted source;
 - `npm audit --audit-level=high`;

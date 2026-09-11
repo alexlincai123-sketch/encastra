@@ -395,10 +395,10 @@ impl RunObserver for Progress {
         // A component that asked to notify gets its notification here, from the side of the
         // application that owns a screen. The runtime only records the request (see
         // encastra_builtins::system), so the same graph runs headless in the CLI.
-        if record.component.starts_with("encastra.system.notify@") {
-            if let Some(message) = record.outputs.get("message") {
-                let _ = self.app.emit(events::NOTIFICATION, message.clone());
-            }
+        if record.component.starts_with("encastra.system.notify@")
+            && let Some(message) = record.outputs.get("message")
+        {
+            let _ = self.app.emit(events::NOTIFICATION, message.clone());
         }
 
         let _ = self.app.emit(
@@ -596,10 +596,10 @@ fn start_workflow(
                 },
             );
 
-            if let Some(state) = thread_app.try_state::<Runtime>() {
-                if let Ok(mut running) = state.running.lock() {
-                    *running = None;
-                }
+            if let Some(state) = thread_app.try_state::<Runtime>()
+                && let Ok(mut running) = state.running.lock()
+            {
+                *running = None;
             }
         })
         .map_err(|e| format!("Could not start the workflow: {e}"))?;

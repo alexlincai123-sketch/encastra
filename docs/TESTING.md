@@ -35,8 +35,9 @@ Build Tools components to install, are in
 
 ## 2. What exists
 
-**Rust: 126 tests across 17 test binaries.** Six of those binaries are empty — `encastra-cli`,
-the two desktop targets, and three doctest runs — and are listed so the totals reconcile.
+**Rust: 126 tests across 17 suites.** Twelve of those are test binaries and five are doctest
+runs; eight report zero — the `encastra-cli` binary, both `encastra-desktop` targets, and every
+doctest run, since nothing in the tree has an executable example. The nine that matter:
 
 | Suite | Tests | What it covers |
 |---|---|---|
@@ -219,7 +220,7 @@ described in §4.
 toolchain is pinned to the same 1.98.1 as `rust-toolchain.toml`; the pin is what makes builds
 reproducible. `RUSTFLAGS: -D warnings` applies to the whole job.
 
-**Supply chain**: `npm audit --audit-level=high` and `cargo deny check advisories bans licences
+**Supply chain**: `npm audit --audit-level=high` and `cargo deny check advisories bans licenses
 sources`. An advisory fails the build rather than opening a ticket nobody reads.
 
 **Secrets**: Gitleaks over the full history.

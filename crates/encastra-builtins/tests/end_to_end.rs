@@ -253,7 +253,7 @@ fn a_graph_that_does_not_validate_never_runs_at_all() {
         BTreeMap::new(),
     );
 
-    let validation = result.err().expect("this graph must be refused");
+    let validation = result.unwrap_err();
     assert!(
         validation
             .errors()

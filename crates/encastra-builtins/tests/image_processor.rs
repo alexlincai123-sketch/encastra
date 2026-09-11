@@ -118,7 +118,7 @@ fn drive(
     let mut completed = Vec::new();
     while Instant::now() < deadline {
         let tick = session.tick(registry, broker, None);
-        for (node, error) in &tick.trigger_errors {
+        if let Some((node, error)) = tick.trigger_errors.first() {
             panic!("the watcher failed on {node}: {error}");
         }
         completed.extend(tick.runs);
