@@ -88,7 +88,7 @@ function Toolbar() {
             {t('toolbar.save')}
           </button>
           <span className="project-name">
-            {projectName}
+            {projectName || t('messages.untitledProject')}
             {dirty ? (
               <span className="project-name__dirty" title={t('toolbar.unsavedChanges')}>
                 {' '}

@@ -158,7 +158,15 @@ export const useEditor = create<EditorState>((set, get) => ({
   busy: false,
   message: null,
   projectPath: null,
-  projectName: translate('messages.untitledProject'),
+  // Empty rather than the translated word, and deliberately.
+  //
+  // This is module scope: it is evaluated when the store is first imported, which happens before
+  // a locale has been chosen and before its messages have loaded. A `translate()` call here
+  // resolves to English once and then never changes again, so a project that was never saved
+  // kept an English name in every other language. The empty string means "not named yet", and
+  // the two places that display a project's name resolve the word at render, where the active
+  // locale is known and a change to it re-renders.
+  projectName: '',
   versions: [],
   dirty: false,
   view: 'home',
@@ -437,7 +445,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       inputs: [],
       grants: [],
       projectPath: null,
-      projectName: translate('messages.untitledProject'),
+      projectName: '',
       versions: [],
       dirty: false,
       history: emptyHistory,

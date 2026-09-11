@@ -8,12 +8,12 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.4.0-beta.1** · built 2026-09-11 on Windows AMD64 · commit `669547c`
+**Version 0.4.0-beta.1** · built 2026-09-11 on Windows AMD64 · commit `a8d790d`
 
 | Artefact | Size | SHA-256 |
 |---|---|---|
-| `Encastra_0.4.0-beta.1_x64-setup.exe` | 3.1 MB | `9e31eb99679cabce3109a446b27d7fc580b28ae00965d61ed2e727706a59ac3e` |
-| `encastra-desktop.exe` | 8.7 MB | `1a7918cf51095438b097425f87b0fa724493763e4dd7badf011f6204e72acfab` |
+| `Encastra_0.4.0-beta.1_x64-setup.exe` | 3.2 MB | `35cf2974541f3cecb9afda77319e22d2198d42d6d185e1534c747b113864ff26` |
+| `encastra-desktop.exe` | 8.7 MB | `72e69fb6f0687a3b4b67629a6e748df4f267996d4ea008956dc124a35ee52d85` |
 
 Verify before installing:
 

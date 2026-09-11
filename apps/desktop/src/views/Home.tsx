@@ -90,7 +90,7 @@ export function Home() {
         <section className="home__section">
           <h2>{t('home.continue.heading')}</h2>
           <button type="button" className="card" onClick={() => setView('builder')}>
-            <span className="card__title">{projectName}</span>
+            <span className="card__title">{projectName || t('messages.untitledProject')}</span>
             <span className="card__detail">
               {t(`home.continue.steps.${selectPlural(locale, nodeCount)}`, { count: nodeCount })}
               {projectPath ? '' : t('home.continue.unsaved')}
