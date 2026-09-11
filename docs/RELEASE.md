@@ -8,8 +8,20 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-Not built yet. Run `npm run tauri:build`, then `python scripts/release_manifest.py` to fill this
-section in.
+**Version 0.1.0-beta.1** · built 2026-09-11 on Windows AMD64 · commit `8ee44b2`
+
+| Artefact | Size | SHA-256 |
+|---|---|---|
+| `Encastra_0.1.0-beta.1_x64-setup.exe` | 3.0 MB | `74ecc7fb1feca92a27bf8da39d95688bf1944f86ee31f1a33c100950ec731129` |
+| `encastra-desktop.exe` | 8.6 MB | `7f6dd847b713e09a1e1980fc8cf8baeafccb2d082758be801c40de987c4f9283` |
+
+Verify before installing:
+
+```powershell
+Get-FileHash .\Encastra_0.1.0-beta.1_x64-setup.exe -Algorithm SHA256
+```
+
+These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking.
 
 <!-- BUILD:END -->
 
@@ -93,8 +105,21 @@ one to make on somebody's behalf. When it happens:
 
 ## Installing
 
-The installer is per user and needs no administrator. It writes to
-`%LOCALAPPDATA%\Programs\Encastra`, adds a Start Menu entry, and registers an uninstaller.
+The installer is per user and needs no administrator. Verified by installing this build:
+
+| What | Where |
+|---|---|
+| Program files | `%LOCALAPPDATA%\Encastra\` — `encastra-desktop.exe` and `uninstall.exe` |
+| Start Menu | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Encastra.lnk` |
+| Uninstall entry | `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall` |
+
+Nothing is written under `HKLM` and nothing goes into `Program Files`, which is what "per user"
+means in practice. The installed executable keeps the crate's name rather than the product's.
+
+Its bytes are **not** identical to `target/release/encastra-desktop.exe`: Tauri patches the
+executable with bundle information before packaging it, so the two hash differently. Verify an
+installer against the hash published below; do not expect an installed copy to match the raw
+build output.
 
 Silent install, for a machine being set up by a script:
 

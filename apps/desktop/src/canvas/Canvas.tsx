@@ -93,10 +93,16 @@ export function Canvas() {
         isValidConnection={isConnectionLegal}
         onNodeClick={(_, node) => select(node.id)}
         onPaneClick={() => select(null)}
-        // The inspector follows the *selection*, not the click that usually causes one.
-        // Wiring it to clicks alone meant a step selected with the keyboard — Tab to it, Enter
-        // to select — left the inspector showing nothing, so somebody working without a mouse
-        // could reach a step but never configure it.
+        // The inspector follows the *selection*, not the click that usually causes one, so a
+        // step selected any other way — a box selection, a restore, anything programmatic —
+        // also opens in the inspector.
+        //
+        // This was meant to fix keyboard use as well, and does not. `nodesFocusable` is set and
+        // the nodes still do not appear in the tab order: tabbing through the editor goes
+        // sidebar, toolbar, palette, and then wraps, never reaching the canvas. So a step
+        // cannot be reached without a mouse, and therefore cannot be configured without one.
+        // That is a real hole and it is recorded in docs/AUDIT.md §8.7 rather than papered
+        // over here.
         onSelectionChange={({ nodes: selected }) => select(selected[0]?.id ?? null)}
         nodesFocusable
         // Keeps hundreds of nodes affordable: offscreen ones are not in the DOM at all.

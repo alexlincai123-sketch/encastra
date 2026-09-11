@@ -122,7 +122,9 @@ def main() -> int:
         if MARKER_START in existing and MARKER_END in existing:
             updated = re.sub(
                 re.escape(MARKER_START) + r".*?" + re.escape(MARKER_END),
-                block,
+                # A function, not the string: as a replacement string, the backslashes in a
+                # Windows path are read as escapes, and `.\Encastra...` fails outright.
+                lambda _match: block,
                 existing,
                 flags=re.S,
             )

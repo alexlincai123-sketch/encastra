@@ -245,3 +245,33 @@ stores exactly what the editor computed and the runtime compares its own reading
 a disagreement costs a refused request rather than an unintended reach. `hostOf` now lives in
 `apps/desktop/src/url.ts` with tests covering credentials in the address, a path that tries to
 smuggle a second host, ports, case, and the empty cases.
+
+### 8.7 The canvas cannot be reached without a mouse — **open, not fixed**
+
+Found by trying to drive the installed application from the keyboard. Tabbing through the editor
+goes sidebar → toolbar → palette, and then wraps to the beginning. The nodes on the canvas are
+never visited, so a step cannot be selected without a mouse, and a step that cannot be selected
+cannot be configured: its folder, its settings and its permission prompt all live in the
+inspector, which only opens for a selected step.
+
+The consequence is not a degraded experience. It is that somebody who cannot use a mouse cannot
+use the product at all.
+
+`nodesFocusable` is set on the React Flow instance and does not produce tabbable nodes, so this
+needs a real investigation rather than another prop. `onSelectionChange` is now wired, which is
+correct on its own merits — the inspector should follow the selection rather than the click that
+usually causes one — and it is what a fix would build on, because once a node can be focused and
+selected the inspector will already follow. **It does not fix this, and nothing in the build
+should be read as claiming it does.**
+
+Two things are worth separating here:
+
+- **The product defect**, above. Real, open, and the most serious thing outstanding in the
+  editor.
+- **A limit of how this beta was checked**, which is not a defect: synthetic mouse clicks do not
+  activate controls in this WebView2 — the cursor moves and hover states appear, but neither
+  `mouse_event` nor `SendInput` causes activation, while synthetic keystrokes work normally.
+  So the end-to-end checkpoint could not be driven through the interface automatically, and it
+  could not be driven by keyboard either, for the reason above. What the checkpoint's automated
+  test proves it proves against the real runtime; what it does not prove is the hand-driven
+  path through the editor. See RELEASE.md for exactly which claims rest on which evidence.
