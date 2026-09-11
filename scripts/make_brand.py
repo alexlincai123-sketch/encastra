@@ -106,6 +106,22 @@ SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none"
 """
 
 
+# The mark beside the name. This is the form a site header needs, and the one that was missing:
+# a mark alone says nothing to somebody who has not met the product yet.
+#
+# The name is set as `<text>` rather than as outlines. Outlines would be self-contained but would
+# also freeze a typeface into the asset, and this repository ships no font it has the right to
+# embed. A stack ending in a generic family degrades to something sane everywhere, and the two
+# places that matter — the website and the desktop shell — both load the UI font already.
+WORDMARK = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 32" fill="none" role="img" aria-label="Encastra">
+  <title>Encastra</title>
+  <path fill="{fg}" fill-rule="evenodd" d="M20 3h7a1.5 1.5 0 0 1 1.5 1.5v16A1.5 1.5 0 0 1 27 22h-7a1.5 1.5 0 0 1-1.5-1.5v-1.4h4.7a1.2 1.2 0 0 0 1.2-1.2v-3.8a1.2 1.2 0 0 0-1.2-1.2h-4.7V4.5A1.5 1.5 0 0 1 20 3Z"/>
+  <path fill="{fg}" d="M5 10h7a1.5 1.5 0 0 1 1.5 1.5v3.3h8.3a1.2 1.2 0 0 1 1.2 1.2v1a1.2 1.2 0 0 1-1.2 1.2H13.5v9.3A1.5 1.5 0 0 1 12 29H5a1.5 1.5 0 0 1-1.5-1.5v-16A1.5 1.5 0 0 1 5 10Z"/>
+  <text x="42" y="22" fill="{text}" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="600" letter-spacing="0.4">Encastra</text>
+</svg>
+"""
+
+
 def main() -> None:
     icons = ROOT / "apps" / "desktop" / "src-tauri" / "icons"
     brand = ROOT / "packages" / "ui" / "brand"
@@ -142,6 +158,16 @@ def main() -> None:
         ("mark-current.svg", "currentColor"),
     ]:
         (brand / name).write_text(SVG.format(fg=colour), encoding="utf-8")
+        print(f"  {(brand / name).relative_to(ROOT)}")
+
+    # Wordmarks. `current` takes both the mark and the name from `currentColor`, which is what
+    # makes one file work on a light page, a dark page and inside a button.
+    for name, fg, text in [
+        ("wordmark-accent.svg", "#FF8A3D", "#0B0C0E"),
+        ("wordmark-on-dark.svg", "#FF8A3D", "#F2F3F5"),
+        ("wordmark-current.svg", "currentColor", "currentColor"),
+    ]:
+        (brand / name).write_text(WORDMARK.format(fg=fg, text=text), encoding="utf-8")
         print(f"  {(brand / name).relative_to(ROOT)}")
 
     print("\nDone. Re-run after changing the geometry; do not hand-edit the output.")

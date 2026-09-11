@@ -1309,3 +1309,27 @@ select.input {
 .cannot__list li {
   margin-bottom: 2px;
 }
+
+/* ---------------------------------------------------------------------------------------
+ * Work area
+ *
+ * The canvas and the execution panel share the middle column. Stacking them here rather
+ * than adding a row to the shell grid keeps the three-column layout — palette, work,
+ * inspector — as the one thing that describes the editor, and lets the panel appear and
+ * disappear without the palette and inspector resizing around it.
+ *
+ * `min-height: 0` is load-bearing: without it a grid child refuses to shrink below its
+ * content and the canvas pushes the panel off the bottom of the window.
+ * ------------------------------------------------------------------------------------ */
+
+.workarea {
+  grid-area: canvas;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 0;
+}
+
+.workarea > .canvas {
+  grid-area: auto;
+  min-height: 0;
+}

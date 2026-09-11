@@ -89,11 +89,32 @@ any claim about users, revenue, customers, or awards, since there are none.
 
 ## Visual identity
 
-To be built in Phase 2. Constraints already fixed:
+Built, and built as code: `scripts/make_brand.py` draws every asset from one geometry. Nothing
+here is hand-edited, and changing the shape means changing the script and re-running it — which
+is what stops the favicon slowly disagreeing with the application icon.
+
+The constraints it was designed under, all still binding:
 
 - **Original.** No LEGO stud, no interlocking-brick silhouette, no third-party icon set traced
   into a logo. The idea to express is *modules that connect*, not *a toy brick*.
-- Must survive at 16 px (favicon) and in one colour.
-- Deliverables: SVG master, PNG set, monochrome, dark, light, app icon, favicon.
-- The design tokens that define it are shared by the desktop app and the website — one system,
-  not two that drift.
+- Must survive at 16 px and in one colour.
+- One system shared by the desktop application and the website, not two that drift.
+
+An earlier draft of the mark was symmetrical and read as the letter H. The version that shipped
+is deliberately staggered — two parts offset so that one plainly slots into the other — because
+symmetry in a small glyph reads as a letter rather than as a joint.
+
+### What exists
+
+| Asset | Where | For |
+|---|---|---|
+| `mark-accent.svg`, `mark-current.svg` | `packages/ui/brand/` | The mark. `current` takes `currentColor`, so one file serves light, dark and inside a button |
+| `wordmark-accent.svg`, `wordmark-on-dark.svg`, `wordmark-current.svg` | `packages/ui/brand/` | The mark beside the name, which is what a site header needs |
+| `mark-accent/light/dark/on-dark.png` | `packages/ui/brand/` | Raster, 512 px, for anywhere SVG is awkward |
+| `favicon.png` | `packages/ui/brand/` | 32 px |
+| `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.png`, `icon.ico` | `apps/desktop/src-tauri/icons/` | The application icon. The `.ico` carries 16 through 256 in one file |
+
+The wordmark sets the name as `<text>` rather than as outlines. Outlines would make the file
+self-contained but would freeze a typeface into it, and this repository ships no font it has the
+right to embed. The stack ends in a generic family, so it degrades sanely; the two places that
+matter already load the UI font.

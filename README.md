@@ -33,7 +33,8 @@ and they never see a filesystem path. See [ARCHITECTURE](docs/ARCHITECTURE.md) �
 
 ## Status
 
-**Beta 0.1.0-beta.1.** A desktop application that builds and runs workflows on this machine.
+**Beta 0.2.0-beta.1.** A desktop application that builds and runs workflows on this
+machine, and now explains itself while you do it.
 
 | Piece | State |
 |---|---|
@@ -46,9 +47,13 @@ and they never see a filesystem path. See [ARCHITECTURE](docs/ARCHITECTURE.md) �
 | Image work — resize, convert, thumbnail, info, with decode limits | working |
 | Desktop application — canvas, palette, debugger, consent, navigation | working |
 | Projects — `.encastra` files, save/open, version history, restore | working |
-| CLI — same runtime, headless | working |
+| CLI — same runtime, headless, the whole permission model | working |
+| First run — welcome, and a guided first workflow that waits rather than drives | working |
+| Settings — navigated and categorised, every control wired to something real | working |
+| Keyboard — the canvas is reachable and navigable without a mouse | working |
+| Website — what Encastra is, how it works, tutorials, download | working |
 | **Third-party components (WebAssembly sandbox)** | **not built** — designed and documented only |
-| **Registry, marketplace, accounts, updates, website** | **not built** |
+| **Registry, marketplace, accounts, payments, updates** | **not built** |
 
 The checkpoint this beta had to pass, and does:
 
