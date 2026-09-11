@@ -16,6 +16,7 @@
   transition:
     border-color var(--duration-slow) var(--ease-out),
     box-shadow var(--duration-slow) var(--ease-out),
+    transform var(--duration-slow) var(--ease-out),
     opacity var(--duration-slow) var(--ease-out);
 }
 
@@ -214,7 +215,13 @@
   flex: 1;
   min-height: 14px;
   background: var(--edge);
-  transition: background-color var(--duration-slow) var(--ease-out);
+  /* Vertical by default, so an unmade connection retracts upwards towards the step it would
+     have come from. The horizontal case is set in the container query below, with the wire's
+     own orientation. */
+  transform-origin: top center;
+  transition:
+    background-color var(--duration-slow) var(--ease-out),
+    transform var(--duration-slow) var(--ease-out);
 }
 
 .wireHead {
@@ -223,7 +230,9 @@
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
   border-top: 6px solid var(--edge);
-  transition: border-color var(--duration-slow) var(--ease-out);
+  transition:
+    border-color var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-out);
 }
 
 .wire[data-active="true"] .wireLine {
@@ -245,7 +254,9 @@
   border: var(--border-strong);
   border-radius: var(--radius-full);
   white-space: nowrap;
-  transition: border-color var(--duration-slow) var(--ease-out);
+  transition:
+    border-color var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-out);
 }
 
 .wire[data-active="true"] .wireBadge {
@@ -375,5 +386,41 @@
 
   .arms {
     grid-template-columns: 1fr;
+  }
+}
+
+/* --- Being built ----------------------------------------------------------------------------
+ * A diagram that is still being assembled, one command at a time, beside the terminal.
+ *
+ * Everything here is a transform or an opacity, and nothing is removed from the layout: a step
+ * that has not been placed yet still occupies its column, and a wire that has not been connected
+ * still occupies its gap. If either collapsed, the diagram would reflow on every command and the
+ * eye would lose the thing it is meant to be watching appear.
+ *
+ * The state is carried on the list item but applied to the node inside it, because `.flowItem`
+ * is `display: contents` on a narrow screen and an element that generates no box cannot be
+ * transformed at all.
+ *
+ * A connection that has not been made retracts rather than fades, because that is what it is:
+ * absent, not faint. It is the same distinction scene 3 draws when the editor refuses a wire.
+ */
+
+.flowItem[data-present="false"] .node {
+  opacity: 0;
+  transform: translateY(10px) scale(0.94);
+}
+
+.wire[data-joined="false"] .wireLine {
+  transform: scaleY(0);
+}
+
+.wire[data-joined="false"] .wireHead,
+.wire[data-joined="false"] .wireBadge {
+  opacity: 0;
+}
+
+@container (min-width: 720px) {
+  .wire[data-joined="false"] .wireLine {
+    transform: scaleX(0);
   }
 }

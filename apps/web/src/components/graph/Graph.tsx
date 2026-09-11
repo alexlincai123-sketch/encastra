@@ -147,6 +147,7 @@ export function Wire({
   label,
   active = false,
   refused = false,
+  joined = true,
 }: {
   type?: string;
   /** What travels along the wire, e.g. `IMAGE → IMAGE`. */
@@ -158,6 +159,16 @@ export function Wire({
    * never "active" in the sense a completed edge is.
    */
   refused?: boolean;
+  /**
+   * Whether this connection has been made yet.
+   *
+   * Distinct from `active`, which is about a value travelling an existing wire. A wire that is
+   * not `joined` has not been drawn at all — it is the state between placing two steps and
+   * connecting them, which is what the terminal's transcript walks through one command at a
+   * time. The retraction is a transform on the line, so an unjoined wire still occupies its
+   * place in the layout and the diagram does not reflow as connections are made.
+   */
+  joined?: boolean;
 }): ReactNode {
   const colour = refused ? 'var(--danger)' : type !== undefined ? typeColour(type) : 'var(--edge)';
   const lit = active || refused;
@@ -166,6 +177,7 @@ export function Wire({
       className={styles.wire}
       data-active={active ? 'true' : 'false'}
       data-refused={refused ? 'true' : 'false'}
+      data-joined={joined ? 'true' : 'false'}
       aria-hidden="true"
     >
       <span className={styles.wireLine} style={lit ? { background: colour } : undefined} />
@@ -202,23 +214,43 @@ export function GraphFlow({
   states,
   caption,
   dense = false,
+  presentCount,
+  wiredCount,
 }: {
   steps: readonly FlowStep[];
   activeIndex?: number;
   states?: Readonly<Record<string, NodeState>>;
   caption?: string;
   dense?: boolean;
+  /**
+   * How many steps have been placed. Omit for a finished diagram, which is what every static
+   * use of this component wants; the terminal passes a rising count so a step appears on the
+   * command that adds it rather than being there before it was asked for.
+   */
+  presentCount?: number;
+  /** How many connections have been made. A wire at index `i` is joined once this reaches `i`. */
+  wiredCount?: number;
 }): ReactNode {
+  // Defaulting to "all of them" is what keeps every existing caller a finished diagram, and it
+  // is also what makes the reduced-motion path correct for free: the terminal shows its whole
+  // transcript at once for those visitors, so every add and every connect has already counted.
+  const present = presentCount ?? steps.length;
+  const wired = wiredCount ?? steps.length;
   return (
     <div className={styles.flowWrap}>
       <ol className={styles.flow} data-dense={dense ? 'true' : 'false'}>
         {steps.map((step, index) => (
-          <li className={styles.flowItem} key={step.node.id}>
+          <li
+            className={styles.flowItem}
+            key={step.node.id}
+            data-present={index < present ? 'true' : 'false'}
+          >
             {step.wire !== undefined ? (
               <Wire
                 {...(step.wire.type !== undefined ? { type: step.wire.type } : {})}
                 {...(step.wire.label !== undefined ? { label: step.wire.label } : {})}
                 active={activeIndex >= index}
+                joined={wired >= index}
               />
             ) : null}
             <GraphNode

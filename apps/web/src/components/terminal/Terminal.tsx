@@ -165,6 +165,32 @@ export function TerminalDemo(): ReactNode {
     return max;
   }, [revealCount]);
 
+  /**
+   * How much of the diagram exists yet, counted from the transcript rather than from a clock.
+   *
+   * This is what makes the terminal a tutorial instead of a widget sitting next to one: a step
+   * appears on the `encastra add` that adds it, and a wire is drawn on the `encastra connect`
+   * that connects it, so every command has a visible consequence. Both counts are derived from
+   * the same `revealCount` the text is, which means the two can never drift out of step and the
+   * loop resets them together.
+   *
+   * Matching on the command text is safe here in a way it would not be anywhere else: these are
+   * fixed strings in a file in this repository, not input. The terminal still evaluates nothing.
+   */
+  const { presentCount, wiredCount } = useMemo(() => {
+    let added = 0;
+    let connected = 0;
+    const upTo = Math.min(revealCount, TOTAL_LINES);
+    for (let i = 0; i < upTo; i += 1) {
+      const line = TERMINAL_SESSION[i];
+      if (line === undefined || line.kind !== 'command') continue;
+      const text = line.text.trim();
+      if (text.startsWith('encastra add ')) added += 1;
+      else if (text.startsWith('encastra connect ')) connected += 1;
+    }
+    return { presentCount: added, wiredCount: connected };
+  }, [revealCount]);
+
   const nodeStates = useMemo(() => {
     const states: Record<string, NodeState> = {};
     const upTo = Math.min(revealCount, TOTAL_LINES);
@@ -289,6 +315,8 @@ export function TerminalDemo(): ReactNode {
           steps={DEMO_FLOW}
           activeIndex={activeIndex}
           states={nodeStates}
+          presentCount={presentCount}
+          wiredCount={wiredCount}
           dense
           caption="The same three blocks as the Image Processor template that ships with the app."
         />
