@@ -9,8 +9,10 @@ pub mod broker;
 pub mod convert;
 pub mod graph;
 pub mod journal;
+pub mod media;
 pub mod registry;
 pub mod runner;
+pub mod session;
 pub mod validate;
 pub mod value;
 
@@ -19,6 +21,7 @@ pub use graph::{ComponentRef, Edge, Graph, Node, NodeId, PortRef, Position};
 pub use journal::{NodeError, NodeRecord, NodeStatus, RunJournal, RunStatus};
 pub use registry::{ComponentRegistry, InMemoryRegistry};
 pub use runner::{CoreComponent, CoreComponentSet, NodeContext, RunOutcome, run};
+pub use session::{Fired, Session, Trigger, TriggerContext, TriggerSet};
 pub use validate::{Issue, Location, Severity, Validation, validate};
 pub use value::{Handle, HandleKind, Value};
 

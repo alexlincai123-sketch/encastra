@@ -146,6 +146,7 @@ pub fn validate_with_supplied(
     check_required_inputs(graph, &manifests, supplied, &mut issues);
     check_config(graph, &manifests, &mut issues);
     check_disabled_dependencies(graph, &mut issues);
+    check_triggers(graph, &manifests, &mut issues);
 
     let order = match topological_order(graph) {
         Ok(order) => order,
@@ -458,6 +459,39 @@ fn json_kind(v: &serde_json::Value) -> &'static str {
 
 /// A node that is switched off produces nothing, so anything requiring its output cannot run.
 /// Saying so here is better than letting the run fail halfway with an empty input.
+/// A graph with a trigger has a way to start. A graph whose every trigger is switched off does
+/// not, and pressing Run on it would do nothing at all — which reads as a broken application
+/// rather than as a switched-off node.
+fn check_triggers(
+    graph: &Graph,
+    manifests: &BTreeMap<&NodeId, &ComponentManifest>,
+    issues: &mut Vec<Issue>,
+) {
+    let triggers: Vec<&NodeId> = manifests
+        .iter()
+        .filter(|(_, manifest)| manifest.trigger)
+        .map(|(id, _)| *id)
+        .collect();
+
+    if triggers.is_empty() {
+        return;
+    }
+
+    let any_enabled = triggers
+        .iter()
+        .any(|id| graph.node(id).is_some_and(|node| !node.disabled));
+
+    if !any_enabled {
+        issues.push(
+            Issue::error(
+                Location::Graph,
+                "Every trigger in this workflow is switched off, so nothing would ever start it.",
+            )
+            .with_hint("Switch one back on, or remove it and start the workflow yourself."),
+        );
+    }
+}
+
 fn check_disabled_dependencies(graph: &Graph, issues: &mut Vec<Issue>) {
     for edge in &graph.edges {
         let Some(source) = graph.node(&edge.from.node) else {

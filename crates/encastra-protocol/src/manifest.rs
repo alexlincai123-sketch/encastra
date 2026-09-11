@@ -134,6 +134,14 @@ pub struct ComponentManifest {
     /// Host versions this component is known to work on, as a semver range.
     pub runtime: String,
     pub kind: ComponentKind,
+    /// A source of events rather than a step.
+    ///
+    /// A trigger has outputs and no inputs, and it does not "run" when the graph runs: it
+    /// produces values over time, and the application runs the rest of the graph once per
+    /// value. Keeping this a property of the manifest rather than a separate concept means the
+    /// editor, the validator and the permission model all see it without a second code path.
+    #[serde(default)]
+    pub trigger: bool,
     #[serde(default)]
     pub ports: Ports,
     #[serde(default)]
@@ -230,6 +238,19 @@ impl ComponentManifest {
             return Err(ManifestError::Invalid(
                 "a component with no ports can neither receive nor produce anything".into(),
             ));
+        }
+
+        if self.trigger {
+            if !self.ports.inputs.is_empty() {
+                return Err(ManifestError::Invalid(
+                    "a trigger produces events; nothing can be connected into it".into(),
+                ));
+            }
+            if self.ports.outputs.is_empty() {
+                return Err(ManifestError::Invalid(
+                    "a trigger with no outputs could never start anything".into(),
+                ));
+            }
         }
 
         for (field_name, field) in &self.config {

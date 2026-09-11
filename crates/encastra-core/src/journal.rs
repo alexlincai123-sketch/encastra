@@ -84,6 +84,22 @@ impl NodeError {
     }
 }
 
+impl std::fmt::Display for NodeError {
+    /// What a person would need to read: the message, then what to do about it.
+    ///
+    /// The code is machine-readable and deliberately left out — it is in the journal for
+    /// tooling, and putting it in front of somebody adds noise to the part that matters.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)?;
+        if let Some(hint) = &self.hint {
+            write!(f, " {hint}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for NodeError {}
+
 /// One capability the broker was asked for, and what it answered.
 ///
 /// Every call is recorded, allowed or denied. A denial is the interesting case and must never

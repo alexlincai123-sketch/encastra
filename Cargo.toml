@@ -22,6 +22,15 @@ serde_json = "1.0"
 thiserror = "2.0.20"
 sha2 = "0.11.0"
 semver = "1.0"
+# Only the formats the product actually offers. The default feature set pulls in AVIF (which
+# needs a C toolchain), DDS, farbfeld, HDR, PNM, QOI and EXR — none of which anything here
+# reads or writes.
+csv = "1.4.0"
+arboard = { version = "3.6.1", default-features = false }
+# Synchronous, which is what the runtime is. reqwest would drag in tokio and an async stack to
+# make one request from a thread that is already blocking.
+ureq = { version = "3.4.1", default-features = false, features = ["rustls"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
 
 [profile.release]
 # A small, fast binary matters more than a fast build for what we ship.
@@ -29,4 +38,7 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
-panic = "abort"
+# `panic = "abort"` is deliberately NOT set. A first-party component that panics would
+# otherwise take the whole application down, and the runtime already treats a component
+# failure as an ordinary, recoverable outcome. The binary is a little larger; the editor
+# survives a bug in one node.

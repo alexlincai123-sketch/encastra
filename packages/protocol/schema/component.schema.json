@@ -40,6 +40,12 @@
       "description": "\"core\" is first-party and compiled into the host. Anything published by a third party is \"wasm\" and runs sandboxed with no ambient authority."
     },
 
+    "trigger": {
+      "type": "boolean",
+      "default": false,
+      "description": "A source of events rather than a step. A trigger has outputs and no inputs; the application runs the rest of the graph once per event it produces."
+    },
+
     "ports": {
       "type": "object",
       "additionalProperties": false,

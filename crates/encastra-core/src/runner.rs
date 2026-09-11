@@ -106,6 +106,39 @@ impl<'a> NodeContext<'a> {
         self.broker.save_to(&self.node, handle, directory, filename)
     }
 
+    pub fn move_to(
+        &mut self,
+        handle: Handle,
+        directory: &std::path::Path,
+        filename: &str,
+    ) -> Result<std::path::PathBuf, NodeError> {
+        self.broker.move_to(&self.node, handle, directory, filename)
+    }
+
+    /// The name of the file behind a handle, with no directory.
+    ///
+    /// Enough to name an output after its input, which a workflow that processes many files
+    /// needs; not enough to learn where anything lives.
+    pub fn source_name(&self, handle: Handle) -> Option<String> {
+        self.broker.display_name(handle).map(str::to_owned)
+    }
+
+    pub fn allowed_hosts(&self) -> Vec<String> {
+        self.broker.allowed_hosts(&self.node)
+    }
+
+    pub fn check_http(&mut self, host: &str) -> Result<(), NodeError> {
+        self.broker.check_http(&self.node, host)
+    }
+
+    pub fn clipboard_allowed(&self) -> bool {
+        self.broker.has_capability(&self.node, "system.clipboard")
+    }
+
+    pub fn use_clipboard(&mut self, detail: &str) -> Result<(), NodeError> {
+        self.broker.use_clipboard(&self.node, detail)
+    }
+
     pub fn notify(&mut self, title: &str) -> Result<(), NodeError> {
         self.broker.notify(&self.node, title)
     }
@@ -136,6 +169,34 @@ impl<'a> NodeContext<'a> {
     }
 }
 
+/// Told what is happening while it happens.
+///
+/// The journal is the record of a finished run and is deliberately immutable; progress is a
+/// stream. Conflating them would mean handing out a half-written journal, and the debugger's
+/// guarantee — that what it shows is what happened — would stop being true.
+///
+/// Implementations are called from the thread running the graph. They must not block: a slow
+/// observer slows the workflow.
+pub trait RunObserver: Send + Sync {
+    fn run_started(&self, _run_id: &str, _order: &[NodeId]) {}
+    fn node_started(&self, _run_id: &str, _node: &NodeId) {}
+    fn node_finished(&self, _run_id: &str, _node: &NodeId, _record: &NodeRecord) {}
+    fn run_finished(&self, _journal: &RunJournal) {}
+}
+
+/// Everything one execution needs.
+pub struct RunRequest<'a> {
+    pub graph: &'a Graph,
+    pub registry: &'a dyn ComponentRegistry,
+    pub components: &'a CoreComponentSet,
+    pub cancel: &'a AtomicBool,
+    pub run_id: &'a str,
+    /// Values the application supplies: the file a person picked, or what a trigger produced.
+    pub seed: BTreeMap<PortRef, Value>,
+    pub observer: Option<&'a dyn RunObserver>,
+}
+
+#[derive(Debug)]
 pub struct RunOutcome {
     pub journal: RunJournal,
     /// The value each output port produced, for a caller that wants the results rather than
@@ -178,6 +239,34 @@ pub fn run_seeded(
     run_id: &str,
     seed: BTreeMap<PortRef, Value>,
 ) -> Result<RunOutcome, Validation> {
+    execute_request(
+        RunRequest {
+            graph,
+            registry,
+            components,
+            cancel,
+            run_id,
+            seed,
+            observer: None,
+        },
+        broker,
+    )
+}
+
+/// Validates and runs, reporting progress as it goes.
+pub fn execute_request(
+    request: RunRequest<'_>,
+    broker: &mut Broker,
+) -> Result<RunOutcome, Validation> {
+    let RunRequest {
+        graph,
+        registry,
+        components,
+        cancel,
+        run_id,
+        seed,
+        observer,
+    } = request;
     let supplied: std::collections::BTreeSet<PortRef> = seed.keys().cloned().collect();
     let validation = crate::validate::validate_with_supplied(graph, registry, &supplied);
     if !validation.is_runnable() {
@@ -196,6 +285,7 @@ pub fn run_seeded(
             components,
             cancel,
             validation: &validation,
+            observer,
         },
         broker,
         run_id,
@@ -213,6 +303,7 @@ struct Execution<'a> {
     components: &'a CoreComponentSet,
     cancel: &'a AtomicBool,
     validation: &'a Validation,
+    observer: Option<&'a dyn RunObserver>,
 }
 
 fn execute(
@@ -227,13 +318,38 @@ fn execute(
         components,
         cancel,
         validation,
+        observer,
     } = plan;
 
     let mut journal = RunJournal::new(run_id);
     journal.order = validation.order.clone();
+    if let Some(observer) = observer {
+        observer.run_started(run_id, &journal.order);
+    }
     let mut outputs: BTreeMap<PortRef, Value> = BTreeMap::new();
-    // Seeded values live in the same map as produced ones, keyed by the port they arrive at.
-    let seeded: BTreeMap<PortRef, Value> = seed;
+
+    // A seed names either an input port — the file a person picked — or an output port, which
+    // is what a trigger produced. Both are values the application supplied; they differ only in
+    // where they enter the graph. Sorting them here means the rest of the executor does not
+    // have to know which kind it is looking at.
+    let mut seeded: BTreeMap<PortRef, Value> = BTreeMap::new();
+    for (port, value) in seed {
+        let is_output = graph
+            .node(&port.node)
+            .and_then(|node| registry.get(&node.component))
+            .is_some_and(|manifest| manifest.ports.outputs.contains_key(&port.port));
+        if is_output {
+            if let Value::Handle(handle) = &value {
+                // Anything downstream of the trigger may open what it produced.
+                for consumer in graph.outgoing(&port.node).map(|e| &e.to.node) {
+                    broker.make_reachable(consumer, *handle);
+                }
+            }
+            outputs.insert(port, value);
+        } else {
+            seeded.insert(port, value);
+        }
+    }
 
     let conversions: BTreeMap<(&PortRef, &PortRef), &Vec<String>> = validation
         .conversions
@@ -249,12 +365,18 @@ fn execute(
 
         if node.disabled {
             record.status = NodeStatus::Disabled;
+            if let Some(observer) = observer {
+                observer.node_finished(run_id, node_id, &record);
+            }
             journal.nodes.insert(node_id.clone(), record);
             continue;
         }
 
         if cancel.load(Ordering::Relaxed) {
             record.status = NodeStatus::Cancelled;
+            if let Some(observer) = observer {
+                observer.node_finished(run_id, node_id, &record);
+            }
             journal.nodes.insert(node_id.clone(), record);
             continue;
         }
@@ -264,6 +386,9 @@ fn execute(
         if let Some(blocker) = upstream_blocker(graph, node_id, &journal) {
             record.status = NodeStatus::Skipped;
             record.skipped_because = Some(blocker);
+            if let Some(observer) = observer {
+                observer.node_finished(run_id, node_id, &record);
+            }
             journal.nodes.insert(node_id.clone(), record);
             continue;
         }
@@ -301,6 +426,20 @@ fn execute(
             record.inputs.insert(port.clone(), value.summary());
         }
 
+        if manifest.trigger {
+            record.status = NodeStatus::Ok;
+            record.duration_ms = Some(0);
+            record.started_at_ms = Some(now_ms());
+            for (port, value) in outputs
+                .iter()
+                .filter(|(reference, _)| reference.node == *node_id)
+            {
+                record.outputs.insert(port.port.clone(), value.summary());
+            }
+            journal.nodes.insert(node_id.clone(), record);
+            continue;
+        }
+
         let Some(implementation) = components.get(&node.component.to_string()) else {
             record.status = NodeStatus::Failed;
             record.error = Some(
@@ -320,6 +459,9 @@ fn execute(
         let started = Instant::now();
         record.started_at_ms = Some(now_ms());
         record.status = NodeStatus::Running;
+        if let Some(observer) = observer {
+            observer.node_started(run_id, node_id);
+        }
 
         let mut ctx = NodeContext {
             node: node_id.clone(),
@@ -356,10 +498,16 @@ fn execute(
             }
         }
 
+        if let Some(observer) = observer {
+            observer.node_finished(run_id, node_id, &record);
+        }
         journal.nodes.insert(node_id.clone(), record);
     }
 
     journal.finish();
+    if let Some(observer) = observer {
+        observer.run_finished(&journal);
+    }
     RunOutcome { journal, outputs }
 }
 

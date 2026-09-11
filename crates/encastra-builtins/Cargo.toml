@@ -11,3 +11,11 @@ publish.workspace = true
 encastra-core = { path = "../encastra-core" }
 encastra-protocol = { path = "../encastra-protocol" }
 serde_json = { workspace = true }
+csv = { workspace = true }
+ureq = { workspace = true }
+arboard = { workspace = true }
+image = { workspace = true }
+
+[dev-dependencies]
+# The checkpoint test makes a real PNG to drop into a watched folder.
+image = { workspace = true }

@@ -17,8 +17,9 @@ use crate::value::{Handle, HandleKind, Value};
 ///
 /// Listed explicitly rather than falling through to a generic "unknown operation", so the gap
 /// is visible in one place and the error a user sees can say what is actually missing. Each
-/// one needs a media decoder that has not been built yet.
-pub const PENDING_OPS: &[&str] = &["decode-image", "probe-video", "probe-audio"];
+/// one needs a container parser that has not been built yet. `decode-image` used to be here
+/// and no longer is.
+pub const PENDING_OPS: &[&str] = &["probe-video", "probe-audio"];
 
 pub fn apply_ops(
     value: Value,
@@ -227,12 +228,32 @@ fn apply_one(
             other => return Err(cannot(op, &other)),
         },
 
+        // The runtime performs a conversion on behalf of an edge, so it reads host-side. The
+        // receiving component gains nothing it did not already have: to open the handle this
+        // produces, it still needs its own `fs.read` grant.
         "read-bytes" => match value {
             Value::Handle(h) => {
-                let bytes = broker.open_input(node, h)?;
+                let bytes = broker.host_read(h)?;
                 let out = broker.create_output(node, HandleKind::Bytes, "content.bin")?;
                 broker.write_output(node, out, &bytes)?;
                 Value::Handle(out)
+            }
+            other => return Err(cannot(op, &other)),
+        },
+
+        // Narrowing a file to an image is a claim about its content, so the content is checked.
+        // A file that does not decode fails here, on the edge the user drew, rather than
+        // somewhere downstream where the cause is no longer visible.
+        "decode-image" => match value {
+            Value::Handle(h) => {
+                let bytes = broker.host_read(h)?;
+                let info = crate::media::probe(&bytes).map_err(|e| {
+                    NodeError::new("not-an-image", e.to_string()).with_hint(
+                        "This connection expects an image. Check that the file really is one.",
+                    )
+                })?;
+                let _ = info;
+                Value::Handle(broker.reclassify(h, HandleKind::Image))
             }
             other => return Err(cannot(op, &other)),
         },
@@ -410,12 +431,74 @@ mod tests {
 
     #[test]
     fn a_pending_conversion_says_what_is_missing() {
-        let handle = Value::Handle(Handle {
-            id: 1,
-            kind: HandleKind::File,
-        });
-        let err = apply(handle, &["decode-image"]).unwrap_err();
+        // `probe-video` needs a container parser this build does not have. It is declared in
+        // the type table, so the failure must name what is missing rather than read as a bug.
+        let dir = std::env::temp_dir().join(format!("encastra-pending-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let clip = dir.join("clip.mp4");
+        std::fs::write(&clip, b"not really a video").unwrap();
+
+        let mut broker = Broker::new(dir.join("run"), GrantSet::new()).unwrap();
+        let handle = broker.import_file(clip, HandleKind::Video);
+        let err = apply_ops(
+            Value::Handle(handle),
+            &["probe-video".to_owned()],
+            &NodeId("n".into()),
+            &mut broker,
+        )
+        .unwrap_err();
+
         assert_eq!(err.code, "conversion-unavailable");
         assert!(err.hint.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn narrowing_a_file_to_an_image_checks_the_content() {
+        let dir = std::env::temp_dir().join(format!("encastra-decode-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut broker = Broker::new(dir.join("run"), GrantSet::new()).unwrap();
+
+        // Something that is not an image fails on the edge the user drew, naming the problem,
+        // rather than somewhere downstream where the cause is no longer visible.
+        let text = dir.join("notes.txt");
+        std::fs::write(&text, b"plain text pretending to be a picture").unwrap();
+        let text_handle = broker.import_file(text, HandleKind::File);
+        let err = apply_ops(
+            Value::Handle(text_handle),
+            &["decode-image".to_owned()],
+            &NodeId("n".into()),
+            &mut broker,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "not-an-image");
+        assert!(err.hint.as_deref().unwrap().contains("image"));
+
+        // A real image is promoted, and the host record moves with it.
+        let png = crate::media::encode(
+            &image::DynamicImage::ImageRgba8(image::RgbaImage::new(8, 8)),
+            crate::media::OutputFormat::Png,
+            90,
+        )
+        .unwrap();
+        let picture = dir.join("real.png");
+        std::fs::write(&picture, &png).unwrap();
+        let file_handle = broker.import_file(picture, HandleKind::File);
+        let promoted = apply_ops(
+            Value::Handle(file_handle),
+            &["decode-image".to_owned()],
+            &NodeId("n".into()),
+            &mut broker,
+        )
+        .unwrap();
+        assert_eq!(
+            promoted,
+            Value::Handle(Handle {
+                id: file_handle.id,
+                kind: HandleKind::Image
+            })
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -100,10 +100,27 @@ impl GrantSet {
     }
 }
 
+/// One file found in a folder listing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirEntry {
+    /// The file's name, with no directory.
+    pub name: String,
+    /// Host-side. A trigger passes this straight back to the broker rather than reading it.
+    pub path: PathBuf,
+    pub size: u64,
+    pub modified_ms: u64,
+}
+
 struct HandleEntry {
     kind: HandleKind,
     /// Host-side only. This never crosses into a component, in any form.
     path: PathBuf,
+    /// The file's name, with no directory.
+    ///
+    /// A component may read this. It is the minimum needed for a workflow to name its output
+    /// after its input — a watcher cannot ask a person for a filename per file — and it reveals
+    /// nothing about *where* the file is, which is the part that matters.
+    display_name: String,
 }
 
 pub struct Broker {
@@ -139,8 +156,26 @@ impl Broker {
     pub fn import_file(&mut self, path: PathBuf, kind: HandleKind) -> Handle {
         let id = self.next_handle;
         self.next_handle += 1;
-        self.handles.insert(id, HandleEntry { kind, path });
+        let display_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| format!("file-{id}"));
+        self.handles.insert(
+            id,
+            HandleEntry {
+                kind,
+                path,
+                display_name,
+            },
+        );
         Handle { id, kind }
+    }
+
+    /// The name of the file behind a handle, with no directory. `None` if the handle is gone.
+    pub fn display_name(&self, handle: Handle) -> Option<&str> {
+        self.handles
+            .get(&handle.id)
+            .map(|e| e.display_name.as_str())
     }
 
     /// Lets `node` open `handle`, because the graph wired it to one of that node's inputs.
@@ -158,6 +193,48 @@ impl Broker {
 
     pub fn take_calls(&mut self, node: &NodeId) -> Vec<CapabilityCall> {
         self.calls.remove(node).unwrap_or_default()
+    }
+
+    /// Reads an artifact the host itself owns.
+    ///
+    /// **Host-only. Not reachable from a component** — it is not exposed on `NodeContext`.
+    /// Conversions on an edge are performed by the runtime, not by the node that receives the
+    /// value, so requiring the *receiving* component to hold `fs.read` would be wrong in both
+    /// directions: it would refuse legitimate conversions, and it would teach components to ask
+    /// for a capability they do not need.
+    ///
+    /// This grants a component nothing. The result is written into another host-owned handle,
+    /// and reading *that* still requires the component to have declared `fs.read` and to have
+    /// been given the handle by the graph.
+    pub fn host_read(&self, handle: Handle) -> Result<Vec<u8>, NodeError> {
+        let Some(entry) = self.handles.get(&handle.id) else {
+            return Err(NodeError::new(
+                "missing-handle",
+                "That value is no longer available.",
+            ));
+        };
+        std::fs::read(&entry.path).map_err(|e| {
+            NodeError::new(
+                "read-failed",
+                format!("Could not read the file ({}).", e.kind()),
+            )
+        })
+    }
+
+    /// Records that the host has verified an artifact's content and it is more specific than
+    /// its handle claimed — a `file` that decodes as an image becomes an `image`.
+    ///
+    /// **Host-only.** A component cannot relabel a handle; `open_input` refuses a kind that
+    /// disagrees with the host's record. This is the one place that record changes, and it
+    /// changes only after the content has actually been checked.
+    pub fn reclassify(&mut self, handle: Handle, kind: HandleKind) -> Handle {
+        if let Some(entry) = self.handles.get_mut(&handle.id) {
+            entry.kind = kind;
+        }
+        Handle {
+            id: handle.id,
+            kind,
+        }
     }
 
     // -- the component-facing surface -----------------------------------------------------
@@ -256,7 +333,14 @@ impl Broker {
         }
 
         self.next_handle += 1;
-        self.handles.insert(id, HandleEntry { kind, path });
+        self.handles.insert(
+            id,
+            HandleEntry {
+                kind,
+                path,
+                display_name: safe.clone(),
+            },
+        );
         // A node can always read back what it just produced.
         self.reachable.entry(node.clone()).or_default().insert(id);
         self.allow(
@@ -317,14 +401,7 @@ impl Broker {
     ) -> Result<PathBuf, NodeError> {
         let detail = format!("{} → {}", handle.id, sanitise_filename(filename));
 
-        let granted: Vec<PathBuf> = self
-            .grants
-            .grants_for(node, "fs.write")
-            .filter_map(|g| match &g.scope {
-                GrantScope::Directory(d) => Some(d.clone()),
-                _ => None,
-            })
-            .collect();
+        let granted = self.writable_roots(node);
 
         if granted.is_empty() {
             return Err(self
@@ -349,9 +426,10 @@ impl Broker {
             }
         };
 
-        if !granted.iter().any(|g| {
-            resolve_existing_dir(g).is_some_and(|allowed| resolved_dir.starts_with(&allowed))
-        }) {
+        if !granted
+            .iter()
+            .any(|allowed| resolved_dir.starts_with(allowed))
+        {
             return Err(self
                 .deny(
                     node,
@@ -372,6 +450,193 @@ impl Broker {
         })?;
         self.allow(node, "fs.write", detail);
         Ok(destination)
+    }
+
+    /// Moves a result into a folder the user chose, removing the original.
+    ///
+    /// A move needs `fs.write` covering **both** ends. Copying into an allowed folder and then
+    /// deleting from somewhere that was never allowed would be a deletion the user did not
+    /// agree to, which is the more dangerous half of the operation.
+    pub fn move_to(
+        &mut self,
+        node: &NodeId,
+        handle: Handle,
+        directory: &Path,
+        filename: &str,
+    ) -> Result<PathBuf, NodeError> {
+        let Some(source) = self.handles.get(&handle.id).map(|e| e.path.clone()) else {
+            return Err(self.deny(
+                node,
+                "fs.write",
+                format!("#{}", handle.id),
+                "that handle does not exist",
+            ));
+        };
+
+        let Some(source_dir) = source.parent().and_then(resolve_existing_dir) else {
+            return Err(self.deny(
+                node,
+                "fs.write",
+                format!("#{}", handle.id),
+                "the original is not somewhere this can be removed from",
+            ));
+        };
+
+        if !self
+            .writable_roots(node)
+            .iter()
+            .any(|root| source_dir.starts_with(root))
+        {
+            return Err(self
+                .deny(
+                    node,
+                    "fs.write",
+                    format!("#{}", handle.id),
+                    "the folder the file is being moved out of has not been allowed",
+                )
+                .with_hint("A move deletes the original, so both folders need permission."));
+        }
+
+        let destination = self.save_to(node, handle, directory, filename)?;
+
+        // The copy succeeded, so the file exists in both places. If the removal fails the
+        // result is a copy rather than a move — reported, not silently accepted.
+        std::fs::remove_file(&source).map_err(|e| {
+            NodeError::new(
+                "move-incomplete",
+                format!("The file was copied but the original could not be removed ({}).", e.kind()),
+            )
+            .with_hint("The destination now has a copy. Remove the original yourself if you meant to move it.")
+        })?;
+
+        self.allow(node, "fs.write", format!("moved #{}", handle.id));
+        Ok(destination)
+    }
+
+    /// Every directory this node may write into, resolved.
+    fn writable_roots(&self, node: &NodeId) -> Vec<PathBuf> {
+        self.grants
+            .grants_for(node, "fs.write")
+            .filter_map(|g| match &g.scope {
+                GrantScope::Directory(d) => resolve_existing_dir(d),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every directory this node may read from, resolved.
+    fn readable_roots(&self, node: &NodeId) -> Vec<PathBuf> {
+        self.grants
+            .grants_for(node, "fs.read")
+            .filter_map(|g| match &g.scope {
+                GrantScope::Directory(d) => resolve_existing_dir(d),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Lists a folder the user allowed this node to read.
+    ///
+    /// Files only, one level deep, sorted. A watcher that descended into subfolders would be
+    /// reading places the person granting the folder may not have pictured, and recursion is a
+    /// separate decision that deserves its own answer.
+    ///
+    /// Size and modification time come back with the listing so that a caller never has to
+    /// reach for `std::fs` itself. Every filesystem access in the product goes through this
+    /// type; a convenience that let one caller skip it would make the audit trail a fiction.
+    pub fn list_dir(
+        &mut self,
+        node: &NodeId,
+        directory: &Path,
+    ) -> Result<Vec<DirEntry>, NodeError> {
+        let detail = directory
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "folder".to_owned());
+
+        let Some(resolved) = resolve_existing_dir(directory) else {
+            return Err(self
+                .deny(node, "fs.read", detail, "that folder does not exist")
+                .with_hint("Check the folder on this node."));
+        };
+
+        if !self
+            .readable_roots(node)
+            .iter()
+            .any(|root| resolved.starts_with(root))
+        {
+            return Err(self
+                .deny(node, "fs.read", detail, "that folder has not been allowed")
+                .with_hint("Allow this component to watch the folder, then start again."));
+        }
+
+        let entries = std::fs::read_dir(&resolved).map_err(|e| {
+            NodeError::new(
+                "read-failed",
+                format!("Could not read the folder ({}).", e.kind()),
+            )
+        })?;
+
+        let mut files: Vec<DirEntry> = entries
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file()))
+            .filter_map(|entry| {
+                let metadata = entry.metadata().ok()?;
+                Some(DirEntry {
+                    name: entry.file_name().to_string_lossy().into_owned(),
+                    path: entry.path(),
+                    size: metadata.len(),
+                    modified_ms: metadata
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0),
+                })
+            })
+            .collect();
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+
+        self.allow(node, "fs.read", format!("listed {}", files.len()));
+        Ok(files)
+    }
+
+    /// Brings a file into the run, having checked that the node was allowed to read it.
+    ///
+    /// [`import_file`](Self::import_file) is the unguarded version, and is for the application
+    /// handing over a file a person picked in a dialog. This one is for a component or trigger
+    /// that found the file itself, where the folder grant is what makes it legitimate.
+    pub fn import_guarded(
+        &mut self,
+        node: &NodeId,
+        path: &Path,
+        kind: HandleKind,
+    ) -> Result<Handle, NodeError> {
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "file".to_owned());
+
+        let Some(parent) = path.parent().and_then(resolve_existing_dir) else {
+            return Err(self.deny(
+                node,
+                "fs.read",
+                name,
+                "that file is not in a readable folder",
+            ));
+        };
+
+        if !self
+            .readable_roots(node)
+            .iter()
+            .any(|root| parent.starts_with(root))
+        {
+            return Err(self.deny(node, "fs.read", name, "that folder has not been allowed"));
+        }
+
+        let handle = self.import_file(path.to_path_buf(), kind);
+        self.allow(node, "fs.read", format!("opened {}", handle.id));
+        Ok(handle)
     }
 
     /// Hosts this node may reach. An empty result means none, which is also what an
@@ -401,6 +666,25 @@ impl Broker {
                 )
                 .with_hint("Allow this component to reach that host, then run again."))
         }
+    }
+
+    /// Whether a node holds a capability at all, for a component that wants to degrade rather
+    /// than fail — reading the clipboard when allowed and skipping it when not.
+    pub fn has_capability(&self, node: &NodeId, kind: &str) -> bool {
+        self.grants.has(node, kind)
+    }
+
+    pub fn use_clipboard(&mut self, node: &NodeId, detail: &str) -> Result<(), NodeError> {
+        if !self.grants.has(node, "system.clipboard") {
+            return Err(self.deny(
+                node,
+                "system.clipboard",
+                detail.to_owned(),
+                "this component did not declare that it uses the clipboard",
+            ));
+        }
+        self.allow(node, "system.clipboard", detail.to_owned());
+        Ok(())
     }
 
     pub fn notify(&mut self, node: &NodeId, title: &str) -> Result<(), NodeError> {
@@ -587,6 +871,31 @@ mod tests {
     }
 
     #[test]
+    fn only_the_host_can_reclassify_a_handle_and_only_after_checking() {
+        let mut f = fixture(true);
+        let handle = f.broker.import_file(f.source.clone(), HandleKind::File);
+        f.broker.make_reachable(&f.node, handle);
+
+        // The host verifies content and promotes the kind; the component then sees an image.
+        let promoted = f.broker.reclassify(handle, HandleKind::Image);
+        assert_eq!(promoted.kind, HandleKind::Image);
+        assert!(f.broker.open_input(&f.node, promoted).is_ok());
+
+        // And the old label no longer works, because the host's record is the truth.
+        assert!(f.broker.open_input(&f.node, handle).is_err());
+    }
+
+    #[test]
+    fn host_read_is_not_a_back_door_into_a_component() {
+        // It reads, but it hands nothing to anybody: the component still needs its own grant
+        // and its own reachable handle to see anything.
+        let mut f = fixture(false);
+        let handle = f.broker.import_file(f.source.clone(), HandleKind::File);
+        assert_eq!(f.broker.host_read(handle).unwrap(), b"hello");
+        assert!(f.broker.open_input(&f.node, handle).is_err());
+    }
+
+    #[test]
     fn every_denial_is_written_down() {
         let mut f = fixture(false);
         let handle = f.broker.import_file(f.source.clone(), HandleKind::File);
@@ -653,6 +962,56 @@ mod tests {
         let escape = allowed.join("inner").join("..");
         let err = broker.save_to(&node, out, &escape, "x.txt").unwrap_err();
         assert_eq!(err.code, "denied");
+    }
+
+    #[test]
+    fn a_move_needs_permission_for_the_folder_it_deletes_from() {
+        let dir = tempdir::TempDir::new();
+        let inbox = dir.path().join("inbox");
+        let sorted = dir.path().join("sorted");
+        std::fs::create_dir_all(&inbox).unwrap();
+        std::fs::create_dir_all(&sorted).unwrap();
+        let original = inbox.join("photo.png");
+        std::fs::write(&original, b"pretend image").unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        // Destination allowed, source not.
+        grants.grant(&node, "fs.write", GrantScope::Directory(sorted.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let handle = broker.import_file(original.clone(), HandleKind::File);
+
+        let err = broker
+            .move_to(&node, handle, &sorted, "photo.png")
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("moved out of"), "{}", err.message);
+        assert!(
+            original.exists(),
+            "nothing may be deleted without permission"
+        );
+    }
+
+    #[test]
+    fn a_move_with_both_folders_allowed_actually_moves() {
+        let dir = tempdir::TempDir::new();
+        let inbox = dir.path().join("inbox");
+        let sorted = dir.path().join("sorted");
+        std::fs::create_dir_all(&inbox).unwrap();
+        std::fs::create_dir_all(&sorted).unwrap();
+        let original = inbox.join("photo.png");
+        std::fs::write(&original, b"pretend image").unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.write", GrantScope::Directory(inbox.clone()));
+        grants.grant(&node, "fs.write", GrantScope::Directory(sorted.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let handle = broker.import_file(original.clone(), HandleKind::File);
+
+        let moved = broker.move_to(&node, handle, &sorted, "photo.png").unwrap();
+        assert!(moved.exists());
+        assert!(!original.exists(), "a move leaves nothing behind");
     }
 
     #[test]

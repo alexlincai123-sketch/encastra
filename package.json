@@ -17,12 +17,15 @@
     "check": "npm run lint && npm run typecheck && npm run test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "typecheck": "tsc --build --verbose",
+    "typecheck": "tsc --build && npm run typecheck --workspace @encastra/desktop",
     "test": "vitest run",
     "test:watch": "vitest",
     "rust:check": "cargo clippy --workspace --all-targets -- -D warnings",
     "rust:test": "cargo test --workspace",
-    "clean": "tsc --build --clean"
+    "clean": "tsc --build --clean",
+    "build": "npm run build --workspace @encastra/desktop",
+    "tauri:dev": "npm run tauri --workspace @encastra/desktop -- dev",
+    "tauri:build": "npm run tauri --workspace @encastra/desktop -- build"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",
