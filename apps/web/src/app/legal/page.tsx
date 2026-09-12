@@ -4,27 +4,30 @@ import type { ReactNode } from 'react';
 
 import { Callout, Card, PageHeader } from '@/components/ui/Ui';
 import { LEGAL_DOCS } from '@/config/legal';
+import { getLocale, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
-export const metadata: Metadata = {
-  title: 'Legal',
-  description:
-    'The nine legal documents this project has drafted. All nine are drafts pending review by qualified legal counsel and are not legal advice.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: t(locale, 'legal.index.hero.eyebrow'),
+    description: t(locale, 'legal.index.meta.description'),
+  };
+}
 
-export default function LegalIndexPage(): ReactNode {
+export default async function LegalIndexPage(): Promise<ReactNode> {
+  const locale = await getLocale();
+
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Legal"
-        title="All documents"
-        lead="Every document below is a draft. None has been reviewed by a lawyer, and every page says so again before the text itself."
+        eyebrow={t(locale, 'legal.index.hero.eyebrow')}
+        title={t(locale, 'legal.index.hero.title')}
+        lead={t(locale, 'legal.index.hero.lead')}
       />
-      <Callout tone="warn" title="Not legal advice">
-        These are working drafts written to state, honestly, what this project currently intends to
-        promise — not finished policies. Nothing on this page or the pages it links to should be
-        relied upon as legal advice, and nothing here has been reviewed by qualified legal counsel.
+      <Callout tone="warn" title={t(locale, 'legal.index.calloutTitle')}>
+        {t(locale, 'legal.index.calloutBody')}
       </Callout>
 
       <div className={`grid ${styles.list}`}>

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { Callout, PageHeader } from '@/components/ui/Ui';
 import { findLegalDoc, LEGAL_DOCS } from '@/config/legal';
+import { getLocale, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
@@ -23,7 +24,11 @@ export async function generateMetadata({
   const { slug } = await params;
   const doc = findLegalDoc(slug);
   if (doc === undefined) return {};
-  return { title: doc.title, description: `Draft — ${doc.summary}` };
+  const locale = await getLocale();
+  return {
+    title: doc.title,
+    description: t(locale, 'legal.doc.metaDescription', { summary: doc.summary }),
+  };
 }
 
 export default async function LegalDocPage({
@@ -34,14 +39,15 @@ export default async function LegalDocPage({
   const { slug } = await params;
   const doc = findLegalDoc(slug);
   if (doc === undefined) notFound();
+  const locale = await getLocale();
 
   return (
     <div className="page page--narrow">
-      <PageHeader eyebrow="Legal · Draft" title={doc.title} lead={doc.summary} />
-      <Callout tone="warn" title="Draft — not legal advice">
-        This document has not been reviewed by qualified legal counsel and is not a finished policy.
-        It states, honestly, what the project currently intends to promise. See{' '}
-        <a href="/legal">all documents</a> for the same notice on every one of them.
+      <PageHeader eyebrow={t(locale, 'legal.doc.eyebrow')} title={doc.title} lead={doc.summary} />
+      <Callout tone="warn" title={t(locale, 'legal.doc.calloutTitle')}>
+        {t(locale, 'legal.doc.calloutBodyPrefix')}{' '}
+        <a href="/legal">{t(locale, 'legal.doc.calloutLinkText')}</a>{' '}
+        {t(locale, 'legal.doc.calloutBodySuffix')}
       </Callout>
 
       <div className={`prose ${styles.body}`}>

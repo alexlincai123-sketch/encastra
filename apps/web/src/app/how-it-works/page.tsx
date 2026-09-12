@@ -6,14 +6,17 @@ import { PermissionMock } from '@/components/ui/PermissionMock';
 import { StepSection } from '@/components/ui/StepSection';
 import { ButtonRow, CTA, PageHeader, SourceRef } from '@/components/ui/Ui';
 import { componentNode, findComponent } from '@/lib/graph-nodes';
+import { getLocale, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
-export const metadata: Metadata = {
-  title: 'How it works',
-  description:
-    'The six steps every Encastra workflow goes through, from picking a component to reading the journal of a finished run — shown with the same diagrams the editor uses, not screenshots.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: t(locale, 'howItWorks.hero.eyebrow'),
+    description: t(locale, 'howItWorks.meta.description'),
+  };
+}
 
 const READ = componentNode('encastra.file.read');
 const PARSE = componentNode('encastra.data.json');
@@ -45,20 +48,22 @@ const PALETTE_PREVIEW = [
   'encastra.system.timer',
 ] as const;
 
-export default function HowItWorksPage(): ReactNode {
+export default async function HowItWorksPage(): Promise<ReactNode> {
+  const locale = await getLocale();
+
   return (
     <div>
       <div className="page">
         <PageHeader
-          eyebrow="How it works"
-          title="Six steps, every time"
-          lead="A workflow that watches a folder and one that runs once and stops go through the same shape. Nothing below is a screenshot — every diagram is the same node-and-wire language the editor renders, built from the real component manifests."
+          eyebrow={t(locale, 'howItWorks.hero.eyebrow')}
+          title={t(locale, 'howItWorks.hero.title')}
+          lead={t(locale, 'howItWorks.hero.lead')}
         />
       </div>
 
       <StepSection
         number={1}
-        title="Choose"
+        title={t(locale, 'howItWorks.steps.choose.title')}
         visual={
           <ul className={styles.palette}>
             {PALETTE_PREVIEW.map((id) => {
@@ -74,165 +79,133 @@ export default function HowItWorksPage(): ReactNode {
         }
       >
         <p className="lead">
-          The palette lists every component available to you — nineteen, plus two triggers. Each
-          states what it does in one sentence, the same sentence everywhere it appears: on the
-          block, in the palette, and in the <a href="/components">component catalogue</a>.
+          {t(locale, 'howItWorks.steps.choose.leadPrefix')}{' '}
+          <a href="/components">{t(locale, 'howItWorks.steps.choose.leadLinkText')}</a>
+          {t(locale, 'howItWorks.steps.choose.leadSuffix')}
         </p>
-        <p className="prose">
-          Components are deliberately narrow. A block that resized an image and saved it and sent a
-          notification would be easy to use once and impossible to reuse. Kept narrow, the same
-          Resize Image block serves a photo workflow, a thumbnail workflow, and one nobody has built
-          yet.
-        </p>
+        <p className="prose">{t(locale, 'howItWorks.steps.choose.body')}</p>
       </StepSection>
 
       <StepSection
         number={2}
-        title="Drag"
+        title={t(locale, 'howItWorks.steps.drag.title')}
         reverse
         visual={
           <div className={styles.canvas}>
             <span className={styles.canvasGhost} aria-hidden="true" />
-            <GraphNode node={RESIZE} />
+            <GraphNode node={RESIZE} locale={locale} />
           </div>
         }
       >
-        <p className="lead">
-          Place a block on the canvas. Nothing about the workflow exists yet except this one step —
-          it has no connections and will not run on its own.
-        </p>
-        <p className="prose">
-          The canvas is reachable entirely from the keyboard, not only a mouse — a block that could
-          not be selected without one would leave its settings and its permission prompt unreachable
-          to anyone who cannot use one.
-        </p>
+        <p className="lead">{t(locale, 'howItWorks.steps.drag.lead')}</p>
+        <p className="prose">{t(locale, 'howItWorks.steps.drag.body')}</p>
       </StepSection>
 
       <StepSection
         number={3}
-        title="Connect"
-        caption="examples/json-report, unconnected to a run"
-        visual={<GraphFlow steps={CONNECTED_FLOW} dense />}
+        title={t(locale, 'howItWorks.steps.connect.title')}
+        caption={t(locale, 'howItWorks.steps.connect.caption')}
+        visual={<GraphFlow steps={CONNECTED_FLOW} dense locale={locale} />}
       >
-        <p className="lead">
-          Draw a line from an output to an input and the type system decides, on the spot, whether
-          it fits — before the workflow exists, not when it fails halfway through a run.
-        </p>
+        <p className="lead">{t(locale, 'howItWorks.steps.connect.lead')}</p>
+        <p className="prose">{t(locale, 'howItWorks.steps.connect.body1')}</p>
         <p className="prose">
-          Same type fits silently. A narrower type into a wider one — an image into a file — fits
-          silently too. A wider type into a narrower one is legal but never silent: a visible
-          conversion appears on the wire, because a claim that can be wrong needs a place to fail.
-          Sideways — an image into a video — is refused outright; both are kinds of file, and being
-          siblings is not a relationship that converts.
-        </p>
-        <p className="prose">
-          The graph on the right is <code>examples/json-report</code>, the same one quoted in the
-          README: read a file, parse it as JSON, write it back out, then notify. Its three
-          connections show all three kinds at once — a same-type wire, an explicit conversion, and
-          an implicit one.
+          {t(locale, 'howItWorks.steps.connect.body2Prefix')} <code>examples/json-report</code>
+          {t(locale, 'howItWorks.steps.connect.body2Suffix')}
         </p>
       </StepSection>
 
       <StepSection
         number={4}
-        title="Configure permissions"
+        title={t(locale, 'howItWorks.steps.permissions.title')}
         reverse
-        caption="What the inspector shows for Save File — reconstructed from its real manifest, not a screenshot, and not an interactive control on this page."
+        caption={t(locale, 'howItWorks.steps.permissions.caption')}
         visual={
           <PermissionMock
             kind={SAVE_CAPABILITY?.kind ?? 'fs.write'}
             reason={
-              SAVE_CAPABILITY?.reason ??
-              'Saves the file into the folder you pick. It cannot write anywhere else.'
+              SAVE_CAPABILITY?.reason ?? t(locale, 'howItWorks.steps.permissions.fallbackReason')
             }
             scope={SAVE_CAPABILITY?.scope ?? 'chosen-folder'}
             location="C:\Users\you\out"
+            locale={locale}
           />
         }
       >
-        <p className="lead">
-          A step that needs to reach something outside the graph — a folder, a network address, a
-          notification — asks for exactly that, with a sentence written for the person deciding, not
-          the name of the capability.
-        </p>
+        <p className="lead">{t(locale, 'howItWorks.steps.permissions.lead')}</p>
         <p className="prose">
-          Declaring is not being granted. A component that asks for <code>fs.write</code> still
-          cannot write anything until a person presses the button, and the button stays disabled
-          until a folder is actually chosen — a grant with nothing attached is an unbounded grant,
-          and the application will not offer one.
+          {t(locale, 'howItWorks.steps.permissions.bodyPrefix')} <code>fs.write</code>{' '}
+          {t(locale, 'howItWorks.steps.permissions.bodySuffix')}
         </p>
       </StepSection>
 
       <StepSection
         number={5}
-        title="Run"
-        caption="One refusal does not discard the work that already succeeded"
-        visual={<GraphFlow steps={CONNECTED_FLOW} states={RUN_STATES} activeIndex={3} dense />}
+        title={t(locale, 'howItWorks.steps.run.title')}
+        caption={t(locale, 'howItWorks.steps.run.caption')}
+        visual={
+          <GraphFlow
+            steps={CONNECTED_FLOW}
+            states={RUN_STATES}
+            activeIndex={3}
+            dense
+            locale={locale}
+          />
+        }
       >
-        <p className="lead">
-          Press run and every step&rsquo;s state changes as it happens — waiting, running, finished,
-          failed, skipped — with timing shown while it is still useful to watch.
-        </p>
+        <p className="lead">{t(locale, 'howItWorks.steps.run.lead')}</p>
         <p className="prose">
-          This is the same graph, actually run, with no folder yet allowed for Save File — the exact
-          transcript quoted in the README. <code>Write File</code> is refused, and{' '}
-          <code>Notify</code> is skipped because the step it depended on did not finish. The first
-          two steps still completed; a run with one refusal is reported as partly finished, not as a
-          crash.
+          {t(locale, 'howItWorks.steps.run.bodyPrefix')}{' '}
+          <code>{t(locale, 'howItWorks.steps.run.bodyWriteFile')}</code>{' '}
+          {t(locale, 'howItWorks.steps.run.bodyMiddle')}{' '}
+          <code>{t(locale, 'howItWorks.steps.run.bodyNotify')}</code>{' '}
+          {t(locale, 'howItWorks.steps.run.bodySuffix')}
         </p>
       </StepSection>
 
       <StepSection
         number={6}
-        title="Inspect"
+        title={t(locale, 'howItWorks.steps.inspect.title')}
         reverse
         visual={
           <div className={styles.journalCard}>
             <div className={styles.journalHead}>
-              <strong>Write File</strong>
+              <strong>{t(locale, 'howItWorks.steps.run.bodyWriteFile')}</strong>
               <code>encastra.file.write@1.0.0</code>
             </div>
             <dl className={styles.journalList}>
-              <dt>State</dt>
-              <dd>failed · 0ms</dd>
-              <dt>Input</dt>
-              <dd>content: text (62 characters)</dd>
-              <dt>Capability</dt>
+              <dt>{t(locale, 'howItWorks.steps.inspect.journal.state')}</dt>
+              <dd>{t(locale, 'howItWorks.steps.inspect.journal.stateValue')}</dd>
+              <dt>{t(locale, 'howItWorks.steps.inspect.journal.input')}</dt>
+              <dd>{t(locale, 'howItWorks.steps.inspect.journal.inputValue')}</dd>
+              <dt>{t(locale, 'howItWorks.steps.inspect.journal.capability')}</dt>
               <dd>
-                <code>fs.write</code> — refused
+                <code>fs.write</code> —{' '}
+                {t(locale, 'howItWorks.steps.inspect.journal.capabilityRefused')}
               </dd>
-              <dt>Reason</dt>
-              <dd>no folder has been allowed for this node</dd>
+              <dt>{t(locale, 'howItWorks.steps.inspect.journal.reason')}</dt>
+              <dd>{t(locale, 'howItWorks.steps.inspect.journal.reasonValue')}</dd>
             </dl>
           </div>
         }
       >
-        <p className="lead">
-          Select the failed step and the inspector shows the journal: what went in, what came out,
-          how long it took, and every permission the broker saw — allowed or refused.
-        </p>
-        <p className="prose">
-          The journal describes values rather than quoting them — a length, a shape, a handle number
-          — never the contents of a file. It is written to be pasted into a bug report without
-          anyone&rsquo;s data leaving with it.
-        </p>
+        <p className="lead">{t(locale, 'howItWorks.steps.inspect.lead')}</p>
+        <p className="prose">{t(locale, 'howItWorks.steps.inspect.body')}</p>
         <SourceRef
           path="crates/encastra-builtins/tests/image_processor.rs"
-          note="the automated version of this checkpoint"
+          note={t(locale, 'howItWorks.steps.inspect.sourceNote')}
+          locale={locale}
         />
       </StepSection>
 
       <section className="section">
         <div className="page">
           <div className="stack">
-            <p className="lead">
-              This is what the whole product does today — nothing here waits on a feature that is
-              not built yet.
-            </p>
+            <p className="lead">{t(locale, 'howItWorks.closing.lead')}</p>
             <ButtonRow>
-              <CTA href="/tutorials">Build the same workflow yourself</CTA>
+              <CTA href="/tutorials">{t(locale, 'howItWorks.closing.buildIt')}</CTA>
               <CTA href="/download" variant="secondary">
-                Download the beta
+                {t(locale, 'howItWorks.closing.download')}
               </CTA>
             </ButtonRow>
           </div>

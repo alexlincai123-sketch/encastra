@@ -2,51 +2,52 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import { Callout, Card, CTA, PageHeader, SectionHeading } from '@/components/ui/Ui';
+import { getLocale, t } from '@/lib/i18n';
 
-export const metadata: Metadata = {
-  title: 'Contact',
-  description:
-    'How to reach the project today. There is no public email yet, no accounts, and no support desk — this page says exactly what does and does not exist.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: t(locale, 'contact.hero.eyebrow'),
+    description: t(locale, 'contact.meta.description'),
+  };
+}
 
-export default function ContactPage(): ReactNode {
+export default async function ContactPage(): Promise<ReactNode> {
+  const locale = await getLocale();
+
   return (
     <div className="page page--narrow">
       <PageHeader
-        eyebrow="Contact"
-        title="How to reach the project"
-        lead="Honestly: there is not much here yet. No account, no support desk, and no published general-purpose address — because none of those exist. This page names the one channel that does."
+        eyebrow={t(locale, 'contact.hero.eyebrow')}
+        title={t(locale, 'contact.hero.title')}
+        lead={t(locale, 'contact.hero.lead')}
       />
 
-      <Callout tone="note" title="No general contact address yet">
-        The domain in this project&rsquo;s own identifiers, <code>encastra.dev</code>, is not
-        registered (see <a href="/about#name">/about</a>), so an address anybody might guess from
-        this site would go nowhere. Establishing one is a launch prerequisite, not something skipped
-        by accident.
+      <Callout tone="note" title={t(locale, 'contact.noAddress.title')}>
+        {t(locale, 'contact.noAddress.bodyPrefix')} <code>encastra.dev</code>,{' '}
+        {t(locale, 'contact.noAddress.bodyMiddle')} <a href="/about#name">/about</a>
+        {t(locale, 'contact.noAddress.bodySuffix')}
       </Callout>
 
       <section className="section">
-        <SectionHeading eyebrow="Security" title="Found a vulnerability?" />
+        <SectionHeading
+          eyebrow={t(locale, 'contact.security.eyebrow')}
+          title={t(locale, 'contact.security.title')}
+        />
         <Card>
-          <p className="prose">
-            This is the one channel that is specified today. Please do not open a public issue —
-            report privately through the repository host&rsquo;s private vulnerability reporting.
-            See the disclosure draft for exactly what to include and what to expect.
-          </p>
+          <p className="prose">{t(locale, 'contact.security.body')}</p>
           <CTA href="/legal/security-disclosure" variant="secondary">
-            Read the disclosure policy
+            {t(locale, 'contact.security.cta')}
           </CTA>
         </Card>
       </section>
 
       <section className="section">
-        <SectionHeading eyebrow="Everything else" title="Bugs, questions, and feedback" />
-        <p className="prose">
-          There is no support desk and no dedicated feedback channel yet. If you have found this
-          site, you most likely also have access to the repository it describes — the commit history
-          and its issue tracker, where they exist, are the closest thing to a contact channel this
-          project currently has.
-        </p>
+        <SectionHeading
+          eyebrow={t(locale, 'contact.everythingElse.eyebrow')}
+          title={t(locale, 'contact.everythingElse.title')}
+        />
+        <p className="prose">{t(locale, 'contact.everythingElse.body')}</p>
       </section>
     </div>
   );

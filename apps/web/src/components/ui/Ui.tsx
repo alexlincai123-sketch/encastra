@@ -2,6 +2,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { BuildState } from '@/config/site';
 import { STATE_LABEL } from '@/config/site';
+import type { Locale } from '@/lib/i18n/locale';
+import { t } from '@/lib/i18n/translate';
 
 import styles from './Ui.module.css';
 
@@ -31,11 +33,13 @@ export function NotBuilt({
   title,
   children,
   blockedBy,
+  locale = 'en',
 }: {
   state: BuildState;
   title: string;
   children: ReactNode;
   blockedBy?: readonly string[];
+  locale?: Locale;
 }): ReactNode {
   return (
     <section className={styles.notBuilt} data-state={state} aria-labelledby="not-built-title">
@@ -48,7 +52,7 @@ export function NotBuilt({
       <div className={styles.notBuiltBody}>{children}</div>
       {blockedBy !== undefined && blockedBy.length > 0 ? (
         <div className={styles.notBuiltBlocked}>
-          <h3 className={styles.notBuiltBlockedTitle}>What has to happen first</h3>
+          <h3 className={styles.notBuiltBlockedTitle}>{t(locale, 'ui.notBuiltBlockedByTitle')}</h3>
           <ol className={styles.ordered}>
             {blockedBy.map((step) => (
               <li key={step}>{step}</li>
@@ -164,10 +168,18 @@ export function SectionHeading({
 }
 
 /** A reference to a file in the repository. Never a link — the repository is not public. */
-export function SourceRef({ path, note }: { path: string; note?: string }): ReactNode {
+export function SourceRef({
+  path,
+  note,
+  locale = 'en',
+}: {
+  path: string;
+  note?: string;
+  locale?: Locale;
+}): ReactNode {
   return (
     <p className={styles.sourceRef}>
-      <span className={styles.sourceRefLabel}>Source</span>
+      <span className={styles.sourceRefLabel}>{t(locale, 'ui.source')}</span>
       <code>{path}</code>
       {note !== undefined ? <span className={styles.sourceRefNote}>{note}</span> : null}
     </p>

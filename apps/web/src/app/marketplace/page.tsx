@@ -3,41 +3,46 @@ import type { ReactNode } from 'react';
 
 import { CTA, NotBuilt, PageHeader } from '@/components/ui/Ui';
 import { STATUS } from '@/config/site';
+import { getLocale, t } from '@/lib/i18n';
 
-export const metadata: Metadata = {
-  title: 'Marketplace',
-  description:
-    'Not built yet. There is no way to install a component beyond the nineteen that ship with the app.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: t(locale, 'marketplace.hero.eyebrow'),
+    description: t(locale, 'marketplace.meta.description'),
+  };
+}
 
-export default function MarketplacePage(): ReactNode {
+export default async function MarketplacePage(): Promise<ReactNode> {
+  const locale = await getLocale();
+
   return (
     <div className="page">
-      <PageHeader eyebrow="Marketplace" title="Not built yet" />
+      <PageHeader
+        eyebrow={t(locale, 'marketplace.hero.eyebrow')}
+        title={t(locale, 'marketplace.hero.title')}
+      />
       <div className="stack-lg">
         <NotBuilt
           state={STATUS.marketplace}
-          title="You cannot install a component"
+          title={t(locale, 'marketplace.notBuilt.title')}
+          locale={locale}
           blockedBy={[
-            'The WebAssembly sandbox third-party components would run in',
-            'Signing and a revocation list, so an installed component can be verified',
-            'A registry: publish, verify, install, revoke',
-            'A listing model — money movement is explicitly out of scope even after that',
+            t(locale, 'marketplace.notBuilt.blockedBy.item1'),
+            t(locale, 'marketplace.notBuilt.blockedBy.item2'),
+            t(locale, 'marketplace.notBuilt.blockedBy.item3'),
+            t(locale, 'marketplace.notBuilt.blockedBy.item4'),
           ]}
         >
           <p>
-            Every component you can use is in the box — nineteen, plus two triggers, all first-party
-            and compiled into the application. See <a href="/components">the full catalogue</a> for
-            exactly what that set can do.
+            {t(locale, 'marketplace.notBuilt.body1Prefix')}{' '}
+            <a href="/components">{t(locale, 'marketplace.notBuilt.body1LinkText')}</a>{' '}
+            {t(locale, 'marketplace.notBuilt.body1Suffix')}
           </p>
-          <p>
-            When this exists, listings will come before any money moves through it — the roadmap
-            treats a marketplace listing model and real payments as separate milestones, in that
-            order.
-          </p>
+          <p>{t(locale, 'marketplace.notBuilt.body2')}</p>
         </NotBuilt>
         <CTA href="/components" variant="secondary">
-          See what you actually have today
+          {t(locale, 'marketplace.cta')}
         </CTA>
       </div>
     </div>

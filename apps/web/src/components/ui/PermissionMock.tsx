@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import type { Locale } from '@/lib/i18n/locale';
+import { t } from '@/lib/i18n/translate';
 
 import styles from './PermissionMock.module.css';
 
@@ -14,6 +16,7 @@ export function PermissionMock({
   scope,
   location,
   granted = false,
+  locale = 'en',
 }: {
   kind: string;
   reason: string;
@@ -21,6 +24,7 @@ export function PermissionMock({
   /** The folder or host shown next to the button. Omit for a plain yes/no capability. */
   location?: string;
   granted?: boolean;
+  locale?: Locale;
 }): ReactNode {
   return (
     <div className={styles.panel}>
@@ -35,7 +39,11 @@ export function PermissionMock({
         <span className={styles.scope}>{scope}</span>
       )}
       <span className={styles.button} data-granted={granted ? 'true' : 'false'}>
-        {granted ? 'Allowed' : location !== undefined ? 'Allow this folder' : 'Allow'}
+        {granted
+          ? t(locale, 'permissionMock.allowed')
+          : location !== undefined
+            ? t(locale, 'permissionMock.allowFolder')
+            : t(locale, 'permissionMock.allow')}
       </span>
     </div>
   );

@@ -4,13 +4,20 @@ import type { ReactNode } from 'react';
 import { PageHeader, SourceRef } from '@/components/ui/Ui';
 import { COMPONENT_COUNT, COMPONENTS, TRIGGER_COUNT } from '@/lib/components.data';
 import type { ComponentRecord, PortRecord } from '@/lib/components.types';
+import { getLocale, type Locale, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
-export const metadata: Metadata = {
-  title: 'Components',
-  description: `Every component in this build — ${COMPONENT_COUNT} plus ${TRIGGER_COUNT} triggers — with its real ports, configuration and capabilities, generated from the manifests the runtime parses.`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: t(locale, 'nav.primary.components'),
+    description: t(locale, 'components.meta.description', {
+      count: String(COMPONENT_COUNT),
+      triggers: String(TRIGGER_COUNT),
+    }),
+  };
+}
 
 function categoriesOf(components: readonly ComponentRecord[]): readonly string[] {
   const seen = new Set<string>();
@@ -20,12 +27,20 @@ function categoriesOf(components: readonly ComponentRecord[]): readonly string[]
 
 const CATEGORIES = categoriesOf(COMPONENTS);
 
-function PortList({ title, ports }: { title: string; ports: readonly PortRecord[] }): ReactNode {
+function PortList({
+  title,
+  ports,
+  locale,
+}: {
+  title: string;
+  ports: readonly PortRecord[];
+  locale: Locale;
+}): ReactNode {
   if (ports.length === 0) {
     return (
       <div className={styles.detailBlock}>
         <h3>{title}</h3>
-        <p className={styles.noCapability}>None.</p>
+        <p className={styles.noCapability}>{t(locale, 'components.none')}</p>
       </div>
     );
   }
@@ -45,7 +60,13 @@ function PortList({ title, ports }: { title: string; ports: readonly PortRecord[
   );
 }
 
-function ComponentCard({ component }: { component: ComponentRecord }): ReactNode {
+function ComponentCard({
+  component,
+  locale,
+}: {
+  component: ComponentRecord;
+  locale: Locale;
+}): ReactNode {
   return (
     <details className={styles.card} id={component.id}>
       <summary className={styles.summary}>
@@ -53,7 +74,7 @@ function ComponentCard({ component }: { component: ComponentRecord }): ReactNode
         <span className={styles.summaryDescription}>{component.description}</span>
         {component.isTrigger ? (
           <span className={styles.badge} data-tone="trigger">
-            Trigger
+            {t(locale, 'components.trigger')}
           </span>
         ) : null}
         <span className={styles.badge} data-tone="version">
@@ -61,12 +82,16 @@ function ComponentCard({ component }: { component: ComponentRecord }): ReactNode
         </span>
       </summary>
       <div className={styles.detail}>
-        <PortList title="Inputs" ports={component.inputs} />
-        <PortList title="Outputs" ports={component.outputs} />
+        <PortList title={t(locale, 'components.inputs')} ports={component.inputs} locale={locale} />
+        <PortList
+          title={t(locale, 'components.outputs')}
+          ports={component.outputs}
+          locale={locale}
+        />
 
         {component.config.length > 0 ? (
           <div className={styles.detailBlock}>
-            <h3>Configuration</h3>
+            <h3>{t(locale, 'components.configuration')}</h3>
             {component.config.map((field) => (
               <div className={styles.portRow} key={field.key}>
                 <span className={styles.portName}>
@@ -86,12 +111,9 @@ function ComponentCard({ component }: { component: ComponentRecord }): ReactNode
         ) : null}
 
         <div className={styles.detailBlock}>
-          <h3>Capabilities</h3>
+          <h3>{t(locale, 'components.capabilities')}</h3>
           {component.capabilities.length === 0 ? (
-            <p className={styles.noCapability}>
-              Declares nothing. It cannot reach the filesystem, the network, the clipboard, or a
-              notification.
-            </p>
+            <p className={styles.noCapability}>{t(locale, 'components.declaresNothing')}</p>
           ) : (
             component.capabilities.map((cap) => (
               <div className={styles.capability} key={`${cap.kind}-${cap.scope}`}>
@@ -107,22 +129,27 @@ function ComponentCard({ component }: { component: ComponentRecord }): ReactNode
         <div className={styles.meta}>
           <span>{component.platforms.join(', ')}</span>
         </div>
-        <SourceRef path={component.sourceFile} />
+        <SourceRef path={component.sourceFile} locale={locale} />
       </div>
     </details>
   );
 }
 
-export default function ComponentsPage(): ReactNode {
+export default async function ComponentsPage(): Promise<ReactNode> {
+  const locale = await getLocale();
+
   return (
     <div>
       <div className="page">
         <PageHeader
-          eyebrow={`${COMPONENT_COUNT} components + ${TRIGGER_COUNT} triggers`}
-          title="Every component in this build"
-          lead="Generated from crates/encastra-builtins/src/*.rs — the manifests the runtime actually parses, not a document that can drift from them. Nothing here can install a new component; there is no marketplace or registry yet, so this is the whole set."
+          eyebrow={t(locale, 'components.hero.eyebrow', {
+            count: String(COMPONENT_COUNT),
+            triggers: String(TRIGGER_COUNT),
+          })}
+          title={t(locale, 'components.hero.title')}
+          lead={t(locale, 'components.hero.lead')}
         />
-        <nav className={styles.toc} aria-label="Jump to category">
+        <nav className={styles.toc} aria-label={t(locale, 'components.jumpToCategory')}>
           {CATEGORIES.map((category) => (
             <a key={category} className={styles.tocLink} href={`#category-${category}`}>
               {category}
@@ -134,17 +161,21 @@ export default function ComponentsPage(): ReactNode {
       <div className="page">
         {CATEGORIES.map((category) => {
           const items = COMPONENTS.filter((c) => c.category === category);
+          const countLabel =
+            items.length === 1
+              ? t(locale, 'components.component')
+              : t(locale, 'components.componentsPlural');
           return (
             <section key={category} id={`category-${category}`} className={styles.category}>
               <div className={styles.categoryHead}>
                 <h2 className={styles.categoryTitle}>{category}</h2>
                 <span className={styles.categoryCount}>
-                  {items.length} component{items.length === 1 ? '' : 's'}
+                  {items.length} {countLabel}
                 </span>
               </div>
               <div className={styles.list}>
                 {items.map((component) => (
-                  <ComponentCard key={component.id} component={component} />
+                  <ComponentCard key={component.id} component={component} locale={locale} />
                 ))}
               </div>
             </section>

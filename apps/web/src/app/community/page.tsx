@@ -3,39 +3,45 @@ import type { ReactNode } from 'react';
 
 import { CTA, NotBuilt, PageHeader } from '@/components/ui/Ui';
 import { STATUS } from '@/config/site';
+import { getLocale, t } from '@/lib/i18n';
 
-export const metadata: Metadata = {
-  title: 'Community',
-  description:
-    'Not built yet. There is no community feature in this build — no accounts, no profiles, no forum.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: t(locale, 'community.hero.eyebrow'),
+    description: t(locale, 'community.meta.description'),
+  };
+}
 
-export default function CommunityPage(): ReactNode {
+export default async function CommunityPage(): Promise<ReactNode> {
+  const locale = await getLocale();
+
   return (
     <div className="page">
-      <PageHeader eyebrow="Community" title="Not built yet" />
+      <PageHeader
+        eyebrow={t(locale, 'community.hero.eyebrow')}
+        title={t(locale, 'community.hero.title')}
+      />
       <div className="stack-lg">
         <NotBuilt
           state={STATUS.community}
-          title="No accounts, no profiles, no forum"
+          title={t(locale, 'community.notBuilt.title')}
+          locale={locale}
           blockedBy={[
-            'A backend: authentication, users, projects',
-            'A component registry to publish to',
-            'A marketplace listing model',
+            t(locale, 'community.notBuilt.blockedBy.item1'),
+            t(locale, 'community.notBuilt.blockedBy.item2'),
+            t(locale, 'community.notBuilt.blockedBy.item3'),
           ]}
         >
+          <p>{t(locale, 'community.notBuilt.body1')}</p>
           <p>
-            There is nowhere on this site or in the application to sign in, follow another author,
-            or post anything. This page is here so the sidebar and the site map are honest about
-            what does not exist, rather than pointing at an empty screen.
-          </p>
-          <p>
-            The product roadmap places Community after the backend and the component registry — see{' '}
-            <a href="/about">/about</a> for the project&rsquo;s current stage.
+            {t(locale, 'community.notBuilt.body2Prefix')}{' '}
+            <a href="/about">{t(locale, 'community.notBuilt.body2LinkText')}</a>{' '}
+            {t(locale, 'community.notBuilt.body2Suffix')}
           </p>
         </NotBuilt>
         <CTA href="/download" variant="secondary">
-          Download the beta instead
+          {t(locale, 'community.cta')}
         </CTA>
       </div>
     </div>

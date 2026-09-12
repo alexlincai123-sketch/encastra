@@ -4,14 +4,17 @@ import type { FlowStep, GraphNodeSpec } from '@/components/graph/Graph';
 import { GraphBranch, GraphFlow } from '@/components/graph/Graph';
 import { PageHeader, SectionHeading, StatusBadge } from '@/components/ui/Ui';
 import { componentNode } from '@/lib/graph-nodes';
+import { getLocale, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
-export const metadata: Metadata = {
-  title: 'Templates',
-  description:
-    'The three workflows that ship with the application — Image Processor, File Organiser and Thumbnails. Ordinary graphs, run on the same runtime as anything you build, with their folders deliberately left empty.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: t(locale, 'nav.primary.templates'),
+    description: t(locale, 'templates.meta.description'),
+  };
+}
 
 const WATCH = componentNode('encastra.file.watch');
 const RESIZE = componentNode('encastra.image.resize');
@@ -50,13 +53,15 @@ const ORGANISER_TRUNK: readonly FlowStep[] = [
 
 const ORGANISER_ARMS: readonly FlowStep[] = [{ node: IMAGES_ARM }, { node: DOCUMENTS_ARM }];
 
-export default function TemplatesPage(): ReactNode {
+export default async function TemplatesPage(): Promise<ReactNode> {
+  const locale = await getLocale();
+
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Templates"
-        title="Workflows that ship with the app"
-        lead="Three demos, and they double as end-to-end test fixtures — not screenshots. Each one arrives with its folders deliberately empty, the same reason a workflow you send somebody else arrives with no permissions granted."
+        eyebrow={t(locale, 'templates.hero.eyebrow')}
+        title={t(locale, 'templates.hero.title')}
+        lead={t(locale, 'templates.hero.lead')}
       />
 
       <div className={styles.template}>
@@ -65,16 +70,20 @@ export default function TemplatesPage(): ReactNode {
           <StatusBadge state="built" />
         </div>
         <p className={styles.summary}>
-          Watches a folder. Whenever an image appears, it makes a smaller copy in another folder —
-          the same checkpoint quoted in the README, and the workflow{' '}
-          <a href="/tutorials">the tutorial</a> builds from scratch.
+          {t(locale, 'templates.imageProcessor.summaryPrefix')}{' '}
+          <a href="/tutorials">{t(locale, 'templates.imageProcessor.tutorialLinkText')}</a>{' '}
+          {t(locale, 'templates.imageProcessor.summarySuffix')}
         </p>
         <div className={styles.needs}>
-          <span className={styles.needsItem}>A folder to watch</span>
-          <span className={styles.needsItem}>A folder to save into</span>
+          <span className={styles.needsItem}>
+            {t(locale, 'templates.imageProcessor.needsWatch')}
+          </span>
+          <span className={styles.needsItem}>
+            {t(locale, 'templates.imageProcessor.needsSave')}
+          </span>
         </div>
         <div className={styles.diagram}>
-          <GraphFlow steps={IMAGE_PROCESSOR_FLOW} dense />
+          <GraphFlow steps={IMAGE_PROCESSOR_FLOW} dense locale={locale} />
         </div>
       </div>
 
@@ -83,20 +92,24 @@ export default function TemplatesPage(): ReactNode {
           <h2>File Organiser</h2>
           <StatusBadge state="built" />
         </div>
-        <p className={styles.summary}>
-          Watches a folder and moves what lands in it into one of three others, by file type. The
-          extension decides the route; the file itself is what travels along it.
-        </p>
+        <p className={styles.summary}>{t(locale, 'templates.fileOrganiser.summary')}</p>
         <div className={styles.needs}>
-          <span className={styles.needsItem}>A folder to watch</span>
-          <span className={styles.needsItem}>A folder for images</span>
-          <span className={styles.needsItem}>A folder for documents</span>
+          <span className={styles.needsItem}>
+            {t(locale, 'templates.fileOrganiser.needsWatch')}
+          </span>
+          <span className={styles.needsItem}>
+            {t(locale, 'templates.fileOrganiser.needsImages')}
+          </span>
+          <span className={styles.needsItem}>
+            {t(locale, 'templates.fileOrganiser.needsDocuments')}
+          </span>
         </div>
         <div className={styles.diagram}>
           <GraphBranch
             trunk={ORGANISER_TRUNK}
             arms={ORGANISER_ARMS}
-            caption="A third route, for anything else, is wired but not shown here"
+            caption={t(locale, 'templates.fileOrganiser.caption')}
+            locale={locale}
           />
         </div>
       </div>
@@ -106,24 +119,21 @@ export default function TemplatesPage(): ReactNode {
           <h2>Thumbnails</h2>
           <StatusBadge state="built" />
         </div>
-        <p className={styles.summary}>
-          Turns a folder of images into square previews, ready for a gallery or a grid. Unlike Image
-          Processor, this one processes files already sitting in the folder when it starts.
-        </p>
+        <p className={styles.summary}>{t(locale, 'templates.thumbnails.summary')}</p>
         <div className={styles.needs}>
-          <span className={styles.needsItem}>A folder to watch</span>
-          <span className={styles.needsItem}>A folder to save into</span>
+          <span className={styles.needsItem}>{t(locale, 'templates.thumbnails.needsWatch')}</span>
+          <span className={styles.needsItem}>{t(locale, 'templates.thumbnails.needsSave')}</span>
         </div>
         <div className={styles.diagram}>
-          <GraphFlow steps={THUMBNAILS_FLOW} dense />
+          <GraphFlow steps={THUMBNAILS_FLOW} dense locale={locale} />
         </div>
       </div>
 
       <section className="section">
         <SectionHeading
-          eyebrow="One rule"
-          title="Every template is an ordinary graph"
-          lead="Nothing about these three is privileged. They run through the same validation, the same capability broker, and the same runtime as a workflow you build from an empty canvas — which is also why they make honest test fixtures rather than curated screenshots."
+          eyebrow={t(locale, 'templates.rule.eyebrow')}
+          title={t(locale, 'templates.rule.title')}
+          lead={t(locale, 'templates.rule.lead')}
         />
       </section>
     </div>

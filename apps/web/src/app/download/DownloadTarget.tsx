@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
 import { Callout } from '@/components/ui/Ui';
+import type { Locale } from '@/lib/i18n/locale';
+import { t } from '@/lib/i18n/translate';
 
 type DetectedOs = 'windows' | 'macos' | 'linux' | 'unknown';
 
@@ -20,8 +22,11 @@ function detect(): DetectedOs {
  * The only thing this component does: read `navigator.userAgent` once, client-side, and say
  * whether the one real artefact on this page — the Windows installer — matches the machine
  * reading it. It changes no other content on the page and reaches no network.
+ *
+ * `locale` arrives as a prop from `download/page.tsx` (a server component) rather than being
+ * re-read here, the same reason `Header.tsx`/`Footer.tsx` take it as a prop — see `locale.ts`.
  */
-export function DownloadTarget(): ReactNode {
+export function DownloadTarget({ locale }: { locale: Locale }): ReactNode {
   const [os, setOs] = useState<DetectedOs>('unknown');
 
   useEffect(() => {
@@ -30,20 +35,18 @@ export function DownloadTarget(): ReactNode {
 
   if (os === 'windows') {
     return (
-      <Callout tone="ok" title="This looks like Windows">
-        The installer below should run here. It is still not code-signed — see the note further down
-        before you run it.
+      <Callout tone="ok" title={t(locale, 'download.target.windowsTitle')}>
+        {t(locale, 'download.target.windowsBody')}
       </Callout>
     );
   }
 
   if (os === 'macos' || os === 'linux') {
-    const label = os === 'macos' ? 'macOS' : 'Linux';
+    const label =
+      os === 'macos' ? t(locale, 'download.target.macos') : t(locale, 'download.target.linux');
     return (
-      <Callout tone="warn" title={`This looks like ${label}`}>
-        There is no {label} build yet. The components declare support for it and the engine is
-        written to be platform-independent, but only the Windows installer has actually been built,
-        packaged and tested.
+      <Callout tone="warn" title={t(locale, 'download.target.otherTitle', { label })}>
+        {t(locale, 'download.target.otherBody', { label })}
       </Callout>
     );
   }

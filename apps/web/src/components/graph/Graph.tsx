@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import type { Locale } from '@/lib/i18n/locale';
+import { t } from '@/lib/i18n/translate';
 
 import styles from './Graph.module.css';
 
@@ -61,10 +63,12 @@ export function GraphNode({
   node,
   state = 'idle',
   highlighted = false,
+  locale = 'en',
 }: {
   node: GraphNodeSpec;
   state?: NodeState;
   highlighted?: boolean;
+  locale?: Locale;
 }): ReactNode {
   const inputs = node.inputs ?? [];
   const outputs = node.outputs ?? [];
@@ -80,7 +84,7 @@ export function GraphNode({
         <span className={styles.nodeName}>{node.name}</span>
         {state !== 'idle' ? (
           <span className={styles.nodeStateLabel} data-state={state}>
-            {state}
+            {t(locale, `graph.state.${state}`)}
           </span>
         ) : null}
       </figcaption>
@@ -101,7 +105,7 @@ export function GraphNode({
       {node.permission !== undefined ? (
         <p className={styles.permission}>
           <span className={styles.permissionKey}>{node.permission}</span>
-          <span className={styles.permissionNote}>needs your permission</span>
+          <span className={styles.permissionNote}>{t(locale, 'graph.needsPermission')}</span>
         </p>
       ) : null}
     </figure>
@@ -216,6 +220,7 @@ export function GraphFlow({
   dense = false,
   presentCount,
   wiredCount,
+  locale = 'en',
 }: {
   steps: readonly FlowStep[];
   activeIndex?: number;
@@ -230,6 +235,7 @@ export function GraphFlow({
   presentCount?: number;
   /** How many connections have been made. A wire at index `i` is joined once this reaches `i`. */
   wiredCount?: number;
+  locale?: Locale;
 }): ReactNode {
   // Defaulting to "all of them" is what keeps every existing caller a finished diagram, and it
   // is also what makes the reduced-motion path correct for free: the terminal shows its whole
@@ -257,6 +263,7 @@ export function GraphFlow({
               node={step.node}
               state={states?.[step.node.id] ?? 'idle'}
               highlighted={activeIndex >= index}
+              locale={locale}
             />
           </li>
         ))}
@@ -278,10 +285,12 @@ export function GraphBranch({
   trunk,
   arms,
   caption,
+  locale = 'en',
 }: {
   trunk: readonly FlowStep[];
   arms: readonly FlowStep[];
   caption?: string;
+  locale?: Locale;
 }): ReactNode {
   return (
     <div className={styles.flowWrap}>
@@ -294,15 +303,15 @@ export function GraphBranch({
                 {...(step.wire.label !== undefined ? { label: step.wire.label } : {})}
               />
             ) : null}
-            <GraphNode node={step.node} />
+            <GraphNode node={step.node} locale={locale} />
           </li>
         ))}
         <li className={styles.flowItem}>
-          <Wire label="routes to" />
+          <Wire label={t(locale, 'graph.routesTo')} />
           <ul className={styles.arms}>
             {arms.map((arm) => (
               <li key={arm.node.id}>
-                <GraphNode node={arm.node} />
+                <GraphNode node={arm.node} locale={locale} />
               </li>
             ))}
           </ul>

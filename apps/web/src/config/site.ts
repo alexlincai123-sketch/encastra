@@ -35,11 +35,19 @@ export const SITE = {
  */
 export type BuildState = 'built' | 'preview' | 'designed' | 'planned';
 
+/**
+ * The four states a part of this product can be in.
+ *
+ * `planned` deliberately does not say "coming soon". Nothing here has a date, a milestone or a
+ * commitment behind it, and "soon" is a promise the project has not made — the download page and
+ * the homepage's availability section both say plainly that macOS and Linux are not built, and a
+ * badge that quietly implied otherwise would contradict them on the same site.
+ */
 export const STATE_LABEL: Record<BuildState, string> = {
   built: 'Available',
   preview: 'Preview',
   designed: 'Designed, not built',
-  planned: 'Coming soon',
+  planned: 'Not built',
 };
 
 export const STATUS = {
