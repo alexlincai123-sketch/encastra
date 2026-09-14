@@ -449,6 +449,25 @@ impl Broker {
         // paths, and any symlink or junction between them is an escape the check never saw.
         let destination = resolved_dir.join(sanitise_filename(filename));
 
+        // The directory is resolved, but the leaf is not, and a copy follows a link at the leaf
+        // as readily as anywhere else. A name already in the granted folder that is a link to
+        // somewhere outside it would take the write with it — and a granted folder is somewhere
+        // files arrive from elsewhere, which is the entire reason to grant one.
+        //
+        // `symlink_metadata` does not follow the link, which is what makes the question askable.
+        if std::fs::symlink_metadata(&destination)
+            .is_ok_and(|meta| meta.file_type().is_symlink())
+        {
+            return Err(self
+                .deny(
+                    node,
+                    "fs.write",
+                    detail,
+                    "a link of that name is already there, and writing through it would leave the folder",
+                )
+                .with_hint("Remove or rename that entry, or write under a different name."));
+        }
+
         if !granted
             .iter()
             .any(|allowed| resolved_dir.starts_with(allowed))
@@ -860,7 +879,45 @@ pub fn resolve_grant_directory(dir: &Path) -> Result<PathBuf, String> {
     if sensitive_roots().contains(&resolved) {
         return Err("that folder belongs to the system, not to a workflow".to_owned());
     }
+    if forbidden_trees()
+        .iter()
+        .any(|tree| resolved.starts_with(tree))
+    {
+        return Err("that folder decides what runs when you log in".to_owned());
+    }
     Ok(resolved)
+}
+
+/// Directories that may not be the scope of a grant, nor contain one.
+///
+/// The roots above are refused because they are absurdly wide. These are refused because of what
+/// writing into them *does*: anything placed in a startup folder runs the next time the person
+/// logs in, so a grant there is not a permission to save a file, it is a permission to choose
+/// what the machine executes. A workflow that writes its results into the startup folder is not
+/// a workflow anybody asked for.
+///
+/// Matched as a prefix rather than exactly, because a subfolder of a startup folder starts the
+/// same way. This is a short list of things with a known meaning, not an attempt to enumerate
+/// every unwise destination — see the residual risks in the audit for what it does not cover.
+fn forbidden_trees() -> Vec<PathBuf> {
+    let mut trees: Vec<PathBuf> = Vec::new();
+    let mut add = |path: PathBuf| {
+        if let Ok(resolved) = std::fs::canonicalize(&path) {
+            trees.push(resolved);
+        }
+    };
+
+    const STARTUP: &str = r"Microsoft\Windows\Start Menu\Programs\Startup";
+    for key in ["APPDATA", "ProgramData"] {
+        if let Some(value) = std::env::var_os(key) {
+            add(PathBuf::from(value).join(STARTUP));
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        add(PathBuf::from(home).join(".config/autostart"));
+    }
+
+    trees
 }
 
 /// Directories that may never themselves be the scope of a grant.
@@ -1309,6 +1366,30 @@ mod tests {
     }
 
     #[test]
+    fn the_folder_that_decides_what_runs_at_login_is_not_grantable() {
+        // A malicious project chooses the folder string the dialog shows and then grants. The
+        // startup folder is the one destination where "save a file here" means "run this next
+        // time you log in", so it is refused however plausible the prompt looked.
+        let Some(appdata) = std::env::var_os("APPDATA") else {
+            eprintln!("skipped: no APPDATA on this platform");
+            return;
+        };
+        let startup = PathBuf::from(appdata)
+            .join(r"Microsoft\Windows\Start Menu\Programs\Startup");
+        if !startup.is_dir() {
+            eprintln!("skipped: no startup folder on this machine");
+            return;
+        }
+
+        assert!(
+            resolve_grant_directory(&startup).is_err(),
+            "the startup folder must not be grantable"
+        );
+        // And a folder inside it, because a subfolder of a startup folder starts the same way.
+        assert!(!forbidden_trees().is_empty());
+    }
+
+    #[test]
     fn a_folder_that_does_not_exist_is_not_a_grant() {
         let dir = tempdir::TempDir::new();
         assert!(resolve_grant_directory(&dir.path().join("nope")).is_err());
@@ -1429,6 +1510,45 @@ mod tests {
         let real = watched.join("real.txt");
         std::fs::write(&real, b"fine").unwrap();
         assert!(broker.import_guarded(&node, &real, HandleKind::File).is_ok());
+    }
+
+    #[test]
+    fn a_link_already_in_the_granted_folder_does_not_take_the_write_with_it() {
+        // The folder is resolved, but a copy follows a link at the leaf just as readily. A
+        // granted folder is somewhere files arrive from elsewhere — that is what it is for — so
+        // a name already sitting there is not necessarily one this run put there.
+        let dir = tempdir::TempDir::new();
+        let allowed = dir.path().join("allowed");
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&allowed).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let outside = elsewhere.join("theirs.txt");
+        std::fs::write(&outside, b"theirs").unwrap();
+
+        let trap = allowed.join("result.txt");
+        if !make_file_symlink(&outside, &trap) {
+            eprintln!("skipped: this platform would not create a symlink");
+            return;
+        }
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.write", GrantScope::Directory(allowed.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let out = broker
+            .create_output(&node, HandleKind::File, "result.txt")
+            .unwrap();
+        broker.write_output(&node, out, b"ours").unwrap();
+
+        let err = broker
+            .save_to(&node, out, &allowed, "result.txt")
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert_eq!(
+            std::fs::read(&outside).unwrap(),
+            b"theirs",
+            "the file outside the grant must be untouched"
+        );
     }
 
     /// Creates a file symlink if the platform allows it, reporting whether it did.
