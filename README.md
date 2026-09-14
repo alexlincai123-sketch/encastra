@@ -107,7 +107,7 @@ apps/web          Next.js marketing and docs
 apps/admin        moderation, advisories, revocation
 packages/protocol component protocol: type system, manifest schema   ← the shared rules live here
 packages/…        project-format · ui · types · sdk
-crates/…          encastra-protocol · encastra-core · encastra-host · encastra-builtins
+crates/…          encastra-protocol · encastra-core · encastra-host · encastra-builtins · encastra-publish
 components/       the first-party component set
 services/api      backend
 docs/             architecture, threat model, roadmap, ADRs
