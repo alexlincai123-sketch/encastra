@@ -921,6 +921,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "encastra-publish"
+version = "0.4.0-beta.1"
+dependencies = [
+ "encastra-core",
+ "encastra-project",
+ "encastra-protocol",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
