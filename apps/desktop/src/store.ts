@@ -126,6 +126,9 @@ interface EditorState {
   restoreVersion: (snapshot: string) => Promise<void>;
 
   setView: (view: View) => void;
+  /** Whether the publication panel is open. One flag, because there is one of it. */
+  publishOpen: boolean;
+  setPublishOpen: (open: boolean) => void;
   attachRuntime: () => Promise<() => void>;
   startWorkflow: () => Promise<void>;
   stopWorkflow: () => Promise<void>;
@@ -550,6 +553,12 @@ export const useEditor = create<EditorState>((set, get) => ({
     } finally {
       set({ busy: false });
     }
+  },
+
+  publishOpen: false,
+
+  setPublishOpen(open) {
+    set({ publishOpen: open });
   },
 
   setView(view) {

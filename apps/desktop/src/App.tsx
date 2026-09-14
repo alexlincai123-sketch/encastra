@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { selectPlural, useTranslation } from './i18n';
 import { ipc, recordedRuns } from './ipc';
 import { Welcome } from './onboarding/Welcome';
+import { Publish } from './panels/Publish';
 import { applyToDocument, usePreferences } from './preferences';
 import { Sidebar } from './Sidebar';
 import { useEditor } from './store';
@@ -52,6 +53,7 @@ function Toolbar() {
   const startWorkflow = useEditor((s) => s.startWorkflow);
   const stopWorkflow = useEditor((s) => s.stopWorkflow);
   const showRecording = useEditor((s) => s.showRecording);
+  const setPublishOpen = useEditor((s) => s.setPublishOpen);
   const { t } = useTranslation();
 
   const triggered = nodes.some((node) => manifests[node.data.componentRef]?.trigger === true);
@@ -86,6 +88,14 @@ function Toolbar() {
             title="Ctrl+S"
           >
             {t('toolbar.save')}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setPublishOpen(true)}
+            title={t('toolbar.publishTitle')}
+          >
+            {t('toolbar.publish')}
           </button>
           <span className="project-name">
             {projectName || t('messages.untitledProject')}
@@ -326,6 +336,7 @@ export function App() {
       {/* Before the content, so the tour can outline the panel its current step is about
           without needing the highlight state lifted up here. */}
       <Welcome />
+      <Publish />
 
       <div className="content">
         {view === 'home' ? <Home /> : null}

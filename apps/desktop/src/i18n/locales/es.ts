@@ -134,7 +134,83 @@ const es: Messages = {
     },
   },
 
+  publish: {
+    heading: 'Preparar una publicación',
+    intro:
+      'Encastra lee el proyecto guardado como lo leería quien lo recibe y luego lo escribe en la carpeta que elijas, junto al documento que lo acompañaría. No se sube nada: no hay registro al que enviarlo ni cuenta con la que enviarlo.',
+    saveFirst: 'Guarda el proyecto primero. Lo que se publica es el archivo, y todavía no existe.',
+    saveChangesFirst:
+      'Guarda los cambios primero. Lo que se publica es el archivo del disco, y ya no coincide con el lienzo.',
+    sections: {
+      about: 'Qué es esto',
+      check: 'Qué ha encontrado Encastra',
+      done: 'Dónde ha quedado',
+    },
+    fields: {
+      title: {
+        label: 'Nombre',
+        hint: 'Cómo se llama en la página desde la que alguien decide.',
+      },
+      summary: {
+        label: 'Resumen',
+        hint: 'Una o dos frases: qué hace y para quién.',
+      },
+      namespace: {
+        label: 'Tu espacio de nombres',
+        hint: 'Un nombre de dominio invertido que controles, como dev.tunombre. Nadie lo ha comprobado — no hay cuentas —, así que es una afirmación, no una prueba.',
+      },
+      version: {
+        label: 'Versión',
+        hint: 'Numerada como 1.0.0. Una versión publicada no cambia nunca; un cambio recibe un número nuevo.',
+      },
+      kind: {
+        label: 'Tipo',
+        hint: 'Un proyecto está pensado para ejecutarse. Una plantilla, para desmontarla y cambiarla.',
+      },
+      licence: {
+        label: 'Licencia',
+        hint: 'Qué puede hacer otra persona con esto. Una parte cuya licencia entre en conflicto con esta se rechaza.',
+      },
+    },
+    kinds: {
+      project: 'Proyecto',
+      template: 'Plantilla',
+    },
+    licences: {
+      mit: 'MIT',
+      'apache-2.0': 'Apache-2.0',
+      'gpl-3.0-only': 'GPL-3.0-only',
+      proprietary: 'Todos los derechos reservados',
+    },
+    derivedName: 'Se conocería como',
+    freeOnly:
+      'Gratis, y solo gratis. No hay proveedor de pagos ni cuenta a la que cobrar, así que un precio aquí sería un número que nada podría cobrar.',
+    checking: 'Leyendo el proyecto…',
+    checkAgain: 'Comprobar de nuevo',
+    prepare: 'Preparar…',
+    nothingFound: 'Nada de aquí impediría publicarlo.',
+    notAnAudit:
+      'Esto encuentra los errores lo bastante mecánicos como para encontrarlos. No es una auditoría de seguridad, y nadie ha hecho ninguna.',
+    capabilities: {
+      none: 'No pide nada fuera de sí mismo.',
+      some: 'A quien lo instale se le preguntará, en cada ejecución, antes de poder usar:',
+    },
+    preparedInto: 'El proyecto y su documento de publicación están aquí:',
+    nowhereToSend: 'Se quedan en este equipo. Todavía no hay adónde enviarlos.',
+    problems: {
+      namespaceMissing: 'Una publicación necesita un espacio de nombres.',
+      namespaceShape: 'Un espacio de nombres es un dominio invertido, como dev.tunombre.',
+      titleMissing: 'Una publicación necesita un nombre.',
+      titleUnusable:
+        'Este nombre no tiene letras ni números con los que construir un identificador.',
+      summaryMissing: 'Una publicación necesita un resumen.',
+      summaryShort: 'Unas pocas palabras no le dicen nada a quien decide. Di qué hace.',
+      versionShape: 'Una versión se numera como 1.0.0.',
+    },
+  },
   toolbar: {
+    publish: 'Publicar',
+    publishTitle: 'Preparar este proyecto para que otra persona lo instale',
     preview: {
       badge: 'vista previa',
       title: 'No hay ningún motor de ejecución conectado a esta ventana.',

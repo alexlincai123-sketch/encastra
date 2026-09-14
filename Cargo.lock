@@ -889,6 +889,7 @@ dependencies = [
  "encastra-core",
  "encastra-project",
  "encastra-protocol",
+ "encastra-publish",
  "serde",
  "serde_json",
  "tauri",

@@ -135,7 +135,85 @@ const de: Messages = {
     },
   },
 
+  publish: {
+    heading: 'Eine Veröffentlichung vorbereiten',
+    intro:
+      'Encastra liest das gespeicherte Projekt so, wie es jemand läse, der es erhält, und schreibt es dann in einen Ordner Ihrer Wahl — zusammen mit dem Dokument, das es begleiten würde. Nichts wird hochgeladen: Es gibt keine Registry, an die es ginge, und kein Konto, mit dem es ginge.',
+    saveFirst:
+      'Speichern Sie das Projekt zuerst. Veröffentlicht wird die Datei, und die gibt es noch nicht.',
+    saveChangesFirst:
+      'Speichern Sie Ihre Änderungen zuerst. Veröffentlicht wird die Datei auf der Festplatte, und sie stimmt nicht mehr mit der Arbeitsfläche überein.',
+    sections: {
+      about: 'Was das ist',
+      check: 'Was Encastra gefunden hat',
+      done: 'Wohin es geschrieben wurde',
+    },
+    fields: {
+      title: {
+        label: 'Name',
+        hint: 'Wie es auf der Seite heißt, auf der sich jemand entscheidet.',
+      },
+      summary: {
+        label: 'Zusammenfassung',
+        hint: 'Ein oder zwei Sätze: was es tut und für wen.',
+      },
+      namespace: {
+        label: 'Ihr Namensraum',
+        hint: 'Ein umgekehrter Domainname, den Sie kontrollieren, etwa dev.ihrname. Niemand hat das geprüft — es gibt keine Konten —, es ist also eine Behauptung, kein Nachweis.',
+      },
+      version: {
+        label: 'Version',
+        hint: 'Nummeriert wie 1.0.0. Eine veröffentlichte Version ändert sich nie; eine Änderung bekommt eine neue Nummer.',
+      },
+      kind: {
+        label: 'Art',
+        hint: 'Ein Projekt ist zum Ausführen gedacht. Eine Vorlage zum Auseinandernehmen und Ändern.',
+      },
+      licence: {
+        label: 'Lizenz',
+        hint: 'Was jemand anderes damit tun darf. Ein Teil, dessen Lizenz dieser widerspricht, wird abgelehnt.',
+      },
+    },
+    kinds: {
+      project: 'Projekt',
+      template: 'Vorlage',
+    },
+    licences: {
+      mit: 'MIT',
+      'apache-2.0': 'Apache-2.0',
+      'gpl-3.0-only': 'GPL-3.0-only',
+      proprietary: 'Alle Rechte vorbehalten',
+    },
+    derivedName: 'Es wäre bekannt als',
+    freeOnly:
+      'Kostenlos, und nur kostenlos. Es gibt keinen Zahlungsanbieter und kein Konto, dem etwas berechnet würde — ein Preis hier wäre eine Zahl, die niemand einziehen könnte.',
+    checking: 'Projekt wird gelesen…',
+    checkAgain: 'Erneut prüfen',
+    prepare: 'Vorbereiten…',
+    nothingFound: 'Nichts hier würde eine Veröffentlichung verhindern.',
+    notAnAudit:
+      'Dies findet die Fehler, die mechanisch genug sind, um gefunden zu werden. Es ist keine Sicherheitsprüfung, und niemand hat eine durchgeführt.',
+    capabilities: {
+      none: 'Es verlangt nichts außerhalb seiner selbst.',
+      some: 'Wer dies installiert, wird bei jeder Ausführung gefragt, bevor es Folgendes nutzen darf:',
+    },
+    preparedInto: 'Das Projekt und sein Veröffentlichungsdokument liegen hier:',
+    nowhereToSend: 'Sie bleiben auf diesem Rechner. Es gibt noch nirgendwo hin, wohin sie gingen.',
+    problems: {
+      namespaceMissing: 'Eine Veröffentlichung braucht einen Namensraum.',
+      namespaceShape: 'Ein Namensraum ist ein umgekehrter Domainname, etwa dev.ihrname.',
+      titleMissing: 'Eine Veröffentlichung braucht einen Namen.',
+      titleUnusable:
+        'Dieser Name enthält weder Buchstaben noch Ziffern, aus denen sich eine Kennung bilden ließe.',
+      summaryMissing: 'Eine Veröffentlichung braucht eine Zusammenfassung.',
+      summaryShort:
+        'Ein paar Wörter sagen jemandem, der sich entscheidet, nichts. Sagen Sie, was es tut.',
+      versionShape: 'Eine Version wird wie 1.0.0 nummeriert.',
+    },
+  },
   toolbar: {
+    publish: 'Veröffentlichen',
+    publishTitle: 'Dieses Projekt vorbereiten, damit jemand anderes es installieren kann',
     preview: {
       badge: 'Vorschau',
       title: 'Mit diesem Fenster ist keine Laufzeitumgebung verbunden.',
