@@ -119,9 +119,46 @@ pub struct Graph {
     pub edges: Vec<Edge>,
 }
 
+/// The most nodes a graph may contain.
+///
+/// A graph is drawn by a person on a canvas, and a workflow with ten thousand steps is not one
+/// anybody drew. The limit is not there for them — it is there because a graph arrives inside a
+/// project file somebody was sent, and every node is work the validator, the editor and the
+/// runner each do. A file declaring a million of them costs all three before anybody sees it.
+pub const MAX_NODES: usize = 10_000;
+
+/// The most edges a graph may contain.
+///
+/// Higher than the node ceiling because a legitimate graph fans out, and low enough that the
+/// repeated passes over edges in validation stay cheap.
+pub const MAX_EDGES: usize = 40_000;
+
 impl Graph {
     pub fn parse(json: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json)
+        let graph: Graph = serde_json::from_str(json)?;
+        graph.within_limits().map_err(serde::de::Error::custom)?;
+        Ok(graph)
+    }
+
+    /// Whether this graph is within the sizes this build will work on.
+    ///
+    /// Public because a graph does not only arrive through [`parse`](Self::parse): the project
+    /// container deserialises one straight out of an archive entry, and a limit that guards only
+    /// one of the two doors guards neither.
+    pub fn within_limits(&self) -> Result<(), String> {
+        if self.nodes.len() > MAX_NODES {
+            return Err(format!(
+                "this graph has {} nodes, and this build works on at most {MAX_NODES}",
+                self.nodes.len()
+            ));
+        }
+        if self.edges.len() > MAX_EDGES {
+            return Err(format!(
+                "this graph has {} connections, and this build works on at most {MAX_EDGES}",
+                self.edges.len()
+            ));
+        }
+        Ok(())
     }
 
     /// Stable JSON: sorted keys, so saving an unchanged graph produces identical bytes and a

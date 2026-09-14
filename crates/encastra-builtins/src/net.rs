@@ -86,7 +86,7 @@ impl CoreComponent for Http {
 
         // The host check is the permission. It happens before anything is sent, and it is
         // recorded in the journal whichever way it goes.
-        ctx.check_http(&url.host)?;
+        ctx.check_http(&url.authority())?;
 
         let method = ctx
             .config_str("method")
@@ -112,7 +112,7 @@ impl CoreComponent for Http {
 
         ctx.log(
             LogLevel::Info,
-            format!("{method} {} responded {status}.", url.host),
+            format!("{method} {} responded {status}.", url.authority()),
         );
 
         Ok(Outputs::from([
@@ -217,6 +217,27 @@ fn describe_read(error: &ureq::Error) -> String {
 struct UrlParts {
     scheme: String,
     host: String,
+    /// Set only when the address names a port that is not the scheme's own.
+    port: Option<u16>,
+}
+
+impl UrlParts {
+    /// What the permission check is made against.
+    ///
+    /// The host alone when the address uses the scheme's own port, `host:port` otherwise. The
+    /// port has to be part of the identity because it is part of what gets reached: a grant for
+    /// `internal.example` that also admitted `internal.example:22` and `internal.example:5432`
+    /// is not a permission to talk to a web service, it is a permission to reach every service
+    /// on that machine. Nobody answering the dialog means the second one.
+    ///
+    /// Bare host for the default port, so the common case reads as a host and a grant already
+    /// made for `example.com` keeps working.
+    fn authority(&self) -> String {
+        match self.port {
+            Some(port) => format!("{}:{port}", self.host),
+            None => self.host.clone(),
+        }
+    }
 }
 
 /// Pulls the scheme and host out without a URL parsing dependency.
@@ -253,18 +274,44 @@ fn url_parts(url: &str) -> Result<UrlParts, NodeError> {
         .with_hint("Send credentials as a header or in the body instead."));
     }
 
-    let host = authority
-        .rsplit_once(':')
-        .map(|(h, _port)| h)
-        .unwrap_or(authority)
-        .trim_matches(['[', ']'])
+    // An IPv6 literal is bracketed and full of colons, so the port has to be looked for after the
+    // closing bracket. Splitting at the last colon regardless — which is what this did — turns
+    // `[::1]` into a host of `:`, so an IPv6 address could never be named in a grant and never
+    // match one.
+    let (host_text, port_text) = if let Some(rest) = authority.strip_prefix('[') {
+        let (inside, after) = rest
+            .split_once(']')
+            .ok_or_else(|| bad("the IPv6 address has no closing bracket"))?;
+        (inside, after.strip_prefix(':'))
+    } else {
+        match authority.rsplit_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        }
+    };
+
+    // A trailing dot is the same name to DNS. Removing it here keeps this parser and the
+    // editor's agreeing on one spelling, which is what makes comparing them meaningful.
+    let host = host_text
+        .trim_end_matches('.')
         .to_ascii_lowercase();
 
     if host.is_empty() {
         return Err(bad("it has no host"));
     }
 
-    Ok(UrlParts { scheme, host })
+    let default_port = if scheme == "https" { 443 } else { 80 };
+    let port = match port_text {
+        None | Some("") => None,
+        Some(text) => {
+            let given: u16 = text.parse().map_err(|_| bad("the port is not a number"))?;
+            // Recorded only when it differs, so `https://example.com:443` and
+            // `https://example.com` are one address and not two.
+            (given != default_port).then_some(given)
+        }
+    };
+
+    Ok(UrlParts { scheme, host, port })
 }
 
 pub fn http() -> Arc<dyn CoreComponent> {
@@ -292,6 +339,66 @@ mod tests {
         assert_eq!(
             url_parts("http://localhost:5173").unwrap().host,
             "localhost"
+        );
+    }
+
+    #[test]
+    fn a_grant_for_a_host_is_not_a_grant_for_every_port_on_it() {
+        // Allowing "internal.example" is a decision about a web service. If the port fell out of
+        // the identity, the same grant would also admit :22, :5432, :6379 and everything else
+        // that machine happens to answer on — turning one permission into a port scanner.
+        assert_eq!(
+            url_parts("https://internal.example/").unwrap().authority(),
+            "internal.example"
+        );
+        assert_eq!(
+            url_parts("https://internal.example:6379/").unwrap().authority(),
+            "internal.example:6379"
+        );
+        assert_eq!(
+            url_parts("https://internal.example:22/").unwrap().authority(),
+            "internal.example:22"
+        );
+
+        // The scheme's own port is not a different address, so an existing grant still works.
+        assert_eq!(
+            url_parts("https://example.com:443/x").unwrap().authority(),
+            "example.com"
+        );
+        assert_eq!(
+            url_parts("http://example.com:80/x").unwrap().authority(),
+            "example.com"
+        );
+
+        // And a port that is not a number is refused rather than quietly ignored.
+        assert!(url_parts("https://example.com:eighty/").is_err());
+        assert!(url_parts("https://example.com:99999/").is_err());
+    }
+
+    #[test]
+    fn an_ipv6_literal_is_a_host_and_not_a_colon() {
+        // Splitting at the last colon regardless turned "[::1]" into a host of ":", so an IPv6
+        // address could never be named in a grant nor matched against one.
+        assert_eq!(url_parts("http://[::1]/").unwrap().host, "::1");
+        assert_eq!(url_parts("http://[::1]/").unwrap().authority(), "::1");
+        assert_eq!(
+            url_parts("http://[::1]:8080/").unwrap().authority(),
+            "::1:8080"
+        );
+        assert_eq!(
+            url_parts("https://[2001:db8::1]/x").unwrap().host,
+            "2001:db8::1"
+        );
+        assert!(url_parts("http://[::1/").is_err());
+    }
+
+    #[test]
+    fn a_trailing_dot_is_the_same_host() {
+        // Otherwise "example.com." and "example.com" are two spellings of one name, and the two
+        // parsers that have to agree — this one and the editor's — could disagree about which.
+        assert_eq!(
+            url_parts("https://example.com./x").unwrap().host,
+            "example.com"
         );
     }
 

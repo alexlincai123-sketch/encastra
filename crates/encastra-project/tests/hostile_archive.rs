@@ -6,8 +6,45 @@
 
 use std::io::{Cursor, Write};
 
-use encastra_project::{MAX_ENTRY_BYTES, Project, ProjectError};
+use encastra_project::{MAX_ENTRY_BYTES, MAX_SNAPSHOTS, Project, ProjectError};
 use zip::write::SimpleFileOptions;
+
+/// The entries of a project that opens, so a test can change exactly one thing about it.
+///
+/// These names and shapes are not decoration: a fixture that does not actually open makes every
+/// test built on it pass through whichever "malformed" branch it hits first, proving nothing.
+/// [`the_fixture_these_tests_are_built_on_actually_opens`] is what keeps that honest.
+fn valid_parts() -> Vec<(String, Vec<u8>)> {
+    vec![
+        (
+            "project.json".to_owned(),
+            br#"{"schema":1,"id":"p-1","name":"p","runtime":">=0.1.0","created_at_ms":0,"modified_at_ms":0}"#.to_vec(),
+        ),
+        ("graph.json".to_owned(), br#"{"nodes":{},"edges":[]}"#.to_vec()),
+        ("lock.json".to_owned(), br#"{"components":[]}"#.to_vec()),
+        ("variables.json".to_owned(), br#"{}"#.to_vec()),
+        (
+            "versions/index.json".to_owned(),
+            br#"{"snapshots":[]}"#.to_vec(),
+        ),
+    ]
+}
+
+/// The fixture above, with some entries replaced or added.
+fn project_with(overrides: Vec<(String, Vec<u8>)>) -> Vec<u8> {
+    let mut parts = valid_parts();
+    for (name, body) in overrides {
+        match parts.iter_mut().find(|(existing, _)| *existing == name) {
+            Some(slot) => slot.1 = body,
+            None => parts.push((name, body)),
+        }
+    }
+    let borrowed: Vec<(&str, &[u8])> = parts
+        .iter()
+        .map(|(name, body)| (name.as_str(), body.as_slice()))
+        .collect();
+    archive(&borrowed)
+}
 
 /// Builds an archive with exactly the entries given, however malformed.
 fn archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
@@ -103,32 +140,174 @@ fn an_entry_that_is_not_utf8_is_refused_rather_than_panicking() {
 }
 
 #[test]
-fn a_snapshot_id_cannot_escape_the_history_prefix() {
-    // Snapshot bodies are looked up as `history/{id}.json`, and the id comes out of the file.
-    // An id full of traversal cannot reach outside the archive, because the result is still
-    // only ever a lookup — but a missing body must also not be fatal: the history entry is
-    // dropped and the project still opens.
-    let manifest = br#"{"schema":1,"name":"p","created_at_ms":0,"updated_at_ms":0}"#;
-    let graph = br#"{"nodes":{},"edges":[]}"#;
-    let lock = br#"{"components":[]}"#;
-    let variables = br#"{"variables":[]}"#;
-    let history = br#"{"snapshots":[{"id":"../../../../etc/passwd","created_at_ms":0}]}"#;
+fn the_fixture_these_tests_are_built_on_actually_opens() {
+    // Every test below changes one thing about this fixture and asserts the change is refused.
+    // That argument only holds if the unchanged fixture is accepted — otherwise a test can pass
+    // because of a typo in an entry name rather than because of the thing it claims to check.
+    // An earlier version of the file below used entry names this build has never read
+    // ("encastra.lock", "history/index.json"), so it proved nothing for as long as it was green.
+    let project = Project::from_bytes(&project_with(vec![]))
+        .expect("the fixture must open, or nothing built on it means anything");
+    assert_eq!(project.manifest.name, "p");
+    assert!(project.graph.nodes.is_empty());
+}
 
-    let bytes = archive(&[
-        ("project.json", manifest),
-        ("graph.json", graph),
-        ("encastra.lock", lock),
-        ("variables.json", variables),
-        ("history/index.json", history),
-    ]);
+#[test]
+fn a_snapshot_id_cannot_escape_the_history_prefix() {
+    // Snapshot bodies are looked up as `versions/{id}.json`, and the id comes out of the file.
+    // An id full of traversal cannot reach outside the archive, because the result is still only
+    // ever a lookup by name — and a missing body must not be fatal: the entry is dropped and the
+    // project still opens.
+    let history = br#"{"snapshots":[{"id":"../../../../etc/passwd","created_at_ms":0,"graph_hash":"x"}]}"#;
+    let bytes = project_with(vec![("versions/index.json".to_owned(), history.to_vec())]);
+
+    let project = Project::from_bytes(&bytes)
+        .expect("a traversal id is an absent body, not a broken project");
+
+    // The lookup found nothing — there is no `versions/../../../../etc/passwd.json` entry in the
+    // archive, and a lookup by name cannot leave the archive to go and find one. A snapshot with
+    // no body is then dropped from the history, which is the existing rule for a missing body.
+    assert!(
+        project.history.snapshots.is_empty(),
+        "a version whose body cannot be found is not kept"
+    );
+    assert!(!std::path::Path::new("etc/passwd").exists());
+}
+
+#[test]
+fn a_history_that_names_more_versions_than_the_build_reads_is_refused() {
+    // The index is one entry and respects the per-entry ceiling, but it chooses how many further
+    // entries get read. Per-entry × unbounded-count is unbounded.
+    let snapshots: Vec<String> = (0..=MAX_SNAPSHOTS)
+        .map(|i| format!(r#"{{"id":"s{i}","created_at_ms":0,"graph_hash":"x"}}"#))
+        .collect();
+    let index = format!(r#"{{"snapshots":[{}]}}"#, snapshots.join(","));
+    let bytes = project_with(vec![("versions/index.json".to_owned(), index.into_bytes())]);
 
     match Project::from_bytes(&bytes) {
-        // Either it opens with that snapshot's body dropped, or the manifest shape is refused.
-        // Both are acceptable; a read outside the archive is not, and cannot happen.
-        Ok(project) => {
-            assert!(project.history.snapshots.len() <= 1);
+        Err(ProjectError::TooManySnapshots { count, limit }) => {
+            assert_eq!(limit, MAX_SNAPSHOTS);
+            assert!(count > limit);
         }
-        Err(ProjectError::Invalid { .. } | ProjectError::MissingEntry(_)) => {}
-        other => panic!("unexpected: {other:?}"),
+        other => panic!("an unbounded history must be refused, got {other:?}"),
     }
+}
+
+#[test]
+fn entries_that_each_respect_the_ceiling_cannot_together_exhaust_memory() {
+    // The attack the per-entry ceiling does not stop: nothing here is oversized on its own. Ten
+    // bodies of eight megabytes are ten legal reads whose sum is not. All of it is whitespace,
+    // so the archive on disk is tiny — the cost is entirely on the machine that opens it.
+    const BODIES: usize = 10;
+    let mut body = br#"{"nodes":{},"edges":[]}"#.to_vec();
+    body.extend(std::iter::repeat_n(b' ', 8 * 1024 * 1024));
+
+    let snapshots: Vec<String> = (0..BODIES)
+        .map(|i| format!(r#"{{"id":"s{i}","created_at_ms":0,"graph_hash":"x"}}"#))
+        .collect();
+    let index = format!(r#"{{"snapshots":[{}]}}"#, snapshots.join(","));
+
+    let mut overrides = vec![("versions/index.json".to_owned(), index.into_bytes())];
+    for i in 0..BODIES {
+        overrides.push((format!("versions/s{i}.json"), body.clone()));
+    }
+    let bytes = project_with(overrides);
+
+    assert!(
+        bytes.len() < 1024 * 1024,
+        "the fixture must be small on disk; that is what makes it a bomb ({} bytes)",
+        bytes.len()
+    );
+    // Every single entry is inside the per-entry ceiling, which is the point.
+    assert!((body.len() as u64) < MAX_ENTRY_BYTES);
+
+    match Project::from_bytes(&bytes) {
+        Err(ProjectError::TooLargeInTotal { .. }) => {}
+        other => panic!("the sum of legal entries must still be bounded, got {other:?}"),
+    }
+}
+
+#[test]
+fn an_archive_that_names_the_same_entry_twice_is_refused() {
+    // `by_name` answers with one of them, and which one is a detail of the central directory —
+    // not necessarily the one somebody sees when they open the file in an archive viewer. A
+    // project that shows one graph and runs another is a file that lies about itself.
+    // The writer in this crate refuses to produce a duplicate, which is the right default and
+    // also means an honest tool cannot build the fixture. An attacker is not using this writer.
+    //
+    // So: write a second entry under a placeholder of exactly the same length, then rewrite that
+    // name to `graph.json` everywhere it appears — in its local header and in its central
+    // directory record. Equal length means every offset in the archive stays valid, and the
+    // result is a structurally sound ZIP naming one entry twice, which is what a hand-built
+    // hostile file looks like.
+    const PLACEHOLDER: &[u8] = b"zzzzz.json";
+    const REAL: &[u8] = b"graph.json";
+    assert_eq!(PLACEHOLDER.len(), REAL.len(), "offsets must not move");
+
+    let second = br#"{"nodes":{"evil":{"component":"a.b@1.0.0","position":{"x":0,"y":0}}},"edges":[]}"#;
+    let mut parts: Vec<(String, Vec<u8>)> = valid_parts();
+    parts.push((
+        String::from_utf8(PLACEHOLDER.to_vec()).unwrap(),
+        second.to_vec(),
+    ));
+    let borrowed: Vec<(&str, &[u8])> = parts
+        .iter()
+        .map(|(name, body)| (name.as_str(), body.as_slice()))
+        .collect();
+
+    let mut bytes = archive(&borrowed);
+    let mut rewritten = 0;
+    for i in 0..bytes.len().saturating_sub(PLACEHOLDER.len()) {
+        if &bytes[i..i + PLACEHOLDER.len()] == PLACEHOLDER {
+            bytes[i..i + REAL.len()].copy_from_slice(REAL);
+            rewritten += 1;
+        }
+    }
+    assert_eq!(
+        rewritten, 2,
+        "the name should appear in the local header and the central directory"
+    );
+
+    // Before this was refused, the reader took the *second* `graph.json` — so the project that
+    // ran was the one carrying the "evil" node, while the first entry is what an archive viewer
+    // would tend to show. That is the whole point of refusing it.
+    match Project::from_bytes(&bytes) {
+        Err(ProjectError::AmbiguousArchive { declared, distinct }) => {
+            assert_eq!(declared, 6);
+            assert_eq!(distinct, 5);
+        }
+        other => panic!("a duplicated entry name must be refused, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_graph_with_more_nodes_than_the_build_works_on_is_refused() {
+    // Thirty megabytes of entirely valid JSON is a very large number of nodes, and every one of
+    // them is work the validator, the editor and the runner each do before anybody sees the file.
+    let nodes: Vec<String> = (0..=encastra_core::graph::MAX_NODES)
+        .map(|i| format!(r#""n{i}":{{"component":"a.b@1.0.0","position":{{"x":0,"y":0}}}}"#))
+        .collect();
+    let graph = format!(r#"{{"nodes":{{{}}},"edges":[]}}"#, nodes.join(","));
+    let bytes = project_with(vec![("graph.json".to_owned(), graph.into_bytes())]);
+
+    match Project::from_bytes(&bytes) {
+        Err(ProjectError::Invalid { entry, reason }) => {
+            assert_eq!(entry, "graph.json");
+            assert!(reason.contains("nodes"), "{reason}");
+        }
+        other => panic!("an enormous graph must be refused, got {other:?}"),
+    }
+}
+
+#[test]
+fn an_ordinary_project_still_opens_from_disk() {
+    // The file-size ceiling added in front of `open` must not have changed the ordinary case.
+    let dir = std::env::temp_dir().join(format!("encastra-hostile-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("p.encastra");
+    std::fs::write(&path, project_with(vec![])).unwrap();
+
+    let project = Project::open(&path).expect("a small, valid project opens");
+    assert_eq!(project.manifest.name, "p");
+    let _ = std::fs::remove_dir_all(&dir);
 }

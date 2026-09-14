@@ -7,12 +7,12 @@
 //! decision belongs in the runtime.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use encastra_core::broker::{Broker, GrantScope, GrantSet};
+use encastra_core::broker::{Broker, GrantScope, GrantSet, resolve_grant_directory};
 use encastra_core::graph::{Graph, NodeId, PortRef};
 use encastra_core::journal::NodeRecord;
 use encastra_core::journal::RunJournal;
@@ -121,41 +121,12 @@ fn run_graph(
     inputs: Vec<InputSpec>,
     grants: Vec<GrantSpec>,
 ) -> Result<RunResult, String> {
-    let mut grant_set = GrantSet::new();
-
-    // Input-handle scopes come from the manifest and need no dialog: they grant nothing the
-    // user has not already said by drawing an edge.
-    for (id, node) in &graph.nodes {
-        if let Some(manifest) = state.registry.get(&node.component) {
-            grant_set.allow_declared_input_handles(id, manifest);
-        }
-    }
-
-    // Everything else is here because a person answered a question.
-    for grant in &grants {
-        let node = NodeId(grant.node.clone());
-        let scope = match (&grant.folder, &grant.hosts) {
-            (Some(folder), _) => GrantScope::Directory(PathBuf::from(folder)),
-            (None, Some(hosts)) => GrantScope::HttpHosts(hosts.clone()),
-            (None, None) => GrantScope::Allowed,
-        };
-        grant_set.grant(&node, &grant.kind, scope);
-    }
-
     let run_id = format!("run-{}", encastra_core::journal::now_ms());
     let run_dir = std::env::temp_dir().join("encastra").join(&run_id);
-    let mut broker = Broker::new(run_dir.clone(), grant_set)
+    let mut broker = Broker::new(run_dir.clone(), grant_set(&graph, &state.registry, &grants))
         .map_err(|e| format!("Could not prepare a working folder: {e}"))?;
 
-    let mut seed: BTreeMap<PortRef, Value> = BTreeMap::new();
-    for input in &inputs {
-        let path = PathBuf::from(&input.path);
-        let absolute = std::fs::canonicalize(&path)
-            .map_err(|e| format!("Could not open {}: {}", path.display(), e.kind()))?;
-        let kind = kind_for(&absolute);
-        let handle = broker.import_file(absolute, kind);
-        seed.insert(input.port_ref(), Value::Handle(handle));
-    }
+    let seed = seed_for(&mut broker, &inputs)?;
 
     let result = match run_seeded(
         &graph,
@@ -176,6 +147,20 @@ fn run_graph(
     // folder they allowed, by a component that asked.
     let _ = std::fs::remove_dir_all(&run_dir);
     Ok(result)
+}
+
+/// Whether a path is one this application will write a project to.
+///
+/// The destination arrives from the webview as a string. It is supposed to be what a person
+/// chose in a save dialog, and this is the part of that claim the runtime can actually check:
+/// whatever else it is, it has to be a `.encastra` file. That does not make the path trusted —
+/// it is still somewhere the user's account can write — but it takes "write these bytes to any
+/// path on the machine" off the table, which is the shape that ends with a file in a startup
+/// folder or on top of something that was already there.
+fn is_project_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("encastra"))
 }
 
 /// A hint from the file extension. The runtime verifies content when a component actually
@@ -239,6 +224,9 @@ fn save_project(
     label: Option<String>,
 ) -> Result<OpenProject, String> {
     let target = PathBuf::from(&path);
+    if !is_project_path(&target) {
+        return Err("A project is saved as a .encastra file.".to_owned());
+    }
     let now = encastra_core::journal::now_ms();
 
     // Saving over an existing project keeps its identity and its history. Only its content
@@ -422,6 +410,23 @@ fn announce(app: &tauri::AppHandle, status: Status) {
 
 /// Assembles the grants for a run: declared input-handle scopes, plus whatever the user said
 /// yes to. A manifest asking for something never grants it.
+///
+/// The one place grants are built. There used to be a second copy of this inside `run_graph`,
+/// which is the way two security checks become one security check and one historical artefact.
+///
+/// Every grant arriving here came over IPC from the webview, and is treated accordingly:
+///
+/// * a grant for a node that is not in the graph is nothing;
+/// * a grant for a capability the component's manifest never declared is nothing, because the
+///   dialog that supposedly produced it is built from that manifest — see
+///   [`GrantSet::grant_declared`];
+/// * a folder is resolved and sanity-checked before it becomes a scope, so "the user picked a
+///   folder" cannot arrive as "the user picked the C drive".
+///
+/// A refused grant is dropped rather than reported as an error. The component then asks the
+/// broker for the capability, is denied, and the denial appears in the journal against the node
+/// that wanted it — which is where somebody debugging would look, and is a record the editor
+/// cannot edit.
 fn grant_set(graph: &Graph, registry: &InMemoryRegistry, grants: &[GrantSpec]) -> GrantSet {
     let mut set = GrantSet::new();
     for (id, node) in &graph.nodes {
@@ -429,14 +434,30 @@ fn grant_set(graph: &Graph, registry: &InMemoryRegistry, grants: &[GrantSpec]) -
             set.allow_declared_input_handles(id, manifest);
         }
     }
+
     for grant in grants {
         let node = NodeId(grant.node.clone());
+
+        // The component this grant is about, by way of the graph. No node, no manifest, no
+        // grant: there is nothing for it to be a decision about.
+        let Some(manifest) = graph
+            .nodes
+            .get(&node)
+            .and_then(|n| registry.get(&n.component))
+        else {
+            continue;
+        };
+
         let scope = match (&grant.folder, &grant.hosts) {
-            (Some(folder), _) => GrantScope::Directory(PathBuf::from(folder)),
+            (Some(folder), _) => match resolve_grant_directory(Path::new(folder)) {
+                Ok(resolved) => GrantScope::Directory(resolved),
+                Err(_) => continue,
+            },
             (None, Some(hosts)) => GrantScope::HttpHosts(hosts.clone()),
             (None, None) => GrantScope::Allowed,
         };
-        set.grant(&node, &grant.kind, scope);
+
+        set.grant_declared(&node, manifest, &grant.kind, scope);
     }
     set
 }

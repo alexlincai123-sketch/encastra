@@ -13,7 +13,17 @@
  * A disagreement costs a run, never a host nobody allowed.
  */
 
-/** The host an address points at, or an empty string when there is nothing to ask about. */
+/**
+ * What an address will be asked permission for, or an empty string when there is nothing to ask
+ * about.
+ *
+ * The host on its own when the address uses the scheme's own port, `host:port` otherwise. The
+ * port belongs in the answer because it is part of what gets reached: a grant for
+ * `internal.example` that also admitted `internal.example:22` and `internal.example:5432` would
+ * not be a permission to talk to a web service, it would be a permission to reach every service
+ * on that machine, and the dialog would be describing neither. The runtime's parser makes the
+ * same distinction; these two must keep agreeing.
+ */
 export function hostOf(url: string): string {
   const [rawScheme, rest] = url.trim().split('://');
   const scheme = (rawScheme ?? '').toLowerCase();
@@ -26,8 +36,31 @@ export function hostOf(url: string): string {
   // put a password in the journal and in the permission prompt. Not offered here either.
   if (authority.includes('@')) return '';
 
-  const withoutPort = authority.includes(':')
-    ? authority.slice(0, authority.lastIndexOf(':'))
-    : authority;
-  return withoutPort.replace(/^\[|\]$/g, '').toLowerCase();
+  // An IPv6 literal is bracketed and full of colons, so the port has to be looked for after the
+  // closing bracket. Cutting at the last colon regardless turned `[::1]` into a host of `:`.
+  let host: string;
+  let portText: string | undefined;
+  if (authority.startsWith('[')) {
+    const close = authority.indexOf(']');
+    if (close === -1) return '';
+    host = authority.slice(1, close);
+    const after = authority.slice(close + 1);
+    portText = after.startsWith(':') ? after.slice(1) : undefined;
+  } else {
+    const colon = authority.lastIndexOf(':');
+    host = colon === -1 ? authority : authority.slice(0, colon);
+    portText = colon === -1 ? undefined : authority.slice(colon + 1);
+  }
+
+  // A trailing dot is the same name to DNS. Dropped so both parsers spell it one way.
+  host = host.replace(/\.+$/, '').toLowerCase();
+  if (!host) return '';
+
+  if (portText === undefined || portText === '') return host;
+  if (!/^\d+$/.test(portText)) return '';
+  const port = Number(portText);
+  if (port > 65535) return '';
+
+  const defaultPort = scheme === 'https' ? 443 : 80;
+  return port === defaultPort ? host : `${host}:${port}`;
 }

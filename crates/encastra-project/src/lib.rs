@@ -49,6 +49,16 @@ pub enum ProjectError {
     Archive(String),
     #[error("{entry} unpacks to more than this build will read ({limit} bytes)")]
     TooLarge { entry: String, limit: u64 },
+    #[error("this project unpacks to more than this build will read ({limit} bytes in total)")]
+    TooLargeInTotal { limit: u64 },
+    #[error("this project declares {count} versions, and the limit is {limit}")]
+    TooManySnapshots { count: usize, limit: usize },
+    #[error("the project file is {size} bytes, and the limit is {limit}")]
+    FileTooLarge { size: u64, limit: u64 },
+    #[error(
+        "the archive lists {declared} entries under only {distinct} names, so it names something twice"
+    )]
+    AmbiguousArchive { declared: usize, distinct: usize },
     #[error("input/output error: {0}")]
     Io(String),
 }
@@ -151,7 +161,19 @@ impl Project {
 
     // -- reading ---------------------------------------------------------------------------
 
+    /// Opens a project from disk.
+    ///
+    /// The file's weight is checked before a byte of it is read. `from_bytes` needs the whole
+    /// archive in memory to find the central directory, so "read it and then decide" would mean
+    /// a 10 GB file is a 10 GB allocation before any limit in this module gets a say.
     pub fn open(path: &Path) -> Result<Self, ProjectError> {
+        let size = std::fs::metadata(path)?.len();
+        if size > MAX_FILE_BYTES {
+            return Err(ProjectError::FileTooLarge {
+                size,
+                limit: MAX_FILE_BYTES,
+            });
+        }
         Self::from_bytes(&std::fs::read(path)?)
     }
 
@@ -159,7 +181,12 @@ impl Project {
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
             .map_err(|e| ProjectError::Archive(e.to_string()))?;
 
-        let manifest: ProjectManifest = read_json(&mut archive, ENTRY_PROJECT)?;
+        reject_ambiguous_archive(bytes, &archive)?;
+
+        // One budget for the whole open, spent by every entry that is read. See MAX_TOTAL_BYTES.
+        let mut budget = Budget::new(MAX_TOTAL_BYTES);
+
+        let manifest: ProjectManifest = read_json(&mut archive, ENTRY_PROJECT, &mut budget)?;
         if manifest.schema != PROJECT_SCHEMA {
             return Err(ProjectError::UnsupportedSchema {
                 ours: PROJECT_SCHEMA,
@@ -167,19 +194,48 @@ impl Project {
             });
         }
 
-        let graph: Graph = read_json(&mut archive, ENTRY_GRAPH)?;
-        let lock: Lockfile = read_json(&mut archive, ENTRY_LOCK)?;
-        let variables: Variables = read_json(&mut archive, ENTRY_VARIABLES)?;
-        let mut history: History = read_json(&mut archive, ENTRY_HISTORY)?;
+        let graph: Graph = read_json(&mut archive, ENTRY_GRAPH, &mut budget)?;
+        // The byte budget bounds what the entry costs to read; this bounds what it costs to
+        // work on. Thirty megabytes of valid JSON is a great many nodes.
+        graph
+            .within_limits()
+            .map_err(|reason| ProjectError::Invalid {
+                entry: ENTRY_GRAPH.to_owned(),
+                reason,
+            })?;
+
+        let lock: Lockfile = read_json(&mut archive, ENTRY_LOCK, &mut budget)?;
+        let variables: Variables = read_json(&mut archive, ENTRY_VARIABLES, &mut budget)?;
+        let mut history: History = read_json(&mut archive, ENTRY_HISTORY, &mut budget)?;
+
+        // A history is a list the file itself chooses the length of, and every entry on it is a
+        // request to read another archive member. Refused rather than truncated: silently
+        // dropping versions from a file somebody sent would lose their history without saying so.
+        if history.snapshots.len() > MAX_SNAPSHOTS {
+            return Err(ProjectError::TooManySnapshots {
+                count: history.snapshots.len(),
+                limit: MAX_SNAPSHOTS,
+            });
+        }
 
         // Snapshot bodies live beside the index. A snapshot whose body is missing is dropped
         // and the rest of the history is kept: losing one old version is survivable, refusing
         // to open the project is not.
+        //
+        // Running out of budget is not the same thing, and stops the open: it means the file is
+        // trying to spend more than it is allowed, not that one version happens to be absent.
         let mut bodies = BTreeMap::new();
         for snapshot in &history.snapshots {
             let entry = format!("{HISTORY_PREFIX}{}.json", snapshot.id.0);
-            if let Ok(graph) = read_json::<Graph, _>(&mut archive, &entry) {
-                bodies.insert(snapshot.id.clone(), graph);
+            match read_json::<Graph, _>(&mut archive, &entry, &mut budget) {
+                // An oversized body is dropped like a missing one. It is an old version, not
+                // what runs, and the project is still openable without it.
+                Ok(graph) if graph.within_limits().is_ok() => {
+                    bodies.insert(snapshot.id.clone(), graph);
+                }
+                Ok(_) => {}
+                Err(exhausted @ ProjectError::TooLargeInTotal { .. }) => return Err(exhausted),
+                Err(_) => {}
             }
         }
         history.attach_bodies(bodies);
@@ -281,22 +337,126 @@ fn to_pretty<T: Serialize>(value: &T) -> Vec<u8> {
 /// `encastra-core::media`, which probes dimensions before it allocates.
 pub const MAX_ENTRY_BYTES: u64 = 32 * 1024 * 1024;
 
+/// The most an entire project may unpack to, across every entry read.
+///
+/// The per-entry ceiling bounds one read. It says nothing about a thousand of them, and the
+/// number of reads is not fixed: `versions/index.json` is itself an entry, so a file that
+/// respects [`MAX_ENTRY_BYTES`] can still name tens of thousands of snapshot bodies and ask for
+/// each in turn. Per-entry × unbounded-count is unbounded.
+///
+/// This budget is what makes opening a project cost a bounded amount whatever the file claims.
+/// It is spent, never refilled, and it is generous: a real project spends kilobytes of it.
+pub const MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
+
+/// The most versions a history may declare.
+///
+/// A second bound on the same attack, at a different layer: this one refuses the *intent* before
+/// any of the budget above is spent, and gives a person a message about their project rather
+/// than about bytes.
+pub const MAX_SNAPSHOTS: usize = 1_000;
+
+/// The most a `.encastra` file may weigh on disk before it is opened at all.
+///
+/// Reading an archive needs it in memory to find the central directory, so this is the only
+/// limit that can apply before the allocation happens.
+pub const MAX_FILE_BYTES: u64 = 256 * 1024 * 1024;
+
+/// What is left of the allowance for one open.
+struct Budget {
+    remaining: u64,
+}
+
+impl Budget {
+    fn new(total: u64) -> Self {
+        Budget { remaining: total }
+    }
+
+    /// The most the next read may take: never more than one entry's ceiling, and never more
+    /// than the whole open has left.
+    fn ceiling(&self) -> u64 {
+        self.remaining.min(MAX_ENTRY_BYTES)
+    }
+
+    fn spend(&mut self, bytes: u64) {
+        self.remaining = self.remaining.saturating_sub(bytes);
+    }
+}
+
+/// Refuses an archive that names the same entry twice.
+///
+/// `by_name` answers with one of them — in practice the last, because the reader indexes entries
+/// into a map and a second `graph.json` overwrites the first. Which one wins is a detail of the
+/// reader, and it need not be the one a person sees when they open the file in an archive viewer.
+/// A project could then show one graph to whoever inspects it and run another.
+///
+/// Note what cannot be used to detect this: the reader's own list of names is that same map, so
+/// duplicates are already gone by the time it can be asked. The count has to come from the
+/// archive's own end-of-central-directory record, which is what the writer of a hostile file has
+/// to keep honest for any reader to parse it at all.
+///
+/// There is no legitimate reason for a duplicate: everything this module writes is a fixed,
+/// sorted, unique set of names, and this crate's writer refuses to produce one.
+fn reject_ambiguous_archive<R: Read + Seek>(
+    bytes: &[u8],
+    archive: &zip::ZipArchive<R>,
+) -> Result<(), ProjectError> {
+    let Some(declared) = declared_entry_count(bytes) else {
+        return Err(ProjectError::Archive(
+            "the archive has no end-of-central-directory record".to_owned(),
+        ));
+    };
+    let distinct = archive.file_names().count();
+    if declared != distinct {
+        return Err(ProjectError::AmbiguousArchive { declared, distinct });
+    }
+    Ok(())
+}
+
+/// How many entries the archive's own end-of-central-directory record claims to hold.
+///
+/// The record sits at the very end, after a comment of at most 64 KiB, and carries the entry
+/// count as a little-endian `u16` twelve bytes in. Scanned from the back because that comment is
+/// variable length and nothing else says where the record begins.
+fn declared_entry_count(bytes: &[u8]) -> Option<usize> {
+    const SIGNATURE: [u8; 4] = [0x50, 0x4b, 0x05, 0x06];
+    const MAX_COMMENT: usize = 0xFFFF;
+    const RECORD: usize = 22;
+
+    let from = bytes.len().saturating_sub(MAX_COMMENT + RECORD);
+    let at = from + bytes[from..].windows(4).rposition(|w| w == SIGNATURE)?;
+    let field = bytes.get(at + 10..at + 12)?;
+    Some(u16::from_le_bytes([field[0], field[1]]) as usize)
+}
+
 fn read_json<T: for<'de> Deserialize<'de>, R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     entry: &str,
+    budget: &mut Budget,
 ) -> Result<T, ProjectError> {
     let file = archive
         .by_name(entry)
         .map_err(|_| ProjectError::MissingEntry(entry.to_owned()))?;
 
+    let ceiling = budget.ceiling();
+
     // Read one byte past the ceiling, so that hitting it exactly is distinguishable from being
     // truncated at it. Without the extra byte a file of exactly the limit would be refused.
     let mut text = String::new();
-    file.take(MAX_ENTRY_BYTES + 1).read_to_string(&mut text)?;
-    if text.len() as u64 > MAX_ENTRY_BYTES {
-        return Err(ProjectError::TooLarge {
-            entry: entry.to_owned(),
-            limit: MAX_ENTRY_BYTES,
+    file.take(ceiling + 1).read_to_string(&mut text)?;
+    let read = text.len() as u64;
+    budget.spend(read);
+
+    if read > ceiling {
+        // Which limit was hit changes what the person is told, and what they can do about it.
+        return Err(if ceiling < MAX_ENTRY_BYTES {
+            ProjectError::TooLargeInTotal {
+                limit: MAX_TOTAL_BYTES,
+            }
+        } else {
+            ProjectError::TooLarge {
+                entry: entry.to_owned(),
+                limit: MAX_ENTRY_BYTES,
+            }
         });
     }
 
