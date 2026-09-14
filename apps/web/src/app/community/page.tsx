@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { CTA, NotBuilt, PageHeader } from '@/components/ui/Ui';
+import { ButtonRow, CTA, NotBuilt, PageHeader } from '@/components/ui/Ui';
 import { STATUS } from '@/config/site';
 import { getLocale, t } from '@/lib/i18n';
 
@@ -40,9 +40,12 @@ export default async function CommunityPage(): Promise<ReactNode> {
             {t(locale, 'community.notBuilt.body2Suffix')}
           </p>
         </NotBuilt>
-        <CTA href="/download" variant="secondary">
-          {t(locale, 'community.cta')}
-        </CTA>
+        <ButtonRow>
+          <CTA href="/ecosystem">{t(locale, 'community.ctaEcosystem')}</CTA>
+          <CTA href="/download" variant="secondary">
+            {t(locale, 'community.cta')}
+          </CTA>
+        </ButtonRow>
       </div>
     </div>
   );

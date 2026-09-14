@@ -25,6 +25,7 @@ const en: Messages = {
       templates: 'Templates',
       learn: 'Learn',
       security: 'Security',
+      ecosystem: 'Ecosystem',
     },
     footer: {
       groups: {
@@ -43,6 +44,7 @@ const en: Messages = {
         tutorials: 'Tutorials',
         docs: 'Documentation',
         security: 'Security',
+        ecosystem: 'Ecosystem',
         marketplace: 'Marketplace',
         community: 'Community',
         about: 'About',
@@ -973,6 +975,7 @@ const en: Messages = {
   },
 
   community: {
+    ctaEcosystem: 'What this would be part of',
     meta: {
       description:
         'Not built yet. There is no community feature in this build — no accounts, no profiles, no forum.',
@@ -1025,7 +1028,112 @@ const en: Messages = {
     },
   },
 
+  ecosystem: {
+    meta: {
+      description:
+        'What Encastra is trying to become: build, publish, discover, reuse. What of that exists today, what is only designed, and the order the rest has to happen in.',
+    },
+    hero: {
+      eyebrow: 'Ecosystem',
+      title: 'Build it, publish it, and one day hand it to somebody',
+      lead: 'Encastra builds software out of components. Everything that follows from that — publishing what you made, finding what other people made, installing it without trusting them — is mostly designed and not built. This page says which is which.',
+    },
+    loop: {
+      eyebrow: 'The loop',
+      title: 'Five moments, two of which work',
+      lead: 'Each one carries the state it is actually in, read from the same table the rest of this site reads.',
+      build: {
+        title: 'Build',
+        body: 'Place components, connect them, run them. The editor refuses a connection the runtime would refuse, so a workflow that draws is a workflow that runs.',
+      },
+      publish: {
+        title: 'Publish',
+        body: 'The application reads your saved project the way somebody receiving it would, refuses it if it carries a secret or names your home folder, and writes it into a folder with the document that would travel with it. Nothing is uploaded — there is nowhere to upload to.',
+      },
+      discover: {
+        title: 'Discover',
+        body: 'There is no registry, so there is nothing to search, nothing to rank and nobody to follow. This page will not show a catalogue of things that do not exist.',
+      },
+      install: {
+        title: 'Install',
+        body: 'Nothing can be installed from outside the application. A component from somebody else would need the sandbox that is designed and not built; a project from somebody else needs a registry to come from and a signature to be checked against.',
+      },
+      reuse: {
+        title: 'Reuse',
+        body: 'A project file is already portable, already carries its own version history, and already pins every component it uses by content. Someone who hands you one, by any means, hands you something you can open and change.',
+      },
+    },
+    today: {
+      eyebrow: 'What exists',
+      title: 'The part of publishing that needs no server',
+      lead: 'Preparing a publication happens entirely on your machine, and most of what it does is refuse.',
+      body: 'A project that was private is checked before it can be handed to a stranger. Publication is refused when:',
+      refuses: {
+        secret:
+          'A setting holds something that looks like a key, a token or a private key — everything typed into a setting is saved in the file, and the file is what gets handed over.',
+        path: 'A setting points inside a home folder, which names whoever made it and exists on no other machine.',
+        unknown:
+          'It uses a component this build cannot read, so what it would ask of somebody cannot be disclosed — and a permission nobody can read is one nobody can agree to.',
+        changed: 'A component no longer matches the content the project pinned it by.',
+        licence:
+          'It carries a part under a licence that conflicts with the one being published under.',
+      },
+      folder:
+        'What comes out is a folder holding the project and a document describing it: who is offering it, under what name and licence, its content hash and size, and every permission it will ask for — gathered from the components rather than typed by the author, because nobody discloses their own permissions accurately from memory.',
+      notAnAudit: {
+        title: 'This is not an audit',
+        body: 'It finds the mistakes that are mechanical enough to find. No external security review has been done, and a check that passes is not a statement that anything is safe.',
+      },
+    },
+    registry: {
+      eyebrow: 'What is designed',
+      title: 'What a registry would have to guarantee',
+      lead: 'None of this is built. It is written down so that whoever builds it has something to build against, and so that shortcuts are visible as shortcuts.',
+      guarantees: {
+        immutable:
+          'A version, once published, never changes. It can be withdrawn; it cannot be rewritten under somebody who already installed it.',
+        disclosure:
+          'Every permission a publication asks for is shown before installing, never after.',
+        namespace:
+          "A name lives inside a publisher's own namespace, and a publisher's identity is checked by somebody rather than asserted by whoever typed it.",
+        noScripts:
+          'Nothing runs at install time. No post-install scripts, ever — it is the single most exploited feature of every package ecosystem that has one.',
+        verified:
+          'Content is verified against its hash and its signature when it is installed and again every time it is loaded, and a revoked version is refused rather than warned about.',
+      },
+    },
+    order: {
+      eyebrow: 'The order',
+      title: 'Seven things, in this sequence',
+      lead: 'This order is not a preference. Each step is what makes the next one mean anything.',
+      steps: {
+        review: 'An external security review of the capability broker.',
+        sandbox:
+          'The sandbox for third-party code, with its time, memory and fuel limits actually enforced.',
+        signing: 'Signing, for both the application and anything published.',
+        licence: 'A licence decision for the source, which today has none.',
+        registry:
+          'The registry, with immutable versions and permissions disclosed before installing.',
+        legal: 'A legal review of the terms a marketplace and its creators would be agreeing to.',
+        money: 'Money, last.',
+      },
+      why: 'Reaching the last one sooner by skipping either of the first two would make every claim this product makes about security false at once.',
+    },
+    money: {
+      eyebrow: 'Money',
+      title: 'Modelled, and not moving',
+      lead: 'There is no payment provider, no account to charge and no balance to pay out.',
+      body: 'What exists is the arithmetic and the states: whole minor units with no floating point anywhere near them, a split whose two shares add up to what was paid at every amount, purchases that cannot come back to life after a refund, and entitlements a client is never allowed to assert about itself. No commission rate is written down, because nobody has decided one and a number in a source file has a way of becoming a promise.',
+      rule: 'One rule holds whatever happens next: money buys distribution, not permissions. A paid publication is checked by exactly the code that checks a free one, and the permission prompt looks identical whether something was free or expensive.',
+    },
+    cta: {
+      download: 'Download Encastra',
+      components: 'See what it ships with',
+    },
+  },
+
   marketplace: {
+    ctaEcosystem: 'What this would be part of',
     meta: {
       description:
         'Not built yet. There is no way to install a component beyond the nineteen that ship with the app.',
