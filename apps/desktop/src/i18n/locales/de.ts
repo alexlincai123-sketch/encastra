@@ -93,6 +93,18 @@ const de: Messages = {
       body: 'Ein Workflow besteht aus wenigen miteinander verbundenen Komponenten. Wählen Sie links eine aus, um Ihren ersten Schritt zu platzieren, verbinden Sie seine Ausgabe mit dem nächsten und drücken Sie Ausführen.',
       hint: 'Jede Komponente nennt vorher, worauf sie zugreifen kann, und nichts berührt Ihre Dateien, bevor Sie es erlauben.',
     },
+    // The menu a right-click opens on the canvas. Removing a step was always possible from
+    // the keyboard; this is where somebody finds out that it is.
+    menu: {
+      label: 'Aktionen der Arbeitsfläche',
+      duplicate: 'Duplizieren',
+      disable: 'Ausschalten',
+      enable: 'Einschalten',
+      deleteStep: 'Schritt löschen',
+      deleteConnection: 'Verbindung löschen',
+      paste: 'Einfügen',
+      selectAll: 'Alles auswählen',
+    },
     keysHint:
       'Mit den Pfeiltasten zwischen Schritten bewegen, mit Eingabe einen Schritt im Inspektor öffnen, mit Escape die Auswahl aufheben und mit Entf den ausgewählten Schritt entfernen.',
     a11y: {

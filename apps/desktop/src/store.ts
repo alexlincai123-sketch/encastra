@@ -103,6 +103,10 @@ interface EditorState {
   setConfig: (nodeId: string, key: string, value: unknown) => void;
   toggleDisabled: (nodeId: string) => void;
   deleteSelected: () => void;
+  /** Removes one step by id, whichever step is selected — what a right-click acts on. */
+  deleteStep: (nodeId: string) => void;
+  /** Removes one connection by id, leaving both steps where they are. */
+  deleteConnection: (edgeId: string) => void;
   onNodesChange: (changes: NodeChange<EditorNode>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   connect: (connection: Connection) => void;
@@ -270,6 +274,38 @@ export const useEditor = create<EditorState>((set, get) => ({
       validation: null,
       dirty: true,
     }));
+  },
+
+  /**
+   * Both of these take an id rather than acting on the selection. A menu opened on one thing
+   * has to act on that thing, whatever the selection does in between — and a connection has no
+   * place in the selection at all, so `deleteSelected` could never have removed one.
+   */
+  deleteStep(nodeId) {
+    set((s) => {
+      if (!s.nodes.some((n) => n.id === nodeId)) return {};
+      return {
+        history: record(s.history, { nodes: s.nodes, edges: s.edges }),
+        nodes: s.nodes.filter((n) => n.id !== nodeId),
+        // Connections that pointed at it go too, rather than dangling.
+        edges: s.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+        selectedNodeId: s.selectedNodeId === nodeId ? null : s.selectedNodeId,
+        validation: null,
+        dirty: true,
+      };
+    });
+  },
+
+  deleteConnection(edgeId) {
+    set((s) => {
+      if (!s.edges.some((e) => e.id === edgeId)) return {};
+      return {
+        history: record(s.history, { nodes: s.nodes, edges: s.edges }),
+        edges: s.edges.filter((e) => e.id !== edgeId),
+        validation: null,
+        dirty: true,
+      };
+    });
   },
 
   onNodesChange(changes) {

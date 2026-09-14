@@ -1359,6 +1359,65 @@ select.input {
   box-shadow: var(--shadow-lg);
 }
 
+/* The menu a right-click opens on the canvas. Fixed rather than absolute: it is positioned from
+   viewport coordinates, and the canvas it sits over pans underneath it. */
+.canvas-menu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.canvas-menu {
+  position: fixed;
+  z-index: 41;
+  min-width: 180px;
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  background: var(--ground-2);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.canvas-menu__item {
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+/* One highlight, driven by the active index, so the pointer and the arrow keys agree about
+   which item is next rather than lighting two at once. */
+.canvas-menu__item.is-active {
+  background: var(--ground-3);
+}
+
+.canvas-menu__item--danger {
+  color: var(--danger);
+}
+
+.canvas-menu__item--danger.is-active {
+  background: var(--danger-dim);
+  color: var(--ink);
+}
+
+/* Focus stays on the menu itself — the items are not in the tab order, because a menu is one
+   widget the arrow keys move within. The ring therefore belongs to the menu, not to an item. */
+.canvas-menu:focus-visible {
+  box-shadow: var(--ring-focus), var(--shadow-lg);
+  outline: none;
+}
+
 .refusal__body {
   display: flex;
   flex-direction: column;

@@ -92,6 +92,18 @@ const es: Messages = {
       body: 'Un flujo de trabajo es unos pocos componentes unidos entre sí. Elige uno de la izquierda para colocar tu primer paso, conecta su salida con el siguiente y pulsa Ejecutar.',
       hint: 'Cada componente indica qué puede alcanzar antes de ejecutarse, y nada toca tus archivos hasta que lo permitas.',
     },
+    // The menu a right-click opens on the canvas. Removing a step was always possible from
+    // the keyboard; this is where somebody finds out that it is.
+    menu: {
+      label: 'Acciones del lienzo',
+      duplicate: 'Duplicar',
+      disable: 'Desactivar',
+      enable: 'Activar',
+      deleteStep: 'Eliminar el paso',
+      deleteConnection: 'Eliminar la conexión',
+      paste: 'Pegar',
+      selectAll: 'Seleccionar todo',
+    },
     keysHint:
       'Usa las flechas para moverte entre pasos, Intro para abrir un paso en el inspector, Escape para deseleccionar y Suprimir para eliminar el paso seleccionado.',
     a11y: {

@@ -92,6 +92,18 @@ const fr: Messages = {
       body: 'Un flux de travail est un petit nombre de composants reliés entre eux. Choisissez-en un à gauche pour placer votre première étape, reliez sa sortie à la suivante, puis appuyez sur Exécuter.',
       hint: 'Chaque composant indique ce qu’il peut atteindre avant de s’exécuter, et rien ne touche vos fichiers tant que vous ne l’avez pas autorisé.',
     },
+    // The menu a right-click opens on the canvas. Removing a step was always possible from
+    // the keyboard; this is where somebody finds out that it is.
+    menu: {
+      label: 'Actions du canevas',
+      duplicate: 'Dupliquer',
+      disable: 'Désactiver',
+      enable: 'Activer',
+      deleteStep: 'Supprimer l’étape',
+      deleteConnection: 'Supprimer la connexion',
+      paste: 'Coller',
+      selectAll: 'Tout sélectionner',
+    },
     keysHint:
       'Utilisez les flèches pour vous déplacer entre les étapes, Entrée pour ouvrir une étape dans l’inspecteur, Échap pour désélectionner, et Suppr pour retirer l’étape sélectionnée.',
     a11y: {

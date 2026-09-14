@@ -93,6 +93,18 @@ const pt: Messages = {
       body: 'Um fluxo de trabalho é composto por alguns componentes ligados entre si. Escolha um à esquerda para colocar o seu primeiro passo, ligue a sua saída ao seguinte e prima Executar.',
       hint: 'Cada componente indica o que consegue alcançar antes de ser executado, e nada toca nos seus ficheiros até que o permita.',
     },
+    // The menu a right-click opens on the canvas. Removing a step was always possible from
+    // the keyboard; this is where somebody finds out that it is.
+    menu: {
+      label: 'Ações da tela',
+      duplicate: 'Duplicar',
+      disable: 'Desligar',
+      enable: 'Ligar',
+      deleteStep: 'Eliminar o passo',
+      deleteConnection: 'Eliminar a ligação',
+      paste: 'Colar',
+      selectAll: 'Seleccionar tudo',
+    },
     keysHint:
       'Use as setas para se mover entre passos, Enter para abrir um passo no inspector, Escape para desmarcar e Delete para remover o passo seleccionado.',
     a11y: {

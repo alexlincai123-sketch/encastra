@@ -98,6 +98,18 @@ const en: Messages = {
       body: 'A workflow is a few components joined together. Pick one from the left to place your first step, connect its output to the next, and press Run.',
       hint: 'Every component says what it can reach before it runs, and nothing touches your files until you allow it.',
     },
+    // The menu a right-click opens on the canvas. Removing a step was always possible from
+    // the keyboard; this is where somebody finds out that it is.
+    menu: {
+      label: 'Canvas actions',
+      duplicate: 'Duplicate',
+      disable: 'Switch off',
+      enable: 'Switch on',
+      deleteStep: 'Delete step',
+      deleteConnection: 'Delete connection',
+      paste: 'Paste',
+      selectAll: 'Select all',
+    },
     keysHint:
       'Use the arrow keys to move between steps, Enter to open a step in the inspector, Escape to deselect, and Delete to remove the selected step.',
     a11y: {

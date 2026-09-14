@@ -92,6 +92,18 @@ const it: Messages = {
       body: 'Un flusso di lavoro è composto da pochi componenti collegati tra loro. Scegline uno a sinistra per posizionare il tuo primo passaggio, collega la sua uscita al successivo e premi Esegui.',
       hint: 'Ogni componente indica cosa può raggiungere prima di essere eseguito, e nulla tocca i tuoi file finché non lo permetti.',
     },
+    // The menu a right-click opens on the canvas. Removing a step was always possible from
+    // the keyboard; this is where somebody finds out that it is.
+    menu: {
+      label: 'Azioni della tela',
+      duplicate: 'Duplica',
+      disable: 'Disattiva',
+      enable: 'Attiva',
+      deleteStep: 'Elimina il passaggio',
+      deleteConnection: 'Elimina la connessione',
+      paste: 'Incolla',
+      selectAll: 'Seleziona tutto',
+    },
     keysHint:
       'Usa le frecce per spostarti tra i passaggi, Invio per aprire un passaggio nell’ispettore, Esc per deselezionare e Canc per rimuovere il passaggio selezionato.',
     a11y: {
