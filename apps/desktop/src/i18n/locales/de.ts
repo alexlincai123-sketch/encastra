@@ -320,6 +320,8 @@ const de: Messages = {
     },
   },
   library: {
+    preparedNotOpenable:
+      'Eine vorbereitete Veröffentlichung ist ein Ordner zum Weitergeben, kein Projekt zum Öffnen. Öffnen Sie stattdessen das Projekt, aus dem sie entstanden ist.',
     heading: 'Ihre Bibliothek',
     intro:
       'Alles, was Sie haben: die Projekte, die Sie gebaut haben, was Sie von jemandem übernommen haben, und die Ordner, die Sie zum Weitergeben vorbereitet haben. Alles liegt auf diesem Rechner. Nichts wird synchronisiert, hochgeladen oder geteilt.',
@@ -1073,7 +1075,7 @@ const de: Messages = {
         loading: 'Wird geladen…',
         loadError: '{name} konnte nicht geladen werden. Die aktuelle Sprache bleibt erhalten.',
         comingLater: {
-          label: 'Später verfügbar',
+          label: 'Nicht übersetzt',
           hint: 'Die Oberfläche ist so aufgebaut, dass sie diese unterstützt; übersetzt hat sie noch niemand.',
         },
       },

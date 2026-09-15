@@ -145,8 +145,14 @@ function Row({ row }: { row: EntryWithStatus }) {
           <button
             type="button"
             className="btn"
-            disabled={busy || status === 'missing' || !ipc.live}
-            title={status === 'missing' ? t('library.status.missing.detail') : undefined}
+            disabled={busy || status === 'missing' || !ipc.live || entry.origin === 'prepared'}
+            title={
+              entry.origin === 'prepared'
+                ? t('library.preparedNotOpenable')
+                : status === 'missing'
+                  ? t('library.status.missing.detail')
+                  : undefined
+            }
             onClick={() => void openFromLibrary(row)}
           >
             {t('library.actions.open')}
@@ -210,6 +216,9 @@ export function Library() {
   const dismissLibraryNote = useEditor((s) => s.dismissLibraryNote);
   const loadLibrary = useEditor((s) => s.loadLibrary);
   const beginImport = useEditor((s) => s.beginImport);
+  // The toolbar's Import button is disabled while something is already in flight, so a second
+  // press cannot open a second native chooser on top of the first.
+  const busy = useEditor((s) => s.busy);
   const { t, locale } = useTranslation();
 
   const [query, setQuery] = useState('');
@@ -244,7 +253,7 @@ export function Library() {
         <button
           type="button"
           className="btn btn--primary"
-          disabled={!ipc.live}
+          disabled={!ipc.live || busy}
           title={ipc.live ? t('library.importTitle') : t('library.importUnavailable')}
           onClick={() => void beginImport()}
         >

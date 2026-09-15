@@ -443,7 +443,13 @@ export const useEditor = create<EditorState>((set, get) => ({
         nodes: applyNodeChanges(changes, s.nodes),
         // Dragging a node changes the file even though it does not change what runs. The
         // history diff is where that distinction belongs, not the save prompt.
-        dirty: s.dirty || changes.some((c) => c.type !== 'select'),
+        //
+        // A `dimensions` change is React Flow measuring a node it has just rendered — it arrives
+        // for every node the moment a project opens, and again whenever a culled node scrolls
+        // back into view. Nothing about the file changed. Counting it made every opened project
+        // read as unsaved before anybody touched it, which disabled Publish and made the
+        // unsaved-work prompt cry wolf on the window's close button.
+        dirty: s.dirty || changes.some((c) => isEdit(c.type)),
         history:
           dragEnded || structural
             ? record(s.history, { nodes: s.nodes, edges: s.edges })
@@ -456,7 +462,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     set((s) => ({
       edges: applyEdgeChanges(changes, s.edges),
       validation: null,
-      dirty: s.dirty || changes.some((c) => c.type !== 'select'),
+      dirty: s.dirty || changes.some((c) => isEdit(c.type)),
     }));
   },
 
@@ -811,11 +817,14 @@ export const useEditor = create<EditorState>((set, get) => ({
    * read. Importing is a second thing somebody presses, having read it.
    */
   async beginImport() {
-    set({ importInspected: null, importError: null });
+    if (get().busy) return;
+    // Busy from the moment the chooser opens, not from the moment it returns: a second press of
+    // Import while the first chooser is up used to open a second chooser.
+    set({ importInspected: null, importError: null, busy: true });
     try {
       const folder = await ipc.pickFolder();
       if (!folder) return;
-      set({ importOpen: true, busy: true });
+      set({ importOpen: true });
       set({ importInspected: { folder, inspected: await ipc.inspectPublication(folder) } });
     } catch (error) {
       set({ importOpen: true, importError: asImportFailure(error) });
@@ -1040,8 +1049,22 @@ type GetEditor = () => EditorState;
  * than inline in the guarded method keeps `confirmDiscard` honest — the thing it runs later is
  * the very same function that would have run immediately.
  */
+/**
+ * Whether a React Flow change is something a person did to the file.
+ *
+ * `select` is where the focus is; `dimensions` is the library measuring what it drew. Neither is
+ * in the saved graph, so neither makes the project unsaved. Exported for the store's tests.
+ */
+export function isEdit(type: string): boolean {
+  return type !== 'select' && type !== 'dimensions';
+}
+
 function doNewProject(set: SetEditor): void {
   set({
+    // Whoever asked for a new project wants to be where it is made; Home used to switch the
+    // view before the unsaved-work question was answered, which landed a person who cancelled
+    // in the Builder they had not chosen to go to.
+    view: 'builder',
     nodes: [],
     edges: [],
     selectedNodeId: null,

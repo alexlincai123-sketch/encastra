@@ -421,7 +421,7 @@ fn read_publication(
             publisher: bundle.publisher,
         });
     }
-    check_text(&bundle)?;
+    check_text(&bundle, &project)?;
 
     // -- compatibility -----------------------------------------------------------------------
 
@@ -506,7 +506,7 @@ fn read_publication(
 /// turns `dev.alice.sloot.exe` into something that reads as a picture, and a zero-width space
 /// makes two different names look identical. They are refused rather than stripped — stripping
 /// changes what somebody wrote and hands back a name they never chose.
-fn check_text(bundle: &PublicationBundle) -> Result<(), ImportError> {
+fn check_text(bundle: &PublicationBundle, project: &Project) -> Result<(), ImportError> {
     let sized: [(&'static str, &str, usize); 3] = [
         ("title", bundle.draft.title.as_str(), MAX_TITLE_CHARS),
         ("summary", bundle.draft.summary.as_str(), MAX_SUMMARY_CHARS),
@@ -526,6 +526,15 @@ fn check_text(bundle: &PublicationBundle) -> Result<(), ImportError> {
         ("title", bundle.draft.title.as_str()),
         ("summary", bundle.draft.summary.as_str()),
         ("publisher", bundle.publisher.as_str()),
+        // The project's own name and description come straight out of the project file, which
+        // whoever sent it wrote, and both are shown on the import panel — the consent surface —
+        // and in the library afterwards. A bidirectional override in a project name would make
+        // the panel read as a different publication.
+        ("project name", project.manifest.name.as_str()),
+        (
+            "project description",
+            project.manifest.description.as_deref().unwrap_or_default(),
+        ),
     ];
     if let Some(changelog) = bundle.draft.changelog.as_deref() {
         checked.push(("changelog", changelog));

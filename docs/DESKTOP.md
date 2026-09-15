@@ -53,11 +53,13 @@ state. Building it per call would let two calls disagree about what is installed
 
 | Command | What it does |
 |---|---|
+| `choose_folder` | opens the native folder chooser on the Rust side, resolves and sanity-checks the choice, and records it — the only way a folder becomes grantable, publishable-into or importable-from this session |
 | `list_components` | every manifest this build offers, for the palette |
 | `type_graph` | the coercion table, served by the runtime that enforces it |
 | `validate_graph` | validation for a graph plus the ports the application will supply |
 | `run_graph` | one-shot and synchronous: assemble grants, import the picked files, run, return a journal |
-| `start_workflow` / `stop_workflow` / `workflow_status` | the session path — runs on a worker thread and reports progress as events |
+| `start_workflow` / `stop_workflow` | the session path — runs on a worker thread and reports progress as events |
+| `workflow_status` | a one-line answer about the running session; kept for tooling, not called by the editor, which listens to the events instead |
 | `save_project` / `open_project` | the `.encastra` container |
 | `restore_version` / `compare_versions` | version history |
 | `review_publication` / `prepare_publication` | reads a saved project the way somebody receiving it would, and writes a publication folder — the review runs again inside the second one, and its answer is the one that decides |
@@ -170,8 +172,8 @@ while it is running rather than only in retrospect.
 ## 4. The editor
 
 `App.tsx` is a shell: a sidebar, one view at a time, a toolbar that changes with the view, and a
-status bar that is the same everywhere. There are five places — Home, Builder, Components,
-Security, Settings — and no more. Marketplace and Community are not in the sidebar because they
+status bar that is the same everywhere. There are six places — Home, Builder, Library,
+Components, Security, Settings — and no more. Marketplace and Community are not in the sidebar because they
 do not exist, and a navigation item that opens an empty "coming soon" page teaches people that
 half the application is decoration.
 

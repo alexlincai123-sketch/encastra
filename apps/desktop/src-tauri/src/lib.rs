@@ -428,8 +428,12 @@ fn restore_version(
         .restore(&id, encastra_core::journal::now_ms())
         .ok_or("That version is not in this project.")?;
     project.graph = graph;
-    project.manifest.modified_at_ms = encastra_core::journal::now_ms();
+    let now = encastra_core::journal::now_ms();
+    project.manifest.modified_at_ms = now;
     project.save(&target).map_err(|e| e.to_string())?;
+    // The file just changed under the library's hash of it. Without this the library showed a
+    // project as "changed" moments after the application itself rewrote it.
+    remember_project(&state, &project, &target, now);
     Ok(describe(project, &path, &state.registry))
 }
 
@@ -707,8 +711,12 @@ fn start_workflow(
     }
 
     let run_id = format!("session-{}", encastra_core::journal::now_ms());
-    let run_dir = std::env::temp_dir().join("encastra").join(&run_id);
-    let mut broker = Broker::new(run_dir.clone(), allowed)
+    // The same guard `run_graph` uses, for the same reason: three `?` sit between creating this
+    // folder and the thread that used to remove it, and an input path that does not resolve
+    // reached the first of them on every press of Run. The guard moves into the thread below,
+    // so the folder lives exactly as long as the session does.
+    let scratch = ScratchDir::new(std::env::temp_dir().join("encastra").join(&run_id));
+    let mut broker = Broker::new(scratch.path().to_path_buf(), allowed)
         .map_err(|e| format!("Could not prepare a working folder: {e}"))?;
 
     let seed = seed_for(&mut broker, &inputs)?;
@@ -822,8 +830,8 @@ fn start_workflow(
             }));
 
             // Scratch space belongs to the run. Anything worth keeping was copied into a folder
-            // the user allowed, by a component that asked.
-            let _ = std::fs::remove_dir_all(&run_dir);
+            // the user allowed, by a component that asked. Dropping the guard removes it.
+            drop(scratch);
 
             announce(
                 &thread_app,

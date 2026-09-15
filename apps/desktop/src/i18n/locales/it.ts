@@ -315,6 +315,8 @@ const it: Messages = {
     },
   },
   library: {
+    preparedNotOpenable:
+      'Una pubblicazione preparata è una cartella da consegnare a qualcuno, non un progetto da aprire. Apri invece il progetto da cui è nata.',
     heading: 'La tua libreria',
     intro:
       'Tutto quello che hai: i progetti che hai creato, quelli che hai ricevuto da qualcun altro e le cartelle che hai preparato per consegnarle. È tutto su questo computer. Niente viene sincronizzato, caricato o condiviso.',
@@ -1062,7 +1064,7 @@ const it: Messages = {
         loading: 'Caricamento…',
         loadError: 'Impossibile caricare {name}. Resta attiva la lingua corrente.',
         comingLater: {
-          label: 'In arrivo',
+          label: 'Non tradotto',
           hint: 'L’interfaccia è strutturata per supportarle; nessuno le ha ancora tradotte.',
         },
       },

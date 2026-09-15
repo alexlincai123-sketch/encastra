@@ -136,7 +136,7 @@ fn honest() -> (Value, Vec<u8>) {
 /// the attacker controls the document, so integrity is never what stops them.
 fn described(mut document: Value, bytes: &[u8]) -> Value {
     document["checksum"] = Value::String(encastra_project::hash(bytes));
-    document["sizeBytes"] = Value::from(bytes.len() as u64);
+    document["size_bytes"] = Value::from(bytes.len() as u64);
     document
 }
 
@@ -203,9 +203,15 @@ fn snapshot(root: &Path) -> BTreeMap<String, String> {
     out
 }
 
-/// One thing the attacker tries: a name for the log, and how to build the folder.
+/// One thing the attacker tries: a name for the log, how to build the folder, and the refusal
+/// it has to produce — by the tag the error serialises under, so a strategy that dies on JSON
+/// strictness before reaching the control it is named for is a failing test, not a passing one.
+/// Eight of these once did exactly that, because the document was written with camelCase keys
+/// that `deny_unknown_fields` refused; the suite counted twenty refusals and proved eight things
+/// fewer than it claimed.
 struct Attempt {
     name: &'static str,
+    expect: &'static str,
     build: Box<dyn Fn(&Path)>,
 }
 
@@ -214,11 +220,12 @@ fn attempts() -> Vec<Attempt> {
     let mut list: Vec<Attempt> = Vec::new();
 
     // A helper for the common shape: rewrite the document, keep the honest bytes.
-    let with_document = |name: &'static str, edit: fn(&mut Value)| {
+    let with_document = |name: &'static str, expect: &'static str, edit: fn(&mut Value)| {
         let document = document.clone();
         let bytes = bytes.clone();
         Attempt {
             name,
+            expect,
             build: Box::new(move |folder| {
                 let mut document = document.clone();
                 edit(&mut document);
@@ -242,16 +249,21 @@ fn attempts() -> Vec<Attempt> {
         let bytes = bytes.clone();
         list.push(Attempt {
             name,
+            expect: "not-a-listing-id",
             build: Box::new(move |folder| {
                 let mut document = document.clone();
-                document["draft"]["listingId"] = Value::String(id.into());
+                document["draft"]["listing_id"] = Value::String(id.into());
                 lay_out(folder, &document, PROJECT_FILE, &bytes);
             }),
         });
     }
-    list.push(with_document("traversal in the version", |d| {
-        d["draft"]["version"] = Value::String("1.0.0/../../escaped".into());
-    }));
+    list.push(with_document(
+        "traversal in the version",
+        "not-a-version",
+        |d| {
+            d["draft"]["version"] = Value::String("1.0.0/../../escaped".into());
+        },
+    ));
     {
         // The project file's own name is chosen by the attacker too. A name with a separator
         // cannot be created on Windows, so the nearest thing that can: a second extension.
@@ -259,6 +271,7 @@ fn attempts() -> Vec<Attempt> {
         let bytes = bytes.clone();
         list.push(Attempt {
             name: "a project file that is also something else",
+            expect: "no-project",
             build: Box::new(move |folder| {
                 lay_out(folder, &document, "thumbnails.encastra.exe", &bytes);
             }),
@@ -266,11 +279,16 @@ fn attempts() -> Vec<Attempt> {
     }
 
     // -- 2. Hide a permission, or carry a secret past the check ---------------------------------
-    list.push(with_document("permissions understated", |d| {
-        d["capabilities"] = json!([]);
-    }));
+    list.push(with_document(
+        "permissions understated",
+        "capabilities-disagree",
+        |d| {
+            d["capabilities"] = json!([]);
+        },
+    ));
     list.push(with_document(
         "permissions overstated to train skimming",
+        "capabilities-disagree",
         |d| {
             d["capabilities"] = json!(["net.http", "fs.read"]);
         },
@@ -281,6 +299,7 @@ fn attempts() -> Vec<Attempt> {
         let document = document.clone();
         list.push(Attempt {
             name: "a secret in a setting, with a truthful checksum",
+            expect: "review-refused",
             build: Box::new(move |folder| {
                 let mut config = BTreeMap::new();
                 config.insert(
@@ -303,6 +322,7 @@ fn attempts() -> Vec<Attempt> {
         let document = document.clone();
         list.push(Attempt {
             name: "a component whose pinned digest is not this build's",
+            expect: "review-refused",
             build: Box::new(move |folder| {
                 let mut project = project_with(BTreeMap::new());
                 project.lock.components[0].manifest_digest = "f".repeat(64);
@@ -318,20 +338,26 @@ fn attempts() -> Vec<Attempt> {
     }
     list.push(with_document(
         "a review outcome smuggled into the document",
+        "document-unreadable",
         |d| {
             d["review"] = json!({ "outcome": "may-publish", "findings": [], "capabilities": [] });
         },
     ));
     list.push(with_document(
         "a signature field this build does not have",
+        "document-unreadable",
         |d| {
             d["signature"] = Value::String("trust me".into());
         },
     ));
-    list.push(with_document("a publisher marked verified", |d| {
-        d["publisher"] = Value::String("dev.alice".into());
-        d["verified"] = Value::Bool(true);
-    }));
+    list.push(with_document(
+        "a publisher marked verified",
+        "document-unreadable",
+        |d| {
+            d["publisher"] = Value::String("dev.alice".into());
+            d["verified"] = Value::Bool(true);
+        },
+    ));
 
     // -- 3. Replace the honest copy -----------------------------------------------------------
     {
@@ -339,6 +365,7 @@ fn attempts() -> Vec<Attempt> {
         let document = document.clone();
         list.push(Attempt {
             name: "the same version with different contents",
+            expect: "already-imported",
             build: Box::new(move |folder| {
                 let mut project = project_with(BTreeMap::new());
                 project.manifest.name = "Thumbnails (really)".into();
@@ -354,21 +381,28 @@ fn attempts() -> Vec<Attempt> {
     }
     list.push(with_document(
         "the runtime range claimed lower than the project's",
+        "document-disagrees-with-project",
         |d| {
             d["runtime"] = Value::String(">=0.0.1".into());
         },
     ));
-    list.push(with_document("a component offered as installable", |d| {
-        d["draft"]["kind"] = Value::String("component".into());
-    }));
+    list.push(with_document(
+        "a component offered as installable",
+        "not-installable",
+        |d| {
+            d["draft"]["kind"] = Value::String("component".into());
+        },
+    ));
     list.push(with_document(
         "a title that displays as something else",
+        "text-has-control-characters",
         |d| {
             d["draft"]["title"] = Value::String("Thumbnails\u{202e}exe.gnp".into());
         },
     ));
     list.push(with_document(
         "a namespace the publisher does not own",
+        "not-publishers-namespace",
         |d| {
             d["publisher"] = Value::String("dev.alic".into());
         },
@@ -380,6 +414,7 @@ fn attempts() -> Vec<Attempt> {
         let bytes = bytes.clone();
         list.push(Attempt {
             name: "a folder wearing the project's name",
+            expect: "no-project",
             build: Box::new(move |folder| {
                 std::fs::write(
                     folder.join("publication.json"),
@@ -389,6 +424,27 @@ fn attempts() -> Vec<Attempt> {
                 let decoy = folder.join(PROJECT_FILE);
                 std::fs::create_dir_all(&decoy).expect("decoy folder");
                 std::fs::write(decoy.join(PROJECT_FILE), &bytes).expect("hidden project");
+            }),
+        });
+    }
+
+    {
+        // The project's own name is shown on the import panel and in the library. A reversed
+        // name with a truthful checksum passes integrity; the text check has to catch it.
+        let document = document.clone();
+        list.push(Attempt {
+            name: "a project name that displays as something else",
+            expect: "text-has-control-characters",
+            build: Box::new(move |folder| {
+                let mut project = project_with(BTreeMap::new());
+                project.manifest.name = "Thumbnails\u{202e}exe.gnp".into();
+                let bytes = project.to_bytes().expect("serialises");
+                lay_out(
+                    folder,
+                    &described(document.clone(), &bytes),
+                    PROJECT_FILE,
+                    &bytes,
+                );
             }),
         });
     }
@@ -431,6 +487,16 @@ fn twenty_strategies_later_the_library_holds_exactly_what_the_honest_import_left
             ),
             Err(error) => error,
         };
+        // Refused for the reason the strategy exists to test, not for some earlier one.
+        let tag = serde_json::to_value(&error).expect("an error serialises")["kind"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert_eq!(
+            tag, attempt.expect,
+            "strategy {index} ({}) was refused by the wrong check: {error}",
+            attempt.name
+        );
         refusals.push((attempt.name, error.to_string()));
 
         // The property: not one byte anywhere in the library moved.

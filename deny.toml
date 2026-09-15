@@ -94,7 +94,7 @@ allow = [
 ]
 confidence-threshold = 0.9
 
-# The six crates in this workspace declare `license = "UNLICENSED"`, which is not an SPDX
+# The crates in this workspace declare `license = "UNLICENSED"`, which is not an SPDX
 # expression — deliberately, because they are not published. Without this, cargo-deny reports
 # our own code as an unlicensed dependency and the check can never pass.
 private = { ignore = true }

@@ -316,6 +316,8 @@ const fr: Messages = {
     },
   },
   library: {
+    preparedNotOpenable:
+      "Une publication préparée est un dossier à remettre à quelqu'un, pas un projet à ouvrir. Ouvrez plutôt le projet dont elle provient.",
     heading: 'Votre bibliothèque',
     intro:
       'Tout ce que vous avez : les projets que vous avez créés, ce que vous avez reçu de quelqu’un d’autre, et les dossiers que vous avez préparés pour les transmettre. Tout reste sur cette machine. Rien n’est synchronisé, envoyé ni partagé.',
@@ -1071,7 +1073,7 @@ const fr: Messages = {
         loading: 'Chargement…',
         loadError: 'Impossible de charger {name}. La langue actuelle est conservée.',
         comingLater: {
-          label: 'À venir',
+          label: 'Non traduit',
           hint: 'L’interface est structurée pour les prendre en charge ; personne ne les a encore traduites.',
         },
       },

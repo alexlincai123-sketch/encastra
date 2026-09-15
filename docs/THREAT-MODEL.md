@@ -9,10 +9,11 @@
 > **what we knowingly do not defend against**.
 >
 > **Read the scope note before the tables.** Most of what is analysed here does not exist in
-> 0.1.0-beta.1. Of the seven boundaries below, exactly one — **T7, the host runtime against the
-> OS** — is crossed by running code today. The other six are analyses of systems that have not
+> the shipped build. Of the seven boundaries below, two are crossed by running code today —
+> **T7, the host runtime against the OS**, and **T5, a browser against the website** (static
+> pages and one locale cookie; no API). The other five are analyses of systems that have not
 > been built: there is no third-party component loader, no backend, no registry, no update
-> channel, no website and no admin plane. A control described for an unbuilt boundary is a
+> channel and no admin plane. A control described for an unbuilt boundary is a
 > requirement on whoever builds it, not a defence anybody currently has.
 >
 > [SECURITY](SECURITY.md) is the implementation report — what the code actually enforces, and
@@ -20,14 +21,14 @@
 
 ### Which boundaries exist
 
-| Boundary | Exists in 0.1.0-beta.1? |
+| Boundary | Exists in the shipped build? |
 |---|---|
 | T1 — third-party component → host runtime | **no.** Nothing can load a third-party component; a `kind: "wasm"` node fails with `no-implementation` |
 | T2 — desktop client → backend API | **no.** There is no backend, no account and no sign-in |
 | T3 — publisher → registry | **no.** There is no registry, no publishing and no signing |
 | T4 — update server → installed client | **no.** There is no update channel |
-| T5 — browser → website / API | **no.** `apps/web` is an empty directory |
-| T6 — admin operator → admin plane | **no.** `apps/admin` is an empty directory |
+| T5 — browser → website / API | **the website, yes.** `apps/web` is a Next.js site with a nonce-based CSP, no accounts, no database and one server action (the locale cookie); there is no API |
+| T6 — admin operator → admin plane | **no.** There is no `apps/admin` at all |
 | **T7 — host runtime → OS** | **yes.** The capability broker is built, enforced and tested |
 
 ---

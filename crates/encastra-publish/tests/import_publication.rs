@@ -21,9 +21,7 @@ use std::path::{Path, PathBuf};
 use encastra_core::ComponentRef;
 use encastra_core::graph::{Graph, Node, NodeId, Position};
 use encastra_core::registry::InMemoryRegistry;
-use encastra_project::{
-    LockedComponent, Lockfile, PROJECT_SCHEMA, Project, ProjectManifest, Variables,
-};
+use encastra_project::{LockedComponent, Lockfile, Project, ProjectManifest, Variables};
 use encastra_protocol::manifest::ComponentManifest;
 use encastra_publish::bundle::MAX_PUBLICATION_BYTES;
 use encastra_publish::import::{
@@ -858,8 +856,10 @@ fn a_project_written_by_a_version_this_build_cannot_read_is_refused() {
                 reason.contains("99"),
                 "the refusal should say which schema it found: {reason}"
             );
+            // A Windows path has both a drive colon and a backslash; a POSIX one has slashes
+            // under a home directory. Neither belongs here.
             assert!(
-                !reason.contains(':') || !reason.contains('\\'),
+                !(reason.contains(':') && reason.contains('\\')) && !reason.contains("/home/"),
                 "no path from anybody's machine belongs in this message: {reason}"
             );
         }
@@ -908,7 +908,6 @@ fn future_schema_archive(project: &Project, schema: u32) -> Vec<u8> {
         }
         writer.finish().expect("archive finished");
     }
-    assert_ne!(schema, PROJECT_SCHEMA, "this fixture is about the mismatch");
     out
 }
 

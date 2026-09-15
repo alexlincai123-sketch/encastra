@@ -317,6 +317,8 @@ const es: Messages = {
     },
   },
   library: {
+    preparedNotOpenable:
+      'Una publicación preparada es una carpeta para entregar a alguien, no un proyecto que abrir. Abre el proyecto del que se hizo.',
     heading: 'Tu biblioteca',
     intro:
       'Todo lo que tienes: los proyectos que hiciste, lo que recibiste de otra persona y las carpetas que preparaste para entregar. Todo está en este ordenador. Nada se sincroniza, se sube ni se comparte con nadie.',
@@ -1063,7 +1065,7 @@ const es: Messages = {
         loading: 'Cargando…',
         loadError: 'No se pudo cargar {name}. Se mantiene el idioma actual.',
         comingLater: {
-          label: 'Próximamente',
+          label: 'Sin traducir',
           hint: 'La interfaz está preparada para admitirlos; todavía nadie los ha traducido.',
         },
       },

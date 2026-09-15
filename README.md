@@ -2,8 +2,9 @@
 
 **Build software from parts that actually fit.**
 
-Encastra is a local-first runtime that executes a typed graph of sandboxed components, plus
-the ecosystem around it: a visual editor, a component registry, an SDK, and a marketplace.
+Encastra is a local-first runtime that executes a typed graph of components, with a visual
+editor around it. The rest of the ecosystem — a sandbox for strangers' components, a registry,
+an SDK, a marketplace — is designed and not built; the status table below says which is which.
 
 > *encastrar* (Spanish, from Latin *incastrare*) — to interlock or couple two pieces so that
 > each holds the other.
@@ -21,11 +22,12 @@ Three primitives, and everything else is a surface on top of them:
 - **Project format** — what you save and share: a graph plus a lockfile that pins every
   component by content hash, so a project that ran yesterday runs today.
 
-The interesting problem is not the canvas. It is that a stranger's component runs on your
-machine. Encastra's answer is that third-party components have **no ambient authority at
-all** — they execute as WebAssembly components with nothing but the capabilities you granted,
-and they never see a filesystem path. See [ARCHITECTURE](docs/ARCHITECTURE.md) §2 and
-[THREAT-MODEL](docs/THREAT-MODEL.md) T1.
+The interesting problem is not the canvas. It is that one day a stranger's component would run
+on your machine. Encastra's answer is designed and not yet built: third-party components would
+have **no ambient authority at all** — WebAssembly components with nothing but the capabilities
+you granted, never seeing a filesystem path. Today only first-party components run, and they go
+through the same capability broker that would gate a stranger's. See
+[ARCHITECTURE](docs/ARCHITECTURE.md) §2 and [THREAT-MODEL](docs/THREAT-MODEL.md) T1.
 
 **No AI in the runtime.** Workflows execute without a model in the loop, by design.
 

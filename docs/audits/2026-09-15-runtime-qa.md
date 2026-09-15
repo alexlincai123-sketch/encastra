@@ -78,7 +78,8 @@ and from the real filesystem. Nothing here was inferred from unit tests.
 
 - The three chooser-driven journeys above, end to end. They are the ones a person actually
   takes, and they need a person at the dialog — or a machine nobody is using — to be verified.
-  Their Rust halves are covered by 313 workspace tests and their refusals by the rows above.
+  Their Rust halves are covered by the 286 workspace tests at that commit and their refusals by
+  the rows above.
 - The unsaved-changes prompt and the keyboard connect mode: not in this build (added afterwards
   on this branch); see the next section once it exists.
 

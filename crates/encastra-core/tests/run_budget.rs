@@ -373,10 +373,9 @@ fn many_small_producers_add_up_to_a_refusal_no_per_item_cap_could_see() {
     // before this looked at the sum.
     const BUDGET: u64 = 900_000;
     const EACH: i64 = 8_000;
-    assert!(
-        (EACH as u64) < BUDGET / 100,
-        "each value must be individually unremarkable"
-    );
+    // Checked when the test is compiled, not when it runs: a runtime assertion on two constants
+    // two lines above it could never fail, and read as if it were testing something.
+    const _: () = assert!((EACH as u64) < BUDGET / 100);
 
     let mut nodes = serde_json::Map::new();
     let mut edges = Vec::new();

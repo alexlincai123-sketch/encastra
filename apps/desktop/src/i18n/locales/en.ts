@@ -348,6 +348,8 @@ const en: Messages = {
   // on. Every sentence here is about files on this machine — there is no account and nothing
   // syncs, and the screen says so rather than leaving somebody to wonder.
   library: {
+    preparedNotOpenable:
+      'A prepared publication is a folder to hand to somebody, not a project to open. Open the project it was made from instead.',
     heading: 'Your library',
     intro:
       'Everything you have: the projects you made, what you took in from somebody else, and the folders you prepared to hand on. All of it is on this machine. Nothing here is synced, uploaded or shared with anyone.',
@@ -1126,7 +1128,7 @@ const en: Messages = {
         loading: 'Loading…',
         loadError: 'Could not load {name}. Staying on the current one.',
         comingLater: {
-          label: 'Coming later',
+          label: 'Not translated',
           hint: 'The interface is structured to support these; nobody has translated them yet.',
         },
       },

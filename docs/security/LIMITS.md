@@ -46,9 +46,16 @@ guards one of two doors guards neither.
 | `MAX_READ_BYTES` | 512 MB | One file a component reads | Every read lands in a `Vec` — the runtime passes bytes between components, it does not stream them. In a watched folder the size of that allocation is chosen by whoever put the file there, not by whoever granted the folder. |
 | `MAX_DIR_ENTRIES` | 50 000 | One folder listing | A watched folder is somewhere other people put files, and a trigger re-reads it every 600 ms. Refused rather than truncated: a watcher that silently skipped files would be worse than one that says the folder is too full to watch. |
 
-Also here, and not a number: `sanitise_filename` refuses Windows device names (`NUL`, `CON`,
-`COM1`…), which name a device in any directory and so are not contained by a granted folder at
-all, and settles trailing dots and spaces, which Windows drops when it opens a file.
+Also here, and not a number: `sanitise_filename` prefixes Windows device names (`NUL`, `CON`,
+`COM1`…) with an underscore rather than refusing them — a result the component cannot name is
+still a result — because they name a device in any directory and so are not contained by a
+granted folder at all; and it settles trailing dots and spaces, which Windows drops when it
+opens a file.
+
+The library has two of its own, in `crates/encastra-library`: `MAX_ENTRIES` (10 000 entries in
+the index, refused rather than truncated) and `MAX_BYTES_TO_HASH` (64 MB — a larger file is
+reported present without being re-hashed, because hashing it on every listing would make the
+Library view cost a read of every large project it knows).
 
 ## The runner
 

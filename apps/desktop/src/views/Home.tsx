@@ -50,14 +50,7 @@ export function Home() {
       </header>
 
       <section className="home__actions">
-        <button
-          type="button"
-          className="action action--primary"
-          onClick={() => {
-            newProject();
-            setView('builder');
-          }}
-        >
+        <button type="button" className="action action--primary" onClick={() => newProject()}>
           <span className="action__title">{t('home.actions.new.title')}</span>
           <span className="action__detail">{t('home.actions.new.detail')}</span>
         </button>
