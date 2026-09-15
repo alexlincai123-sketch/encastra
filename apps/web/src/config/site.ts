@@ -173,6 +173,13 @@ export const DOCS = [
     audience: 'engineers',
   },
   {
+    slug: 'OBSERVABILITY.md',
+    title: 'Observability',
+    summary:
+      'Nothing is collected and nothing is sent. What would be worth knowing after launch, how it would be collected without carrying anyone’s data, and what is never sent under any setting.',
+    audience: 'everyone',
+  },
+  {
     slug: 'RELEASE.md',
     title: 'Release',
     summary: 'How a build is produced, what it contains, and what you can check about it.',
