@@ -261,3 +261,40 @@ fn a_graph_that_does_not_validate_never_runs_at_all() {
     );
     assert!(!sandbox.out().join("result.json").exists());
 }
+
+#[test]
+fn a_value_is_released_once_its_last_consumer_has_finished() {
+    // A run's memory used to be proportional to the graph's length: every value ever produced
+    // stayed in the outcome until the run ended, so a chain of twenty thousand steps each passing
+    // a document along held twenty thousand documents at once (measured at ~3.9 GB). Now a value
+    // is dropped when the last edge out of its port has been read. What survives the run is what
+    // nothing was waiting for — the graph's terminal outputs — and nothing else.
+    let (outcome, _sandbox) = run_demo("released", r#"{"name":"Encastra","parts":3}"#, true);
+    assert_eq!(outcome.journal.status, RunStatus::Ok);
+
+    let port = |node: &str, port: &str| PortRef {
+        node: NodeId(node.into()),
+        port: port.into(),
+    };
+
+    // Consumed along the way, and gone.
+    for (node, name) in [("read", "text"), ("parse", "json"), ("write", "saved")] {
+        assert!(
+            !outcome.outputs.contains_key(&port(node, name)),
+            "{node}.{name} was consumed and should have been released"
+        );
+    }
+    // Nothing downstream was waiting for these, so they are the results a caller may want.
+    for (node, name) in [("notify", "message"), ("write", "file"), ("read", "name")] {
+        assert!(
+            outcome.outputs.contains_key(&port(node, name)),
+            "{node}.{name} has no consumer and should still be there"
+        );
+    }
+    // And the journal still summarises every value, released or not.
+    assert!(
+        outcome.journal.nodes[&NodeId("parse".into())]
+            .outputs
+            .contains_key("json")
+    );
+}

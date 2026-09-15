@@ -15,7 +15,7 @@ use encastra_protocol::manifest::ComponentManifest;
 
 use crate::broker::Broker;
 use crate::convert::apply_ops;
-use crate::graph::{Graph, NodeId, PortRef};
+use crate::graph::{Edge, Graph, NodeId, PortRef};
 use crate::journal::{LogLevel, LogLine, NodeError, NodeRecord, NodeStatus, RunJournal, now_ms};
 use crate::registry::ComponentRegistry;
 use crate::validate::Validation;
@@ -199,8 +199,13 @@ pub struct RunRequest<'a> {
 #[derive(Debug)]
 pub struct RunOutcome {
     pub journal: RunJournal,
-    /// The value each output port produced, for a caller that wants the results rather than
-    /// just the record of them.
+    /// The values still held when the run ended: what the graph's terminal ports produced, for
+    /// a caller that wants the results rather than just the record of them.
+    ///
+    /// Not every value that was ever produced. A value is dropped the moment its last consumer
+    /// has finished with it, so that a run's memory is bounded by the widest point of the graph
+    /// rather than by its length — see the note in `execute`. The journal keeps a summary of
+    /// every value; this keeps the values nothing downstream was waiting for.
     pub outputs: BTreeMap<PortRef, Value>,
 }
 
@@ -364,149 +369,189 @@ fn execute(
         .map(|plan| ((&plan.from, &plan.to), &plan.ops))
         .collect();
 
+    // How many edges still have to read each produced value.
+    //
+    // A produced value used to live in `outputs` until the run ended, which made a run's memory
+    // proportional to the *length* of the graph: a chain of ten thousand steps each handing a
+    // 50 KB document to the next held ten thousand documents at once — measured at close to
+    // four gigabytes for twenty thousand — when at no point did more than one step need one.
+    // Every edge out of a port is counted here, and when the last consumer of a port has
+    // finished, whatever it produced is dropped. Memory is then bounded by how *wide* the graph
+    // is, which is the shape a person drew, rather than by how long it is.
+    //
+    // A consumer counts as finished whatever happened to it — ran, failed, was skipped, was
+    // cancelled, was disabled — because in every one of those cases it is never going to read
+    // the value. Validation refuses cycles and orders producers before consumers, so a port's
+    // count only ever reaches zero after everything that could have read it has had its turn.
+    let mut consumers_left: BTreeMap<&PortRef, usize> = BTreeMap::new();
+    // And which edges feed each node, indexed once. `Graph::incoming` walks every edge in the
+    // graph to answer for one node, and this loop asked it three times per node — to find a
+    // blocker, to gather inputs, to release values — which made a run quadratic in the size of
+    // the graph: twenty thousand steps spent more time scanning edges than running components.
+    let mut incoming: BTreeMap<&NodeId, Vec<&Edge>> = BTreeMap::new();
+    for edge in &graph.edges {
+        *consumers_left.entry(&edge.from).or_insert(0) += 1;
+        incoming.entry(&edge.to.node).or_default().push(edge);
+    }
+    const NO_EDGES: &[&Edge] = &[];
+
     for node_id in &validation.order {
         let Some(node) = graph.node(node_id) else {
             continue;
         };
-        let mut record = NodeRecord::new(node.component.to_string());
+        let feeding: &[&Edge] = incoming.get(node_id).map_or(NO_EDGES, Vec::as_slice);
 
-        if node.disabled {
-            record.status = NodeStatus::Disabled;
-            if let Some(observer) = observer {
-                observer.node_finished(run_id, node_id, &record);
-            }
-            journal.nodes.insert(node_id.clone(), record);
-            continue;
-        }
+        // One block, one exit per step: however the step ends, the record it leaves is written
+        // to the journal below and the values it consumed are released below. The alternative —
+        // remembering to release at each of eight early exits — is how one of them is forgotten.
+        let record = 'step: {
+            let mut record = NodeRecord::new(node.component.to_string());
 
-        if cancel.load(Ordering::Relaxed) {
-            record.status = NodeStatus::Cancelled;
-            if let Some(observer) = observer {
-                observer.node_finished(run_id, node_id, &record);
-            }
-            journal.nodes.insert(node_id.clone(), record);
-            continue;
-        }
-
-        // If anything upstream did not produce, this node does not run. Saying which node is
-        // responsible is the difference between a debuggable run and a mystery.
-        if let Some(blocker) = upstream_blocker(graph, node_id, &journal) {
-            record.status = NodeStatus::Skipped;
-            record.skipped_because = Some(blocker);
-            if let Some(observer) = observer {
-                observer.node_finished(run_id, node_id, &record);
-            }
-            journal.nodes.insert(node_id.clone(), record);
-            continue;
-        }
-
-        let Some(manifest) = registry.get(&node.component) else {
-            record.status = NodeStatus::Failed;
-            record.error = Some(NodeError::new(
-                "component-missing",
-                format!("{} is not installed.", node.component),
-            ));
-            journal.nodes.insert(node_id.clone(), record);
-            continue;
-        };
-
-        let inputs = match gather_inputs(
-            graph,
-            node_id,
-            manifest,
-            &outputs,
-            &seeded,
-            &conversions,
-            broker,
-        ) {
-            Ok(inputs) => inputs,
-            Err(error) => {
-                record.status = NodeStatus::Failed;
-                record.error = Some(error);
-                record.capability_calls = broker.take_calls(node_id);
-                journal.nodes.insert(node_id.clone(), record);
-                continue;
-            }
-        };
-
-        for (port, value) in &inputs {
-            record.inputs.insert(port.clone(), value.summary());
-        }
-
-        if manifest.trigger {
-            record.status = NodeStatus::Ok;
-            record.duration_ms = Some(0);
-            record.started_at_ms = Some(now_ms());
-            for (port, value) in outputs
-                .iter()
-                .filter(|(reference, _)| reference.node == *node_id)
-            {
-                record.outputs.insert(port.port.clone(), value.summary());
-            }
-            journal.nodes.insert(node_id.clone(), record);
-            continue;
-        }
-
-        let Some(implementation) = components.get(&node.component.to_string()) else {
-            record.status = NodeStatus::Failed;
-            record.error = Some(
-                NodeError::new(
-                    "no-implementation",
-                    format!(
-                        "{} has a manifest but no code in this build.",
-                        node.component
-                    ),
-                )
-                .with_hint("Sandboxed components are not executable in this build yet."),
-            );
-            journal.nodes.insert(node_id.clone(), record);
-            continue;
-        };
-
-        let started = Instant::now();
-        record.started_at_ms = Some(now_ms());
-        record.status = NodeStatus::Running;
-        if let Some(observer) = observer {
-            observer.node_started(run_id, node_id);
-        }
-
-        let mut ctx = NodeContext {
-            node: node_id.clone(),
-            inputs,
-            config: node.config.clone(),
-            broker,
-            logs: Vec::new(),
-            cancel,
-        };
-        let result = implementation.run(&mut ctx);
-        let logs = std::mem::take(&mut ctx.logs);
-
-        record.duration_ms = Some(started.elapsed().as_millis() as u64);
-        record.logs = logs;
-        record.capability_calls = broker.take_calls(node_id);
-
-        match result.and_then(|produced| check_outputs(manifest, produced)) {
-            Ok(produced) => {
-                for (port, value) in &produced {
-                    record.outputs.insert(port.clone(), value.summary());
-                    outputs.insert(
-                        PortRef {
-                            node: node_id.clone(),
-                            port: port.clone(),
-                        },
-                        value.clone(),
-                    );
+            if node.disabled {
+                record.status = NodeStatus::Disabled;
+                if let Some(observer) = observer {
+                    observer.node_finished(run_id, node_id, &record);
                 }
-                record.status = NodeStatus::Ok;
+                break 'step record;
             }
-            Err(error) => {
-                record.status = NodeStatus::Failed;
-                record.error = Some(error);
-            }
-        }
 
-        if let Some(observer) = observer {
-            observer.node_finished(run_id, node_id, &record);
+            if cancel.load(Ordering::Relaxed) {
+                record.status = NodeStatus::Cancelled;
+                if let Some(observer) = observer {
+                    observer.node_finished(run_id, node_id, &record);
+                }
+                break 'step record;
+            }
+
+            // If anything upstream did not produce, this node does not run. Saying which node is
+            // responsible is the difference between a debuggable run and a mystery.
+            if let Some(blocker) = upstream_blocker(feeding, &journal) {
+                record.status = NodeStatus::Skipped;
+                record.skipped_because = Some(blocker);
+                if let Some(observer) = observer {
+                    observer.node_finished(run_id, node_id, &record);
+                }
+                break 'step record;
+            }
+
+            let Some(manifest) = registry.get(&node.component) else {
+                record.status = NodeStatus::Failed;
+                record.error = Some(NodeError::new(
+                    "component-missing",
+                    format!("{} is not installed.", node.component),
+                ));
+                break 'step record;
+            };
+
+            let inputs = match gather_inputs(
+                feeding,
+                node_id,
+                manifest,
+                &outputs,
+                &seeded,
+                &conversions,
+                broker,
+            ) {
+                Ok(inputs) => inputs,
+                Err(error) => {
+                    record.status = NodeStatus::Failed;
+                    record.error = Some(error);
+                    record.capability_calls = broker.take_calls(node_id);
+                    break 'step record;
+                }
+            };
+
+            for (port, value) in &inputs {
+                record.inputs.insert(port.clone(), value.summary());
+            }
+
+            if manifest.trigger {
+                record.status = NodeStatus::Ok;
+                record.duration_ms = Some(0);
+                record.started_at_ms = Some(now_ms());
+                for (port, value) in outputs
+                    .iter()
+                    .filter(|(reference, _)| reference.node == *node_id)
+                {
+                    record.outputs.insert(port.port.clone(), value.summary());
+                }
+                break 'step record;
+            }
+
+            let Some(implementation) = components.get(&node.component.to_string()) else {
+                record.status = NodeStatus::Failed;
+                record.error = Some(
+                    NodeError::new(
+                        "no-implementation",
+                        format!(
+                            "{} has a manifest but no code in this build.",
+                            node.component
+                        ),
+                    )
+                    .with_hint("Sandboxed components are not executable in this build yet."),
+                );
+                break 'step record;
+            };
+
+            let started = Instant::now();
+            record.started_at_ms = Some(now_ms());
+            record.status = NodeStatus::Running;
+            if let Some(observer) = observer {
+                observer.node_started(run_id, node_id);
+            }
+
+            let mut ctx = NodeContext {
+                node: node_id.clone(),
+                inputs,
+                config: node.config.clone(),
+                broker,
+                logs: Vec::new(),
+                cancel,
+            };
+            let result = implementation.run(&mut ctx);
+            let logs = std::mem::take(&mut ctx.logs);
+
+            record.duration_ms = Some(started.elapsed().as_millis() as u64);
+            record.logs = logs;
+            record.capability_calls = broker.take_calls(node_id);
+
+            match result.and_then(|produced| check_outputs(manifest, produced)) {
+                Ok(produced) => {
+                    // Moved, not cloned: the component handed these over and nothing else holds
+                    // them. A copy of every output of every step is a second run's worth of memory.
+                    for (port, value) in produced {
+                        record.outputs.insert(port.clone(), value.summary());
+                        outputs.insert(
+                            PortRef {
+                                node: node_id.clone(),
+                                port,
+                            },
+                            value,
+                        );
+                    }
+                    record.status = NodeStatus::Ok;
+                }
+                Err(error) => {
+                    record.status = NodeStatus::Failed;
+                    record.error = Some(error);
+                }
+            }
+
+            if let Some(observer) = observer {
+                observer.node_finished(run_id, node_id, &record);
+            }
+            record
+        };
+
+        // This step is finished with everything that fed it. Release what nothing else is
+        // waiting for — see `consumers_left` above.
+        for edge in feeding {
+            if let Some(left) = consumers_left.get_mut(&edge.from) {
+                *left = left.saturating_sub(1);
+                if *left == 0 {
+                    outputs.remove(&edge.from);
+                }
+            }
         }
         journal.nodes.insert(node_id.clone(), record);
     }
@@ -518,10 +563,11 @@ fn execute(
     RunOutcome { journal, outputs }
 }
 
-/// The nearest upstream node that failed, was skipped, or was cancelled.
-fn upstream_blocker(graph: &Graph, node: &NodeId, journal: &RunJournal) -> Option<NodeId> {
-    graph
-        .incoming(node)
+/// The nearest upstream node that failed, was skipped, or was cancelled, among the edges that
+/// feed the node in question.
+fn upstream_blocker(feeding: &[&Edge], journal: &RunJournal) -> Option<NodeId> {
+    feeding
+        .iter()
         .map(|edge| &edge.from.node)
         .find(|producer| {
             journal.nodes.get(*producer).is_some_and(|r| {
@@ -534,8 +580,10 @@ fn upstream_blocker(graph: &Graph, node: &NodeId, journal: &RunJournal) -> Optio
         .cloned()
 }
 
+/// Assembles what a node receives: the values the application supplied for it, then whatever
+/// arrived along `feeding` — the edges into this node, already indexed by the caller.
 fn gather_inputs(
-    graph: &Graph,
+    feeding: &[&Edge],
     node: &NodeId,
     manifest: &ComponentManifest,
     outputs: &BTreeMap<PortRef, Value>,
@@ -553,7 +601,7 @@ fn gather_inputs(
         }
     }
 
-    for edge in graph.incoming(node) {
+    for edge in feeding {
         let Some(produced) = outputs.get(&edge.from) else {
             // Validation guarantees the producer runs first, so this means the producer
             // succeeded without filling this port. Optional outputs are legitimately absent.

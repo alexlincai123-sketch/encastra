@@ -15,8 +15,9 @@
  * - **It is short.** Seven cards, a minute or two. It teaches the vocabulary and gets out.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useFocusTrap } from '../a11y/focus';
 import { DEMOS } from '../demos';
 import { useTranslation } from '../i18n';
 import { usePreferences } from '../preferences';
@@ -38,6 +39,17 @@ export function Welcome() {
 
   /** `null` means the tour is not running; a number is the card being shown. */
   const [step, setStep] = useState<number | null>(null);
+
+  // The welcome is the one genuinely modal thing here (`aria-modal="true"` below), so Tab stays
+  // inside it and focus lands on it when it appears. The tour cards are deliberately not modal —
+  // the whole point of a card is that the person is using the editor behind it — so they get
+  // neither.
+  const welcomeCard = useRef<HTMLDivElement | null>(null);
+  const welcomeShowing = !welcomeSeen && step === null;
+  useFocusTrap(welcomeCard, welcomeShowing);
+  useEffect(() => {
+    if (welcomeShowing) welcomeCard.current?.focus();
+  }, [welcomeShowing]);
 
   const progress = {
     nodes: nodes.length,
@@ -136,7 +148,7 @@ export function Welcome() {
   // question entirely instead of relying on nothing upstream ever gaining a transform.
   return createPortal(
     <div className="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-      <div className="welcome__card">
+      <div className="welcome__card" ref={welcomeCard} tabIndex={-1}>
         <h1 id="welcome-title" className="welcome__title">
           {t('onboarding.welcome.title')}
         </h1>
