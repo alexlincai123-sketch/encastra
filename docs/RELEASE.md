@@ -8,20 +8,20 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.5.0-rc.2** · built 2026-09-15 on Windows AMD64 · build commit `90e479d732b8cce9a896ffc3a2cb35fe42f14fc8`
+**Version 0.5.0-rc.3** · built 2026-09-15 on Windows AMD64 · build commit `3264e07ab372d2370bec88b7062406cd71e3cc3a`
 
 Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0. Two builds of the build commit with this toolchain produce these exact bytes; `scripts/pe_diff.py` says how they differ if they do not.
 
 | Artefact | Size | Signature | SHA-256 |
 |---|---|---|---|
-| `Encastra_0.5.0-rc.2_x64-setup.exe` | 3.4 MB | **not signed** | `e146fd48918800fdbef46ef33856591b3d9bfe9d1bf517ed7b0d8e8b2396a7bf` |
-| `encastra-desktop.exe` | 9.4 MB | **not signed** | `b26cb76cd720749ec8856c87f56ed6796d28050b9e390e946257e215d5d94451` |
+| `Encastra_0.5.0-rc.3_x64-setup.exe` | 3.4 MB | **not signed** | `fecbf62a5735712414ae8063d6ba63daf6eff183e7b6e77654d71647e5cb5257` |
+| `encastra-desktop.exe` | 9.4 MB | **not signed** | `a30a56ea482be940fba7f472081303c518701cb54507ad2ab540bbdd305ca457` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.5.0-rc.2_x64-setup.exe -Algorithm SHA256
-Get-AuthenticodeSignature .\Encastra_0.5.0-rc.2_x64-setup.exe
+Get-FileHash .\Encastra_0.5.0-rc.3_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Encastra_0.5.0-rc.3_x64-setup.exe
 ```
 
 These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking — with the caveat that a hash published beside the download is only as trustworthy as the site serving both.
