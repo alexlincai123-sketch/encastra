@@ -134,7 +134,7 @@ build output.
 Silent install, for a machine being set up by a script:
 
 ```powershell
-.\Encastra_0.1.0-beta.1_x64-setup.exe /S
+.\Encastra_<version>_x64-setup.exe /S
 ```
 
 Uninstalling removes the application. It does not touch `.encastra` files, which live wherever
@@ -162,7 +162,7 @@ in Settings rather than implying an update mechanism it does not have.
 
 ## Version numbering
 
-`0.1.0-beta.1`. One version, set in `Cargo.toml`'s `[workspace.package]` and in
+One version — the one in the BUILD block above — set in `Cargo.toml`'s `[workspace.package]` and in
 `tauri.conf.json`, and shown in Settings by reading it from the build rather than from anything
 typed into the interface.
 
