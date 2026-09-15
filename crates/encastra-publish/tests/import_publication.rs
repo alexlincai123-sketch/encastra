@@ -26,7 +26,9 @@ use encastra_project::{
 };
 use encastra_protocol::manifest::ComponentManifest;
 use encastra_publish::bundle::MAX_PUBLICATION_BYTES;
-use encastra_publish::import::{Inspected, MAX_DOCUMENT_BYTES, MAX_TITLE_CHARS, import, inspect};
+use encastra_publish::import::{
+    Inspected, MAX_DOCUMENT_BYTES, MAX_FOLDER_ENTRIES, MAX_TITLE_CHARS, import, inspect,
+};
 use encastra_publish::{
     ImportError, Kind, License, Pricing, PublicationBundle, PublicationDraft, Publisher,
 };
@@ -670,6 +672,81 @@ fn a_version_that_is_not_one_is_refused_on_the_way_in() {
             version: "latest".into()
         }
     );
+}
+
+#[test]
+fn a_folder_full_of_junk_is_refused_before_it_is_listed_to_the_end() {
+    // A publication is two files. A folder holding a million is refused — but it used to be
+    // listed and stat'ed to the end first, with every name collected into the error. The ceiling
+    // stops the work, not just the answer.
+    let sandbox = Sandbox::new("junk");
+    let folder = good_folder(&sandbox, "publication");
+    for i in 0..=MAX_FOLDER_ENTRIES {
+        std::fs::write(folder.join(format!("junk-{i}.bin")), b"x").unwrap();
+    }
+
+    assert_eq!(
+        refused(&sandbox, &folder),
+        ImportError::TooManyEntries {
+            max: MAX_FOLDER_ENTRIES
+        }
+    );
+
+    // Under the ceiling the ordinary refusal still names what it found, so the ceiling did not
+    // replace it.
+    let folder = good_folder(&sandbox, "littered");
+    std::fs::write(folder.join("stray.txt"), b"x").unwrap();
+    assert!(matches!(
+        refused(&sandbox, &folder),
+        ImportError::UnexpectedEntries { names } if names == vec!["stray.txt".to_string()]
+    ));
+}
+
+#[test]
+fn a_tag_or_category_that_hides_what_it_says_is_refused() {
+    // `check_text` covers tags and categories as well as the title, and nothing exercised those
+    // branches. A tag is rendered in a list beside the title; a zero-width space in one makes two
+    // listings look like the same thing.
+    let sandbox = Sandbox::new("hidden-tag");
+    let folder = folder_with_document(&sandbox, "tags", |document| {
+        document["draft"]["tags"] = serde_json::json!(["images", "thumb\u{200b}nails"]);
+    });
+    assert_eq!(
+        refused(&sandbox, &folder),
+        ImportError::TextHasControlCharacters { field: "tags" }
+    );
+
+    let folder = folder_with_document(&sandbox, "categories", |document| {
+        document["draft"]["categories"] = serde_json::json!(["ima\u{202e}ges"]);
+    });
+    assert_eq!(
+        refused(&sandbox, &folder),
+        ImportError::TextHasControlCharacters {
+            field: "categories"
+        }
+    );
+}
+
+#[test]
+fn the_format_characters_beyond_the_obvious_ones_are_refused_too() {
+    // The list used to stop at U+2069. These are the ones it did not know: a deprecated format
+    // control that some renderers still honour, the Arabic letter mark, the paragraph separator.
+    let sandbox = Sandbox::new("format-chars");
+    for (name, hostile) in [
+        ("inhibit-swapping", "Thumb\u{206a}nails"),
+        ("arabic-letter-mark", "Thumb\u{061c}nails"),
+        ("paragraph-separator", "Thumbnails\u{2029}not really"),
+        ("annotation-anchor", "Thumb\u{fff9}nails"),
+    ] {
+        let folder = folder_with_document(&sandbox, name, |document| {
+            document["draft"]["title"] = Value::String(hostile.into());
+        });
+        assert_eq!(
+            refused(&sandbox, &folder),
+            ImportError::TextHasControlCharacters { field: "title" },
+            "{name}"
+        );
+    }
 }
 
 #[test]

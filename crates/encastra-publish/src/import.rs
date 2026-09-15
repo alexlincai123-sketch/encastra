@@ -51,6 +51,15 @@ pub const PROJECT_EXTENSION: &str = "encastra";
 /// bytes somebody else chose is the cheapest denial of service there is.
 pub const MAX_DOCUMENT_BYTES: u64 = 256 * 1024;
 
+/// The most entries a publication folder may hold before it is refused unread.
+///
+/// A publication is two files, plus whatever a file manager leaves behind. Every entry beyond
+/// that is already a refusal (`UnexpectedEntries`) — but the folder was being listed and stat'ed
+/// to the end first, and its names collected into the error, so a folder of a million junk files
+/// cost a million system calls and a message the size of the folder before saying no. The number
+/// is generous for a folder that holds two things.
+pub const MAX_FOLDER_ENTRIES: usize = 64;
+
 /// The longest a publication's title may be.
 pub const MAX_TITLE_CHARS: usize = 120;
 
@@ -99,6 +108,8 @@ pub enum ImportError {
         names.join(", ")
     )]
     UnexpectedEntries { names: Vec<String> },
+    #[error("that folder holds more than {max} entries, which is more than a publication is")]
+    TooManyEntries { max: usize },
     #[error("the project file is {size} bytes, and this build installs at most {max}")]
     ProjectTooLarge { size: u64, max: u64 },
     #[error("the project file is not the one this publication describes")]
@@ -578,7 +589,15 @@ fn read_folder(folder: &Path) -> Result<Contents, ImportError> {
         others: Vec::new(),
     };
 
-    for entry in std::fs::read_dir(folder)? {
+    for (index, entry) in std::fs::read_dir(folder)?.enumerate() {
+        // Refused before the entry is even stat'ed. A publication folder holds two files; one
+        // that holds sixty-five is not a publication whatever they are, and the cost of finding
+        // that out must not scale with how many there are.
+        if index >= MAX_FOLDER_ENTRIES {
+            return Err(ImportError::TooManyEntries {
+                max: MAX_FOLDER_ENTRIES,
+            });
+        }
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let meta = std::fs::symlink_metadata(entry.path())?;

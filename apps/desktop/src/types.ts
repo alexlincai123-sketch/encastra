@@ -326,6 +326,7 @@ export type ImportError =
   | { kind: 'more-than-one-project'; names: string[] }
   | { kind: 'project-is-a-link' }
   | { kind: 'unexpected-entries'; names: string[] }
+  | { kind: 'too-many-entries'; max: number }
   | { kind: 'project-too-large'; size: number; max: number }
   | { kind: 'checksum-mismatch' }
   | { kind: 'project-unreadable'; reason: string }

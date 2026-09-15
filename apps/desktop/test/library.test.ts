@@ -190,6 +190,7 @@ const EVERY_KIND: ImportError['kind'][] = [
   'more-than-one-project',
   'project-is-a-link',
   'unexpected-entries',
+  'too-many-entries',
   'project-too-large',
   'checksum-mismatch',
   'project-unreadable',

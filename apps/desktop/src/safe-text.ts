@@ -25,7 +25,8 @@
  * zero-width and word-joiner family (U+200B–U+200F, U+FEFF), and the interlinear annotation
  * marks (U+FFF9–U+FFFB), which some renderers treat as invisible structure.
  */
-const INVISIBLE_OR_REORDERING = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\uFFF9-\uFFFB]/g;
+const INVISIBLE_OR_REORDERING =
+  /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\u206A-\u206F\u061C\u180E\u2028\u2029\uFEFF\uFFF9-\uFFFB]/g;
 
 /** Every C0 and C1 control character, none of which belongs in a path or a host. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the entire purpose

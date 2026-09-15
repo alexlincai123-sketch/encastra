@@ -122,6 +122,7 @@ export const IMPORT_ERROR_KEYS: Record<ImportError['kind'], string> = {
   'more-than-one-project': 'import.errors.moreThanOneProject',
   'project-is-a-link': 'import.errors.projectIsALink',
   'unexpected-entries': 'import.errors.unexpectedEntries',
+  'too-many-entries': 'import.errors.tooManyEntries',
   'project-too-large': 'import.errors.projectTooLarge',
   'checksum-mismatch': 'import.errors.checksumMismatch',
   'project-unreadable': 'import.errors.projectUnreadable',
