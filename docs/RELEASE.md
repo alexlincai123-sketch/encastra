@@ -8,12 +8,14 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.5.0-beta.1** · built 2026-09-15 on Windows AMD64 · commit `f6e7c29`
+**Version 0.5.0-beta.1** · built 2026-09-15 on Windows AMD64 · build commit `349b2ff972817798ef1175b73e5885fafe963ed6`
+
+Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0. Two builds of the build commit with this toolchain produce these exact bytes; `scripts/pe_diff.py` says how they differ if they do not.
 
 | Artefact | Size | Signature | SHA-256 |
 |---|---|---|---|
-| `Encastra_0.5.0-beta.1_x64-setup.exe` | 3.4 MB | **not signed** | `6d12bab6b90cd04f743e38167ad8a92d2492270c72bc9b342ab4e43bbb102994` |
-| `encastra-desktop.exe` | 9.2 MB | **not signed** | `dbbbff757e4a0b6db215638c545f3ac40ab4fa1776397500e410985d0efc44be` |
+| `Encastra_0.5.0-beta.1_x64-setup.exe` | 3.4 MB | **not signed** | `5678e5d06b659c178c8eaae0a874cbb539eb56e571b6400df4a12f68f6d66f91` |
+| `encastra-desktop.exe` | 9.2 MB | **not signed** | `be1945f9f8dc3dcf60e89f524f0d1f291d91585c8ba847a5e3736f1394de67a1` |
 
 Verify before installing:
 
