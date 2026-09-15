@@ -71,10 +71,21 @@ git commit -m "release: <version>" docs/RELEASE.md apps/web/src/config/site.ts
 #    copy, and that only those two files changed since the build commit.
 python scripts/release_manifest.py --verify
 
-# 6. Tag the publication commit. The release workflow checks out the build commit it names,
-#    builds it again on a clean machine, and fails unless the bytes are the published bytes.
+# 6. The verdict. Every gate above plus artefact identity, signing for the mode, a second build
+#    to compare, the CI run for this commit and the clean-machine log — one word, and
+#    release-readiness.json for anything that reads JSON rather than prose.
+npm run release:reproduce          # two builds from two paths; prints IDENTICAL or the differing bytes
+npm run release:check -- --compare %TEMP%\encastra-reproduce\a --evidence-vm docs/release/vm/<version>/install.log
+
+# 7. Tag the publication commit only on BETA_READY (a pre-release) or RELEASE_READY. The release
+#    workflow checks out the build commit it names, builds it again on a clean machine, and
+#    fails unless the bytes are the published bytes.
 git tag v<version>
 ```
+
+What each of those refuses, and why, is in `docs/release/` — `SIGNING_PIPELINE.md` for the
+three modes (dev, beta, release) and the signing chain, `CLEAN_WINDOWS_VM.md` for the machine
+procedure, `COMMERCIAL_RELEASE_CLOSURE.md` for what is automated and what is still a person's.
 
 `npm run tauri:build` invokes `vite build` first, through Tauri's `beforeBuildCommand`, so there
 is no separate frontend step to forget.

@@ -33,7 +33,9 @@ The gates, in order, all blocking:
 | Secrets, full history | `gitleaks` |
 | The tag names the declared version | compare `v<tag>` with `tauri.conf.json` |
 | The published manifest is consistent | `python scripts/release_manifest.py --verify` |
+| Every artefact is this version's and this commit's, read from the artefact | `python scripts/release_identity.py --check` |
 | The release scripts themselves | `python -m unittest discover -s scripts/tests` |
+| The whole verdict, machine-readable | `python scripts/release_check.py` → `release-readiness.json` |
 
 And after the build, on the Windows runner, the gate that the *bytes* are the published bytes:
 the workflow checks out the build commit the manifest names, builds it, restores the published
@@ -113,6 +115,18 @@ defend against a compromised release.
 **One gotcha, already documented in `docs/RELEASE.md`:** the installed binary's hash differs from
 the raw build output by three bytes, because Tauri patches a bundle-type marker into the
 executable. Only the installer hash is worth comparing.
+
+## Identity: an artefact says which release it is
+
+`scripts/release_identity.py` reads the `ProductVersion` string out of the `VS_VERSIONINFO`
+resource of the executable and of the NSIS installer's stub (Tauri writes both from
+`tauri.conf.json`), and the build stamp out of the executable, and refuses (exit 6) anything
+under `target/` that states another version or another commit — however the file is named and
+whatever its modification time says. That closes ENC-NEW-22 from the inside of the file: a
+previous release's installer renamed to this release's name is still refused. `release_check.py`
+runs it; `release_manifest.py` refuses by name and age (a0c81af); the two together are the
+check. Tested against synthetic images with a decoy key
+(`scripts/tests/test_release_identity.py`), and against the real 0.5.0-beta.1 artefacts.
 
 ## Provenance: the binary names its commit
 
