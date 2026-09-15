@@ -33,3 +33,6 @@ desktop.ini
 *.db-shm
 /tmp/
 /.scratch/
+
+# Python bytecode from scripts/tests
+__pycache__/
