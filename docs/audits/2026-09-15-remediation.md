@@ -289,6 +289,7 @@ Ordered by how much they should worry you.
    fixed on `feat/readiness`). A value is released once its last consumer has finished. What
    remains unbounded is width: many producers feeding one consumer are held at once, each
    under its own cap.
+   *Superseded by `sec/findings-runtime`:* width is now bounded as well, by `MAX_LIVE_VALUE_BYTES`; see `docs/security/LIMITS.md` and the closure report.
 4. **No per-node timeout.** A run has an outer hour; one node that never returns does not. This
    needs a host that can interrupt a running component, which is the WebAssembly host.
 5. **Hard links cannot be detected** (ENC-NEW-06).

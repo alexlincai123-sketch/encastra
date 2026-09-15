@@ -445,7 +445,11 @@ An earlier revision of this table listed all four as things that run. They do no
    moment its last consumer has finished — so a chain of twenty thousand steps holds one
    document, not twenty thousand (measured: 3.9 GB → 67 MB). What is *not* bounded is width:
    twenty producers feeding one consumer are twenty values held at once, each under its own
-   cap. That is the shape a person drew, and there is no number that would be right for it.
+   cap. *Since `sec/findings-runtime`:* width is bounded too. `MAX_LIVE_VALUE_BYTES` (1 GiB)
+   is the sum of every value held at once by the runtime's own accounting; a producer that would
+   cross it fails with `run-memory-budget`, its consumers are skipped, and the run finishes.
+   It is a bound on the accounting, not on the process: component working memory, decoder
+   buffers and the per-edge delivery copies (`TODO(ENC-NEW-05b)`) sit outside it.
 5. **Secrets are declared and never resolved.** No keystore integration exists. The invariant
    that a secret value cannot reach the project file is real and tested; the mechanism that
    would make a secret usable is not built.
