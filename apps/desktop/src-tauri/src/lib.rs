@@ -206,8 +206,12 @@ fn run_graph(
     }
 
     let run_id = format!("run-{}", encastra_core::journal::now_ms());
-    let run_dir = std::env::temp_dir().join("encastra").join(&run_id);
-    let mut broker = Broker::new(run_dir.clone(), allowed)
+    // A guard, so the folder goes whichever way this function leaves — an early `?`, a
+    // panic, or the end. It used to be removed by one line at the bottom, and every `?` above
+    // that line was a folder left under %TEMP% per call, for a caller that could make one input
+    // fail to resolve. A path that does not exist was enough.
+    let scratch = ScratchDir::new(std::env::temp_dir().join("encastra").join(&run_id));
+    let mut broker = Broker::new(scratch.path().to_path_buf(), allowed)
         .map_err(|e| format!("Could not prepare a working folder: {e}"))?;
 
     let seed = seed_for(&mut broker, &inputs)?;
@@ -227,10 +231,34 @@ fn run_graph(
         Err(validation) => RunResult::Invalid { validation },
     };
 
-    // Scratch space belongs to the run. Anything the user wanted to keep was copied into a
-    // folder they allowed, by a component that asked.
-    let _ = std::fs::remove_dir_all(&run_dir);
+    // Scratch space belongs to the run and goes with `scratch`. Anything the user wanted to
+    // keep was copied into a folder they allowed, by a component that asked.
+    drop(scratch);
     Ok(result)
+}
+
+/// A run's scratch folder, removed when this is dropped.
+///
+/// Removal on drop rather than by a line at the end of the function, because a function with
+/// several `?` in it has several ends, and only one of them used to remove anything. The folder
+/// is created by the broker; this only promises that whatever is there when the run is over is
+/// gone afterwards, whether the run ended by returning, by failing, or by unwinding.
+struct ScratchDir(PathBuf);
+
+impl ScratchDir {
+    fn new(path: PathBuf) -> Self {
+        ScratchDir(path)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for ScratchDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// Whether a path names an Encastra project — something whose name ends in `.encastra`.
@@ -1527,6 +1555,44 @@ mod tests {
         // Silent: there is no node for it to be a decision about, so there is nothing to tell
         // the person that they would recognise.
         assert!(refused.is_empty(), "{refused:?}");
+    }
+
+    #[test]
+    fn a_scratch_folder_is_gone_however_the_run_left() {
+        let base = temp_dir("scratch");
+
+        // The ordinary way out.
+        let path = base.join("a");
+        {
+            let scratch = ScratchDir::new(path.clone());
+            std::fs::create_dir_all(scratch.path()).unwrap();
+            std::fs::write(scratch.path().join("out.bin"), b"x").unwrap();
+            assert!(path.exists());
+        }
+        assert!(!path.exists(), "removed when the guard is dropped");
+
+        // The way out that used to leak: an early error. A `?` in run_graph drops the guard
+        // exactly as this block does.
+        let path = base.join("b");
+        fn leaves_early(path: PathBuf) -> Result<(), String> {
+            let scratch = ScratchDir::new(path);
+            std::fs::create_dir_all(scratch.path()).unwrap();
+            Err("an input did not resolve".into())
+        }
+        assert!(leaves_early(path.clone()).is_err());
+        assert!(!path.exists(), "removed on an early return");
+
+        // And the way out nobody plans for.
+        let path = base.join("c");
+        let unwound = std::panic::catch_unwind(|| {
+            let scratch = ScratchDir::new(path.clone());
+            std::fs::create_dir_all(scratch.path()).unwrap();
+            panic!("a component bug");
+        });
+        assert!(unwound.is_err());
+        assert!(!path.exists(), "removed during unwinding");
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

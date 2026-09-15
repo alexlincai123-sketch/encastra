@@ -238,10 +238,27 @@ impl PublicationBundle {
 pub fn has_control_characters(text: &str) -> bool {
     text.chars().any(|c| {
         (c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+            // Bidirectional embeddings, overrides and isolates: they reorder what follows.
             || matches!(c, '\u{202a}'..='\u{202e}')
             || matches!(c, '\u{2066}'..='\u{2069}')
+            // Zero-width characters and joiners: they hide a difference between two names.
             || matches!(c, '\u{200b}'..='\u{200f}')
             || c == '\u{feff}'
+            // The deprecated format characters — inhibit/activate swapping and symmetric
+            // swapping, and the Arabic shaping controls. Deprecated is not the same as inert:
+            // renderers still honour some of them, and a filter that lists U+202E and forgets
+            // U+206A has an exception with a name.
+            || matches!(c, '\u{206a}'..='\u{206f}')
+            // The Arabic letter mark and the Mongolian vowel separator: format characters that
+            // affect layout without being controls by the `is_control` definition.
+            || c == '\u{061c}'
+            || c == '\u{180e}'
+            // Line and paragraph separators: not controls, but a renderer breaks the line on
+            // them, so a title can carry a second line nobody sees in a list.
+            || c == '\u{2028}'
+            || c == '\u{2029}'
+            // Interlinear annotation anchors: invisible structure, honoured by some renderers.
+            || matches!(c, '\u{fff9}'..='\u{fffb}')
     })
 }
 
@@ -356,6 +373,49 @@ mod tests {
         // The control. Every refusal above has to be about traversal, and that argument only
         // holds if the shape a real publisher uses still goes through.
         assert!(prepare(draft(), &passed()).is_ok());
+    }
+
+    #[test]
+    fn the_runtime_refuses_every_code_point_the_shared_table_says_it_must() {
+        // One table, replayed here and in apps/desktop/test/safe-text.test.ts. The two lists
+        // this guards were maintained by hand on each side and had drifted: this one did not
+        // know U+206A, U+061C, U+180E, U+2028 or U+FFF9, the editor's did not know U+206A or
+        // U+061C. A character that one side strips and the other accepts is a name that reads
+        // one way in the prompt and another in the document.
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/protocol/data/hostile-text-cases.json");
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!(
+                "the shared table must be readable at {}: {e}",
+                path.display()
+            )
+        });
+        let table: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
+
+        let refused = table["refused"].as_array().expect("a refused list");
+        let allowed = table["allowed"].as_array().expect("an allowed list");
+        assert!(
+            refused.len() >= 15 && allowed.len() >= 5,
+            "the table should be worth replaying"
+        );
+
+        for case in refused {
+            let sample = case["sample"].as_str().unwrap();
+            let codepoint = case["codepoint"].as_str().unwrap();
+            assert!(
+                has_control_characters(sample),
+                "{codepoint} ({}) must be refused",
+                case["why"].as_str().unwrap_or("")
+            );
+        }
+        for case in allowed {
+            let sample = case["sample"].as_str().unwrap();
+            assert!(
+                !has_control_characters(sample),
+                "{sample:?} must be allowed: {}",
+                case["why"].as_str().unwrap_or("")
+            );
+        }
     }
 
     #[test]

@@ -398,6 +398,8 @@ const de: Messages = {
         'Die Projektdatei ist eine Verknüpfung auf eine andere Datei, keine Datei. Encastra installiert, was im gewählten Ordner liegt, und nichts außerhalb davon.',
       unexpectedEntries:
         'Ein Veröffentlichungsordner enthält ein Dokument und ein Projekt, sonst nichts. Dieser enthält außerdem {names}. Encastra übernimmt keinen Ordner, für den es nicht geradestehen kann.',
+      tooManyEntries:
+        'Ein Veröffentlichungsordner enthält ein Dokument und ein Projekt, sonst nichts. Dieser enthält mehr als {max} Einträge, und das ist keine Veröffentlichung, was auch immer sie sind.',
       projectTooLarge:
         'Das Projekt ist etwa {size} kB groß, und dieser Build installiert höchstens {max} kB.',
       checksumMismatch:

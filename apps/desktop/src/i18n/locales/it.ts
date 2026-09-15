@@ -395,6 +395,8 @@ const it: Messages = {
         'Il file del progetto è un collegamento a un altro file, non un file. Encastra installa quello che c’è nella cartella che hai scelto e niente fuori da lì.',
       unexpectedEntries:
         'Una cartella di pubblicazione contiene un documento e un progetto, e niente altro. Questa contiene anche {names}. Encastra non riceve una cartella di cui non può rendere conto.',
+      tooManyEntries:
+        "Una cartella di pubblicazione contiene un documento e un progetto, e nient'altro. Questa ne contiene più di {max}, e non è una pubblicazione qualunque cosa siano.",
       projectTooLarge:
         'Il progetto occupa circa {size} kB e questa versione ne installa al massimo {max} kB.',
       checksumMismatch:

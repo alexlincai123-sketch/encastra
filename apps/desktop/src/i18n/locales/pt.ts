@@ -394,6 +394,8 @@ const pt: Messages = {
         'O ficheiro do projeto é uma ligação para outro ficheiro, não um ficheiro. O Encastra instala o que está na pasta que escolheu e nada fora dela.',
       unexpectedEntries:
         'Uma pasta de publicação tem um documento e um projeto, e mais nada. Esta também tem {names}. O Encastra não recebe uma pasta de que não consiga dar conta.',
+      tooManyEntries:
+        'Uma pasta de publicação tem um documento e um projeto, e nada mais. Esta tem mais de {max} entradas, e isso não é uma publicação sejam o que forem.',
       projectTooLarge:
         'O projeto ocupa cerca de {size} kB e esta versão instala no máximo {max} kB.',
       checksumMismatch:

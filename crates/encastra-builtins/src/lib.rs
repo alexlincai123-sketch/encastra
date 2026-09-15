@@ -45,6 +45,9 @@ mod triggers;
 /// that test existed nothing checked that they did.
 pub use net::permission_authority;
 
+/// The ceilings the CSV reader applies, for the test that drives it end to end.
+pub use data::{MAX_CSV_CELLS, MAX_CSV_ROWS};
+
 /// Everything this build offers: the manifests, the code behind them, and the triggers.
 pub struct Installed {
     pub registry: InMemoryRegistry,

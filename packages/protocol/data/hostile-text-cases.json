@@ -1,0 +1,120 @@
+{
+  "purpose": "Code points that make text lie about itself, replayed through both implementations that guard against them: the runtime refuses them in a publication document (crates/encastra-publish/src/bundle.rs has_control_characters) and the editor strips them from a permission prompt (apps/desktop/src/safe-text.ts forDisplay). The two lists were maintained separately and had drifted \u2014 one knew about U+FFF9, the other about nothing past U+2069. Whatever is listed as refused here must be refused by the runtime and removed by the editor; whatever is listed as allowed must pass both untouched. One deliberate difference: the allowed list describes text in a document, and the editor's prompt additionally removes newline, carriage return and tab, because a folder path with a line break in it reads as two things. The editor's test encodes exactly that difference and nothing wider.",
+  "refused": [
+    {
+      "codepoint": "U+202E",
+      "sample": "Thumbnails\u202egnp.exe",
+      "why": "right-to-left override: reorders what follows"
+    },
+    {
+      "codepoint": "U+202A",
+      "sample": "a\u202ab",
+      "why": "left-to-right embedding"
+    },
+    {
+      "codepoint": "U+202D",
+      "sample": "a\u202db",
+      "why": "left-to-right override"
+    },
+    {
+      "codepoint": "U+2066",
+      "sample": "a\u2066b\u2069c",
+      "why": "isolates"
+    },
+    {
+      "codepoint": "U+200B",
+      "sample": "exam\u200bple",
+      "why": "zero-width space: two names look identical"
+    },
+    {
+      "codepoint": "U+200D",
+      "sample": "a\u200db",
+      "why": "zero-width joiner"
+    },
+    {
+      "codepoint": "U+FEFF",
+      "sample": "\ufeffexample",
+      "why": "byte-order mark used as a zero-width no-break space"
+    },
+    {
+      "codepoint": "U+206A",
+      "sample": "a\u206ab",
+      "why": "inhibit symmetric swapping: deprecated, still honoured by some renderers"
+    },
+    {
+      "codepoint": "U+206E",
+      "sample": "a\u206eb",
+      "why": "national digit shapes"
+    },
+    {
+      "codepoint": "U+061C",
+      "sample": "a\u061cb",
+      "why": "Arabic letter mark: a bidi format character that is not a control"
+    },
+    {
+      "codepoint": "U+180E",
+      "sample": "a\u180eb",
+      "why": "Mongolian vowel separator: formerly a space, now a format character"
+    },
+    {
+      "codepoint": "U+2028",
+      "sample": "first\u2028second",
+      "why": "line separator: a second line nobody sees in a list"
+    },
+    {
+      "codepoint": "U+2029",
+      "sample": "first\u2029second",
+      "why": "paragraph separator"
+    },
+    {
+      "codepoint": "U+FFF9",
+      "sample": "a\ufff9b\ufffbc",
+      "why": "interlinear annotation anchors"
+    },
+    {
+      "codepoint": "U+001B",
+      "sample": "First release.\u001b[2J",
+      "why": "escape: a terminal control sequence"
+    },
+    {
+      "codepoint": "U+0000",
+      "sample": "a\u0000b",
+      "why": "nul"
+    },
+    {
+      "codepoint": "U+0085",
+      "sample": "a\u0085b",
+      "why": "next line, a C1 control"
+    }
+  ],
+  "allowed": [
+    {
+      "sample": "Thumbnails",
+      "why": "plain ASCII"
+    },
+    {
+      "sample": "Miniaturas \u2014 v\u00e9ase README",
+      "why": "accented letters and an em dash are text, not structure"
+    },
+    {
+      "sample": "First release.\n\nSecond paragraph.",
+      "why": "newlines are the ordinary shape of a changelog"
+    },
+    {
+      "sample": "a\tb\r\nc",
+      "why": "tab and carriage return are kept with newline"
+    },
+    {
+      "sample": "\u0645\u0631\u062d\u0628\u0627",
+      "why": "right-to-left script is not a right-to-left override"
+    },
+    {
+      "sample": "\u65e5\u672c\u8a9e",
+      "why": "ideographs"
+    },
+    {
+      "sample": "caf\u00e9 \u2013 2\u00d72",
+      "why": "typographic punctuation"
+    }
+  ]
+}

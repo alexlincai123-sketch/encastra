@@ -397,6 +397,8 @@ const fr: Messages = {
         'Le fichier du projet est un lien vers un autre fichier, pas un fichier. Encastra installe ce qui se trouve dans le dossier que vous avez choisi, et rien en dehors.',
       unexpectedEntries:
         'Un dossier de publication contient un document et un projet, et rien d’autre. Celui-ci contient aussi {names}. Encastra ne récupère pas un dossier dont il ne peut rendre compte.',
+      tooManyEntries:
+        "Un dossier de publication contient un document et un projet, et rien d'autre. Celui-ci contient plus de {max} entrées, ce qui n'est pas une publication, quelles qu'elles soient.",
       projectTooLarge:
         'Le projet fait environ {size} ko, et cette version en installe au plus {max} ko.',
       checksumMismatch:

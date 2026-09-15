@@ -410,6 +410,8 @@ const en: Messages = {
         'The project file is a link to another file rather than a file. Encastra installs what is in the folder you chose, and nothing outside it.',
       unexpectedEntries:
         'A publication folder holds a document and a project, and nothing else. This one also holds {names}. Encastra will not take in a folder it cannot account for.',
+      tooManyEntries:
+        'A publication folder holds a document and a project, and nothing else. This one holds more than {max} entries, which is not a publication whatever they are.',
       projectTooLarge: 'The project is about {size} kB, and this build installs at most {max} kB.',
       checksumMismatch:
         'The project file is not the one this publication describes. Either the document describes a different file, or the file changed on the way here. Ask for it again.',

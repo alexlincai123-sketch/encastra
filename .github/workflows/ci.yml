@@ -128,6 +128,21 @@ jobs:
             exit 1
           fi
 
+      # The receiving side of a publication has the same shape of test: a file that is a link
+      # where the project or the document should be must be refused, and the fixture needs a
+      # symlink the platform will create. Linux will; it must not skip here.
+      - name: The publication link-refusal test must actually run, not skip
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -o pipefail
+          cargo test -p encastra-publish --test import_publication -- --nocapture --exact             a_link_where_a_file_should_be_is_never_followed             2>&1 | tee import-link-test.log
+          if grep -q 'skipped' import-link-test.log; then
+            echo "::error::The publication link-refusal test skipped on Linux, so nothing
+            verifies that a linked project or document inside a publication folder is refused
+            rather than followed."
+            exit 1
+          fi
+
       # The mirror of the above. The startup-folder refusal is about a Windows path, and the test
       # returns early where there is no profile to find it in — so Windows is the only job that
       # can prove that control works.

@@ -72,6 +72,36 @@ interruption in the WebAssembly host — rather than a flag nobody is checking.
 | `MAX_PIXELS` | 100 MP | A 30 KB PNG can declare 60 000 × 60 000 and ask the decoder for 14 GB. The header is checked before a pixel is read. |
 | decoder `max_alloc` | 512 MB | Belt and braces: the dimension check catches a declared size, this catches anything that gets past it. |
 
+## Data components
+
+`crates/encastra-builtins/src/data.rs`
+
+| Limit | Value | Why |
+|---|---|---|
+| `MAX_CSV_ROWS` | 1 000 000 | Every cell becomes a heap string inside a map inside an array — fifty to a hundred and fifty bytes of structure per byte of input for a file of one-character cells. The read ceiling bounds the text; this bounds what the text becomes. Refused rather than truncated: a table missing its last rows is a different table. |
+| `MAX_CSV_CELLS` | 10 000 000 | Rows alone would let a file of ten million one-byte columns through. |
+
+## The publication importer
+
+`crates/encastra-publish/src/import.rs`
+
+| Limit | Value | Why |
+|---|---|---|
+| `MAX_FOLDER_ENTRIES` | 64 | A publication is two files plus what a file manager leaves behind. A folder of a million junk files was already refused — after being listed and stat'ed to the end and its names collected into the error. Refused at the sixty-fifth entry, before it is stat'ed. |
+| `MAX_DOCUMENT_BYTES` | 256 KB | `publication.json`, checked by metadata and again by a read that stops one byte past the ceiling, because a file can be swapped between the two. |
+| `MAX_PUBLICATION_BYTES` | 64 MB | The `.encastra` file inside a publication. Same double check. |
+| Text fields | 120 / 2 000 / 8 000 chars | Title, summary, changelog. And no bidirectional, zero-width or control character in any free-text field — the list is `packages/protocol/data/hostile-text-cases.json`, replayed by both this crate and the editor. |
+
+## Identifiers
+
+`crates/encastra-protocol/src/manifest.rs`
+
+One grammar for component ids and listing ids: `[a-z][a-z0-9-]*` segments joined by dots, at
+least two, at most 128 characters — and the first segment may not be a name Windows resolves to a
+device (`con`, `nul`, `com1`…), because a listing id becomes a folder name under `imports/`. A
+listing id is further capped at 200 characters by `is_listing_id`, which is that grammar plus
+the ceiling and nothing else.
+
 ## Network
 
 `crates/encastra-builtins/src/net.rs`
