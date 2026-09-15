@@ -1,7 +1,7 @@
 {
   "name": "encastra",
   "private": true,
-  "version": "0.5.0-rc.2",
+  "version": "0.5.0-rc.3",
   "description": "A local-first runtime that executes a typed graph of sandboxed components.",
   "license": "UNLICENSED",
   "type": "module",

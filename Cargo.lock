@@ -849,7 +849,7 @@ checksum = "4ef6b89e5b37196644d8796de5268852ff179b44e96276cf4290264843743bb7"
 
 [[package]]
 name = "encastra-builtins"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 dependencies = [
  "arboard",
  "csv",
@@ -862,7 +862,7 @@ dependencies = [
 
 [[package]]
 name = "encastra-cli"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 dependencies = [
  "encastra-builtins",
  "encastra-core",
@@ -872,7 +872,7 @@ dependencies = [
 
 [[package]]
 name = "encastra-core"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 dependencies = [
  "encastra-protocol",
  "image",
@@ -883,7 +883,7 @@ dependencies = [
 
 [[package]]
 name = "encastra-desktop"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 dependencies = [
  "encastra-builtins",
  "encastra-core",
@@ -901,7 +901,7 @@ dependencies = [
 
 [[package]]
 name = "encastra-library"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 dependencies = [
  "encastra-core",
  "encastra-project",
@@ -914,7 +914,7 @@ dependencies = [
 
 [[package]]
 name = "encastra-project"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 dependencies = [
  "encastra-core",
  "encastra-protocol",
@@ -927,7 +927,7 @@ dependencies = [
 
 [[package]]
 name = "encastra-protocol"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 dependencies = [
  "semver",
  "serde",
@@ -938,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "encastra-publish"
-version = "0.5.0-rc.2"
+version = "0.5.0-rc.3"
 dependencies = [
  "encastra-core",
  "encastra-project",
