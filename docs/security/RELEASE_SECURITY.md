@@ -191,9 +191,17 @@ the list cannot go stale silently.
 
 ## Clean-install verification
 
-**Status: NOT EXECUTED.** The 0.4.0-beta.1 installer was produced and its signing state verified;
-it has not been installed on a clean machine from this branch. The procedure below exists so that
-the next person does it the same way twice, not because it has been run.
+**Status: NOT EXECUTED on a clean VM. Executed in part on the development machine, 2026-09-15,
+for the 0.5.0-beta.1 build of `c975bd4`** — see
+`docs/audits/2026-09-15-final-release-readiness.md` for the run. What that run covered, by step
+number below: 1 (hash and `NotSigned`), 3 (silent install, exit 0, per-user directory, nothing
+under `HKLM`), 4 (ACL recorded), 5 (the window opens; the network and file-creation checks were
+**not** made), 6 in part (the Choose button opens the native chooser, Cancel and a folder with
+spaces and non-ASCII characters both behave; a workflow was **not** run), 7, 8 and 9 **not**
+executed. Two scripts now do the executable part the same way every time:
+`scripts/verify/install_check.ps1` (install and inspect) and `scripts/verify/gui_chooser.ps1`
+(the chooser, through UI Automation against the real window). The procedure below is still the
+whole of what a release needs; the scripts are the part of it that no longer depends on a hand.
 
 On a Windows VM with no Encastra history, no Rust, no Node, and a fresh user profile:
 
