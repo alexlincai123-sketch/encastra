@@ -46,6 +46,13 @@ export PATH="$HOME/.cargo/bin:$PATH"   # cargo no está en PATH por defecto en e
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+# Artefactos generados que van commiteados: CI falla si están desfasados (el primer run real
+# de CI en Linux cayó aquí porque el corpus llevaba tres commits sin regenerar).
+UPDATE_MATRIX=1 npx vitest run --silent && git diff --exit-code -- packages/protocol/data/compat-matrix.json
+UPDATE_FUZZ_CORPUS=1 cargo test -p encastra-project --test fuzz_smoke --quiet && git diff --exit-code -- fuzz/corpus
+python scripts/third_party.py --check
+python scripts/version.py --check
+python -m unittest discover -s scripts/tests
 ```
 
 Todo tiene que quedar en verde antes de commitear. No usar `npm run tauri:build | tail` ni

@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      macos:
+        description: >-
+          Also run the Rust job on macOS. Nothing ships for macOS and a macOS minute is billed
+          at ten Linux minutes on a private repository, so it is opt-in rather than in every run.
+        type: boolean
+        default: false
 
 # A new push to a branch makes the previous run irrelevant.
 concurrency:
@@ -23,8 +30,10 @@ jobs:
     name: TypeScript — lint, types, tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
@@ -63,6 +72,12 @@ jobs:
         # against a hand-built PE image, on the platform where the release gates run.
         run: python3 -m unittest discover -s scripts/tests -v
 
+      - name: The third-party inventory must be committed up to date
+        # docs/THIRD-PARTY.md is generated from the dependency tree. A dependency bump that is
+        # not reflected there is a licence obligation nobody has read. The runner image ships a
+        # cargo; only `cargo metadata` is used, nothing is compiled.
+        run: python3 scripts/third_party.py --check
+
 
   rust:
     name: Rust — ${{ matrix.os }}
@@ -70,9 +85,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # Linux runs the symlink suites Windows skips; Windows is the platform that ships. macOS
+        # is opt-in through the dispatch input above.
+        os: ${{ fromJSON(inputs.macos && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
       - name: Tauri's Linux dependencies
         # The workspace contains the desktop application, which links against the system
@@ -88,12 +107,12 @@ jobs:
             libxdo-dev \
             patchelf
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-03
         with:
           # Kept in step with rust-toolchain.toml; the pin is what makes builds reproducible.
           toolchain: '1.98.1'
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Format
         run: cargo fmt --all --check
@@ -171,8 +190,10 @@ jobs:
     name: Supply chain — advisories and licences
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
@@ -180,10 +201,10 @@ jobs:
       - name: npm advisories
         # An advisory fails the build. It does not open a ticket nobody reads.
         run: npm audit --audit-level=high
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-03
         with:
           toolchain: '1.98.1'
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check advisories bans licenses sources
 
@@ -191,9 +212,10 @@ jobs:
     name: Secret scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
