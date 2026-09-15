@@ -36,3 +36,6 @@ desktop.ini
 
 # Python bytecode from scripts/tests
 __pycache__/
+
+# Written by scripts/release_check.py; the evidence is the run, not the file
+release-readiness.json
