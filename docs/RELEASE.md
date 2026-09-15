@@ -99,9 +99,11 @@ Two builds of the build commit with the pinned toolchain (`rust-toolchain.toml`,
 `package-lock.json`) produce byte-identical `encastra-desktop.exe` and byte-identical installers.
 The MSVC linker is passed `/Brepro` from `build.rs`, which replaces the image timestamps and the
 PDB GUID — the only bytes that used to differ — with hashes of the content, and the NSIS
-installer carries no clock of its own. `scripts/pe_diff.py A.exe B.exe` names every differing
-byte by PE structure if two builds ever disagree; an independent rebuild is compared by hash, and
-by that tool when the hash differs.
+installer is told not to record the executable's modification time
+(`apps/desktop/src-tauri/nsis/hooks.nsh`, `SetDateSave off`), which was the one thing that made
+two installers of identical executables differ. `scripts/pe_diff.py A.exe B.exe` names every
+differing byte by PE structure if two builds ever disagree; an independent rebuild is compared by
+hash, and by that tool when the hash differs.
 
 ### What comes out
 

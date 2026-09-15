@@ -178,10 +178,11 @@ async fn choose_folder(
         .map_err(|_| "The runtime is busy.".to_owned())?
         .insert(resolved.clone());
 
-    // The resolved path is what is returned, so the string the editor shows and later sends back
-    // as a grant is the same string this side recorded. Returning what the chooser gave and
-    // recording something else would put the comparison back where it started.
-    Ok(Some(resolved.to_string_lossy().into_owned()))
+    // The resolved path is what is returned — without its verbatim `\\?\` prefix — so the string
+    // the editor shows and later sends back as a grant resolves to exactly what this side
+    // recorded. Returning what the chooser gave and recording something else would put the
+    // comparison back where it started.
+    Ok(Some(for_display(&resolved)))
 }
 
 #[tauri::command]
@@ -296,6 +297,33 @@ fn is_project_path(path: &Path) -> bool {
 }
 
 const NOT_A_PROJECT: &str = "That is not an Encastra project. A project's name ends in .encastra.";
+
+/// A resolved path as a person should read it.
+///
+/// `std::fs::canonicalize` on Windows returns the verbatim form — `\\?\C:\Users\...`, or
+/// `\\?\UNC\server\share\...` — which is the right thing to compare and the wrong thing to show:
+/// driving the real chooser through Settings put `\\?\C:\Users\...` into the folder field, and
+/// that string then travels into the consent prompt and the saved preferences. The prefix
+/// carries no information a person needs (it tells the Win32 layer to skip its own path
+/// parsing), so it is removed for display and the plain form goes back through
+/// `resolve_grant_directory` on the way in, where canonicalising it yields the verbatim form
+/// again. Anything that is not one of the two verbatim shapes is returned as it is.
+fn for_display(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{unc}");
+    }
+    if let Some(plain) = text.strip_prefix(r"\\?\") {
+        // Only a drive path is safe to strip: `\\?\Volume{...}\` has no non-verbatim spelling.
+        let mut chars = plain.chars();
+        let drive =
+            chars.next().is_some_and(|c| c.is_ascii_alphabetic()) && chars.next() == Some(':');
+        if drive {
+            return plain.to_owned();
+        }
+    }
+    text.into_owned()
+}
 
 /// The one place a project path is turned from a string into something to act on.
 fn project_path(path: &str) -> Result<PathBuf, String> {
@@ -1722,6 +1750,42 @@ mod tests {
         )));
         assert!(!is_project_path(Path::new("C:/work/report")));
         assert!(!is_project_path(Path::new("C:/work/report.encastra.exe")));
+    }
+
+    #[test]
+    fn a_verbatim_path_is_shown_without_its_prefix() {
+        assert_eq!(
+            for_display(Path::new(r"\\?\C:\Users\a b\ñ 日本語")),
+            r"C:\Users\a b\ñ 日本語"
+        );
+        assert_eq!(
+            for_display(Path::new(r"\\?\UNC\server\share\x")),
+            r"\\server\share\x"
+        );
+        // Shapes with no plain spelling, and paths that were never verbatim, are left alone.
+        assert_eq!(
+            for_display(Path::new(r"\\?\Volume{1234}\x")),
+            r"\\?\Volume{1234}\x"
+        );
+        assert_eq!(for_display(Path::new(r"C:\Users\a")), r"C:\Users\a");
+        assert_eq!(for_display(Path::new("/home/alice")), "/home/alice");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn what_the_chooser_returns_resolves_back_to_what_was_recorded() {
+        // The round trip the grant depends on: the display form sent back by the editor must
+        // canonicalise to the same PathBuf the chooser recorded.
+        let dir = temp_dir("chooser ñ 日本語");
+        std::fs::create_dir_all(&dir).unwrap();
+        let recorded = resolve_grant_directory(&dir).unwrap();
+        let shown = for_display(&recorded);
+        assert!(!shown.starts_with(r"\\?\"), "{shown}");
+        assert_eq!(
+            resolve_grant_directory(Path::new(&shown)).unwrap(),
+            recorded
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

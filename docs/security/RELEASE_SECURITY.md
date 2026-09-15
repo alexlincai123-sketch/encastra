@@ -138,6 +138,14 @@ image contents instead of the clock. Passed as a link argument from the build sc
 through `RUSTFLAGS` or `.cargo/config.toml`, because an environment variable set by CI overrides
 both silently and the release build is the one place the flag must not be lost.
 
+The installer had a second clock: NSIS stores each embedded file's last-write time so it can
+restore it on install, and that time is when the linker finished. With `/Brepro` alone the two
+executables were identical and the two installers still differed from the first byte of the
+compressed data. `apps/desktop/src-tauri/nsis/hooks.nsh` (wired through
+`bundle.windows.nsis.installerHooks`) sets `SetDateSave off` at the top of the install section,
+before the one `File` command that embeds the executable. `SOURCE_DATE_EPOCH` is not needed and
+not used.
+
 What "reproducible" means here, exactly: the same build commit, `rust-toolchain.toml`'s pinned
 `1.98.1` for `x86_64-pc-windows-msvc`, the same `package-lock.json` and `Cargo.lock`, built from
 any directory, produce a byte-identical `encastra-desktop.exe` and a byte-identical NSIS
