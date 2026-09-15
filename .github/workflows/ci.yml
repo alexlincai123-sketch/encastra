@@ -72,6 +72,12 @@ jobs:
         # against a hand-built PE image, on the platform where the release gates run.
         run: python3 -m unittest discover -s scripts/tests -v
 
+      - name: The third-party inventory must be committed up to date
+        # docs/THIRD-PARTY.md is generated from the dependency tree. A dependency bump that is
+        # not reflected there is a licence obligation nobody has read. The runner image ships a
+        # cargo; only `cargo metadata` is used, nothing is compiled.
+        run: python3 scripts/third_party.py --check
+
 
   rust:
     name: Rust — ${{ matrix.os }}

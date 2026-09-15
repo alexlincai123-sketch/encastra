@@ -260,3 +260,49 @@ jobs:
             docs/RELEASE.md
           if-no-files-found: error
           retention-days: 30
+
+  install:
+    name: Install on a clean Windows runner
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: encastra-installer
+          path: artefact
+
+      # A hosted runner is a fresh Windows image that has never seen Encastra: the nearest thing
+      # to "a clean VM" this repository can reach on its own. `install_check.ps1` installs
+      # silently per-user, checks the version, the build stamp, the HKCU uninstall entry, that
+      # nothing landed under HKLM, the shortcut, the directory ACL, and that the installed copy
+      # launches and stays up. It is the same script a person runs on a real machine; what it
+      # cannot do here is click through the native folder chooser (scripts/verify/gui_chooser.ps1
+      # needs a desktop session), and this job does not claim to.
+      - name: Silent install and first launch
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $installer = Get-ChildItem artefact -Recurse -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw "no installer in the artefact" }
+          "installer: $($installer.FullName)"
+          $log = & pwsh -NoProfile -File scripts/verify/install_check.ps1 -Installer $installer.FullName -ExpectedVersion $version
+          $log
+          $fails = @($log | Where-Object { $_ -like 'FAIL*' })
+          if ($fails.Count -gt 0) { throw "$($fails.Count) check(s) failed" }
+
+      - name: Uninstall, and nothing is left
+        shell: pwsh
+        run: |
+          Get-Process encastra-desktop -ErrorAction SilentlyContinue | Stop-Process -Force
+          $dir = Join-Path $env:LOCALAPPDATA 'Encastra'
+          $p = Start-Process -FilePath (Join-Path $dir 'uninstall.exe') -ArgumentList '/S' -PassThru -Wait
+          "uninstall exit $($p.ExitCode)"
+          Start-Sleep 3
+          $entry = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_.DisplayName -eq 'Encastra' }
+          if ($entry) { throw "uninstall entry still present" }
+          if (Test-Path (Join-Path $dir 'encastra-desktop.exe')) { throw "binary still present after uninstall" }
+          "clean"
