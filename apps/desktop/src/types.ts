@@ -199,6 +199,8 @@ export interface OpenProject {
 
 export interface About {
   version: string;
+  /** Full commit hash the binary was built from; `<hash>-dirty` or `unknown` when it cannot say. */
+  buildCommit: string;
   runtime: string;
   protocolSchema: number;
   projectSchema: number;

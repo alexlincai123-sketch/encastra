@@ -57,6 +57,12 @@ jobs:
         # release whose installer, binary and published hash describe different builds.
         run: python3 scripts/version.py --check
 
+      - name: The release scripts, against a synthetic executable
+        # release_manifest.py refuses a binary no commit explains and an unsigned production
+        # version; pe_diff.py tells a code change from a linker timestamp. Both are tested here
+        # against a hand-built PE image, on the platform where the release gates run.
+        run: python3 -m unittest discover -s scripts/tests -v
+
 
   rust:
     name: Rust — ${{ matrix.os }}

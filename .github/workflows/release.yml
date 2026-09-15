@@ -53,6 +53,27 @@ jobs:
           toolchain: '1.98.1'
           components: rustfmt, clippy
 
+      # A tag is a claim about a version. `v0.5.0-beta.1` on a tree whose tauri.conf.json says
+      # 0.5.0-beta.2 produces an installer named one thing and a release named another.
+      - name: The tag names the version the tree declares
+        if: github.ref_type == 'tag'
+        run: |
+          declared=$(python3 -c "import json;print(json.load(open('apps/desktop/src-tauri/tauri.conf.json'))['version'])")
+          if [ "${GITHUB_REF_NAME#v}" != "$declared" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} but the tree declares ${declared}"
+            exit 1
+          fi
+
+      # The manifest on this commit must be internally consistent before anything is built from
+      # it: the build commit it names exists and is an ancestor, only publication files changed
+      # since, and the website's copy of the hashes agrees. Artefacts are not present yet; the
+      # hashes themselves are checked after the build below.
+      - name: The published manifest is consistent with the history
+        run: python3 scripts/release_manifest.py --verify
+
+      - name: The release scripts, against a synthetic executable
+        run: python3 -m unittest discover -s scripts/tests -v
+
       - name: Tauri's Linux dependencies
         run: |
           sudo apt-get update
@@ -134,7 +155,9 @@ jobs:
       #
       # The .pfx never touches the repository and never reaches a log: it arrives base64 in a
       # secret, is written to a temporary file outside the working directory, imported, and the
-      # file is removed. The thumbprint goes into tauri.conf.json at build time, not in git.
+      # file is removed. The thumbprint goes to Tauri as a `--config` overlay file outside the
+      # tree, never into tauri.conf.json: editing a tracked file would make the build "dirty"
+      # in the binary's own eyes and the manifest would refuse to describe it.
       - name: Import the code-signing certificate
         id: signing
         if: env.HAS_CERTIFICATE == 'true'
@@ -149,34 +172,76 @@ jobs:
           $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
           Remove-Item $pfx -Force
           # The thumbprint identifies the certificate in the store. It is not a secret, but it is
-          # also not committed: it is written into the config for this build only.
-          $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
-          $config.bundle.windows | Add-Member -Force -NotePropertyName certificateThumbprint -NotePropertyValue $cert.Thumbprint
-          $config | ConvertTo-Json -Depth 32 | Set-Content apps/desktop/src-tauri/tauri.conf.json -Encoding utf8
+          # also not committed: it goes into an overlay merged over tauri.conf.json for this build.
+          $overlay = Join-Path $env:RUNNER_TEMP 'signing.json'
+          @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint } } } |
+            ConvertTo-Json -Depth 8 | Set-Content $overlay -Encoding utf8
+          "TAURI_CONFIG_OVERLAY=$overlay" | Out-File -Append -FilePath $env:GITHUB_ENV
           Write-Output "A certificate was imported; this build will be signed."
 
-      - name: Build
-        run: npm run tauri:build
-
-      # The gate. `--require-signature` exits non-zero unless every artefact carries a valid
-      # Authenticode signature, and treats "this platform cannot check" as a refusal rather than
-      # as a pass. Publishing unsigned takes the dispatch input, which is recorded in the
-      # manifest the build produces.
-      - name: Hash the artefacts, and refuse an unsigned release
+      # Built from the commit the published manifest names, which is the commit whose bytes it
+      # describes — not from the tag, which sits on the publication commit one after it. The
+      # `--verify` in the gates job already proved the two differ only in publication files.
+      - name: Check out the build commit the manifest names
         shell: bash
         run: |
-          if [ "${{ inputs.allow_unsigned }}" = "true" ]; then
-            echo "::warning::Publishing UNSIGNED, as this run explicitly requested. Whoever
-            receives this installer cannot tell it from a tampered one."
-            python scripts/release_manifest.py --allow-unsigned
+          build=$(python scripts/release_manifest.py --build-commit)
+          echo "build commit $build (tag/ref commit ${{ github.sha }})"
+          git -c advice.detachedHead=false checkout "$build"
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ -n "$TAURI_CONFIG_OVERLAY" ]; then
+            npm run tauri:build -- --config "$TAURI_CONFIG_OVERLAY"
           else
-            python scripts/release_manifest.py --require-signature
+            npm run tauri:build
           fi
 
-      - name: Restore the config the certificate step edited
-        if: always()
+      # The manifest that was published, put back beside the artefacts this machine just built.
+      # After the build, not before: the build script stamps the binary `-dirty` if a tracked
+      # file differs from the commit, and the tree at the build commit carries the previous
+      # manifest.
+      - name: Restore the published manifest and website record
         shell: bash
-        run: git checkout -- apps/desktop/src-tauri/tauri.conf.json || true
+        run: |
+          git show "${{ github.sha }}:docs/RELEASE.md" > docs/RELEASE.md
+          git show "${{ github.sha }}:apps/web/src/config/site.ts" > apps/web/src/config/site.ts
+
+      # An independent machine built the build commit with the pinned toolchain. Unsigned, its
+      # bytes must be the published bytes — that is what "the installer matches the final code"
+      # means, and it is checked here rather than assumed. A signed build differs from the
+      # published unsigned hashes by its signature, so for it the manifest is regenerated from
+      # the signed artefacts and uploaded, and `--require-signature` is the gate.
+      - name: The build reproduces the published hashes
+        if: env.HAS_CERTIFICATE != 'true'
+        shell: bash
+        run: python scripts/release_manifest.py --verify
+
+      - name: A signed build regenerates the manifest and must verify as signed
+        if: env.HAS_CERTIFICATE == 'true'
+        shell: bash
+        run: python scripts/release_manifest.py --require-signature
+
+      # `--allow-unsigned` is what a person passes locally to publish a pre-release unsigned; it
+      # refuses any version that is not a pre-release, with no override. The dispatch input
+      # exists so that an unsigned run is a recorded decision; it does not weaken that guard.
+      - name: An unsigned release is a pre-release, published on purpose
+        if: env.HAS_CERTIFICATE != 'true'
+        shell: bash
+        run: |
+          if [ "${{ inputs.allow_unsigned }}" != "true" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "::error::This tree has no certificate. Publishing unsigned needs the allow_unsigned input."
+            exit 1
+          fi
+          echo "::warning::These artefacts are UNSIGNED. Whoever receives this installer cannot tell it from a tampered one."
+          python - <<'PY'
+          import json, re, sys
+          version = json.load(open("apps/desktop/src-tauri/tauri.conf.json"))["version"]
+          if not re.match(r"^\d+\.\d+\.\d+-", version):
+              print(f"::error::{version} is not a pre-release and there is no certificate; a production release is signed or it does not happen.")
+              sys.exit(1)
+          PY
 
       - uses: actions/upload-artifact@v4
         with:

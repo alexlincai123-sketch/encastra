@@ -34,7 +34,10 @@
     "longDescription": "Encastra runs a typed graph of sandboxed components on your machine.",
     "windows": {
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "installerHooks": "nsis/hooks.nsh"
+      }
     }
   }
 }

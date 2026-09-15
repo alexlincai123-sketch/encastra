@@ -376,6 +376,7 @@ class PreviewIpc implements Ipc {
     // The preview knows what it is, and says so rather than inventing a build.
     return {
       version: 'preview',
+      buildCommit: 'unknown',
       runtime: 'not attached',
       protocolSchema: 1,
       projectSchema: 1,
