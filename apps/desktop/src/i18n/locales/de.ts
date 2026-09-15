@@ -21,6 +21,7 @@ const de: Messages = {
     items: {
       home: 'Start',
       builder: 'Builder',
+      library: 'Bibliothek',
       components: 'Komponenten',
       security: 'Sicherheit',
       settings: 'Einstellungen',
@@ -41,6 +42,10 @@ const de: Messages = {
         title: 'Öffnen',
         detailReady: 'Eine zuvor gespeicherte .encastra-Datei',
         detailUnavailable: 'Erfordert die Desktop-Anwendung',
+      },
+      library: {
+        title: 'Aus Ihrer Bibliothek öffnen',
+        detail: 'Was Sie gebaut, übernommen oder vorbereitet haben',
       },
       browse: {
         title: 'Komponenten durchsuchen',
@@ -87,6 +92,61 @@ const de: Messages = {
           'Ein Workflow läuft vorwärts. Um dieselbe Arbeit wiederholt auszuführen, starten Sie ihn über einen Auslöser — Ordner überwachen oder Timer —, der ihn einmal pro Ereignis ausführt.',
       },
       bridge: 'Ein Schritt, der dazwischen {bridge} erzeugt, würde die beiden verbinden.',
+      // Jede Formulierung, aus der eine Ablehnung besteht — siehe `canvas/refusal.ts`.
+      cannotFeed:
+        'Ein Wert vom Typ {from} passt nicht in einen Schritt, der einen Wert vom Typ {to} erwartet.',
+      rawType: '„{name}“',
+      listOf: 'Liste von Werten vom Typ {item}',
+      optional: 'optionaler Wert vom Typ {item}',
+      types: {
+        bool: 'Wahrheitswert',
+        i64: 'ganze Zahl',
+        f64: 'Zahl',
+        string: 'Text',
+        json: 'JSON',
+        file: 'Datei',
+        dir: 'Ordner',
+        bytes: 'Bytes',
+        image: 'Bild',
+        video: 'Video',
+        audio: 'Ton',
+      },
+      nouns: {
+        bool: 'Wahrheitswert',
+        i64: 'ganze Zahl',
+        f64: 'Zahl',
+        string: 'Text',
+        json: 'JSON',
+        file: 'Datei',
+        dir: 'Ordner',
+        bytes: 'Bytes',
+        image: 'Bild',
+        video: 'Video',
+        audio: 'Ton',
+      },
+      labels: {
+        bool: 'Wahrheitswert',
+        i64: 'Ganzzahl',
+        f64: 'Zahl',
+        string: 'Text',
+        json: 'JSON',
+        file: 'Datei',
+        dir: 'Ordner',
+        bytes: 'Bytes',
+        image: 'Bild',
+        video: 'Video',
+        audio: 'Ton',
+      },
+      detail: {
+        notAType: '„{name}“ kann diese Version nicht als Typ lesen.',
+        listsDoNotMatch: 'Die beiden Listen enthalten nicht dasselbe. {inner}',
+        cannotConnect: '{from} und {to} lassen sich nicht verbinden.',
+        unknownType:
+          '„{name}“ ist kein Typ, den diese Laufzeitumgebung kennt. Die Komponente braucht vielleicht eine neuere Version.',
+        siblings:
+          '{from} und {to} sind beides Arten von {shared}, aber das eine ist nicht das andere. Wandeln Sie über {shared} um, wenn Sie das meinen.',
+        noConversion: 'Zwischen {from} und {to} gibt es keine Umwandlung.',
+      },
     },
     empty: {
       heading: 'Ihre Fläche ist leer',
@@ -97,6 +157,7 @@ const de: Messages = {
     // the keyboard; this is where somebody finds out that it is.
     menu: {
       label: 'Aktionen der Arbeitsfläche',
+      connect: 'Von hier aus verbinden…',
       duplicate: 'Duplizieren',
       disable: 'Ausschalten',
       enable: 'Einschalten',
@@ -104,14 +165,61 @@ const de: Messages = {
       deleteConnection: 'Verbindung löschen',
       paste: 'Einfügen',
       selectAll: 'Alles auswählen',
+      undo: 'Rückgängig',
+      redo: 'Wiederholen',
+      many: {
+        duplicate: {
+          one: '{count} Schritt duplizieren',
+          other: '{count} Schritte duplizieren',
+        },
+        disable: {
+          one: '{count} Schritt ausschalten',
+          other: '{count} Schritte ausschalten',
+        },
+        enable: {
+          one: '{count} Schritt einschalten',
+          other: '{count} Schritte einschalten',
+        },
+        delete: {
+          one: '{count} Schritt löschen',
+          other: '{count} Schritte löschen',
+        },
+      },
     },
     keysHint:
-      'Mit den Pfeiltasten zwischen Schritten bewegen, mit Eingabe einen Schritt im Inspektor öffnen, mit Escape die Auswahl aufheben und mit Entf den ausgewählten Schritt entfernen.',
+      'Mit den Pfeiltasten zwischen Schritten bewegen, mit Eingabe einen Schritt im Inspektor öffnen, mit C eine Verbindung vom ausgewählten Schritt aus beginnen, mit E durch dessen bestehende Verbindungen gehen, mit Entf das Ausgewählte entfernen und mit Escape loslassen.',
+    connect: {
+      started:
+        'Verbindung von {from}. {targets}. Pfeiltasten zum Auswählen, Eingabe zum Verbinden, Escape zum Abbrechen.',
+      targets: {
+        one: '{count} mögliches Ziel',
+        other: '{count} mögliche Ziele',
+      },
+      connected: 'Verbunden.',
+      cancelled: 'Abgebrochen.',
+      noTargets: 'Nichts auf dieser Arbeitsfläche kann aufnehmen, was {step} erzeugt.',
+      noOutputs: '{step} erzeugt nichts, von dem aus verbunden werden könnte.',
+    },
+    connection: {
+      focused: 'Verbindung von {from} nach {to}.',
+      removed: 'Verbindung entfernt.',
+      none: '{step} hat noch keine Verbindungen.',
+    },
     a11y: {
       selected: '{name}, Schritt {index} von {total}, ausgewählt.',
+      port: '{step} · {port}',
     },
     node: {
       notInstalled: 'Nicht installiert.',
+      glyphs: {
+        pending: '·',
+        running: '…',
+        ok: '✓',
+        failed: '✕',
+        skipped: '–',
+        cancelled: '⊘',
+        disabled: '–',
+      },
     },
     wire: {
       ops: {
@@ -211,6 +319,225 @@ const de: Messages = {
       versionShape: 'Eine Version wird wie 1.0.0 nummeriert.',
     },
   },
+  library: {
+    preparedNotOpenable:
+      'Eine vorbereitete Veröffentlichung ist ein Ordner zum Weitergeben, kein Projekt zum Öffnen. Öffnen Sie stattdessen das Projekt, aus dem sie entstanden ist.',
+    heading: 'Ihre Bibliothek',
+    intro:
+      'Alles, was Sie haben: die Projekte, die Sie gebaut haben, was Sie von jemandem übernommen haben, und die Ordner, die Sie zum Weitergeben vorbereitet haben. Alles liegt auf diesem Rechner. Nichts wird synchronisiert, hochgeladen oder geteilt.',
+    import: 'Importieren…',
+    importTitle: 'Einen Veröffentlichungsordner lesen, den Ihnen jemand gegeben hat',
+    importUnavailable: 'Erfordert die Desktop-Anwendung',
+    search: {
+      placeholder: 'Suchen',
+      ariaLabel: 'In Ihrer Bibliothek suchen',
+    },
+    sort: {
+      label: 'Reihenfolge',
+      name: 'Nach Name',
+      recent: 'Zuletzt benutzt',
+      origin: 'Nach Herkunft',
+    },
+    noMatches: 'Hier passt nichts dazu.',
+    quarantined:
+      'Die bisherige Liste war nicht lesbar. Sie wurde als {name} beiseitegelegt und eine neue begonnen. Gelöscht wurde nichts, und keines Ihrer Projekte wurde angerührt.',
+    origin: {
+      created: 'Hier gebaut',
+      imported: 'Importiert',
+      prepared: 'Vorbereitet',
+    },
+    status: {
+      missing: {
+        label: 'Nicht da',
+        detail:
+          'An der genannten Stelle liegt nichts mehr. Die Datei wurde außerhalb von Encastra verschoben oder gelöscht — das dürfen Sie. Dieser Eintrag ist veraltet, nicht falsch.',
+      },
+      changed: {
+        label: 'Geändert',
+        detail:
+          'Die Datei ist da, ihr Inhalt weicht aber von dem ab, was Encastra zuletzt gesehen hat. Etwas hat sie anderswo bearbeitet.',
+      },
+    },
+    facts: {
+      version: 'Version',
+      publisher: 'Herausgeber',
+      steps: 'Schritte',
+      when: 'Zuletzt',
+    },
+    row: {
+      opened: 'Geöffnet am {when}',
+      added: 'Hinzugefügt am {when}',
+      publisherClaim:
+        '{publisher} — behauptet, nicht geprüft. Es gibt keine Konten, also hat das niemand nachgesehen.',
+      steps: {
+        one: '{count} Schritt',
+        other: '{count} Schritte',
+      },
+    },
+    reach: {
+      none: 'Es fordert nichts außerhalb seiner selbst an.',
+      someLabel: 'Es wird um Zugriff bitten auf:',
+      asksEveryRun: 'Dass es hier liegt, gewährt davon nichts. Jeder Lauf fragt erneut.',
+    },
+    actions: {
+      open: 'Öffnen',
+      remove: 'Entfernen…',
+    },
+    remove: {
+      cancel: 'Behalten',
+      keepsFile:
+        'Das nimmt es nur von der Liste. Ihre Datei bleibt genau dort, wo Sie sie abgelegt haben.',
+      forget: 'Von der Liste nehmen',
+      importedNote:
+        'Diese Kopie hat Encastra angelegt, also darf sie auch gelöscht werden. Sie entscheiden: die Kopie geht, oder sie bleibt liegen.',
+      andDeleteCopy: 'Entfernen und Kopie löschen',
+      keepCopy: 'Entfernen, Kopie behalten',
+      refused:
+        'Diese Datei gehört Ihnen und bleibt, wo sie ist. Encastra löscht nur Kopien, die sie selbst angelegt hat.',
+    },
+    empty: {
+      heading: 'Hier ist noch nichts',
+      body: 'Drei Dinge landen auf dieser Liste, und jedes beginnt mit etwas, das Sie tun.',
+      ways: {
+        created: 'Ein Projekt, das Sie speichern, wird aufgenommen.',
+        imported:
+          'Ein Veröffentlichungsordner, den Ihnen jemand gegeben hat, kommt dazu, wenn Sie ihn importieren — nachdem Encastra ihn gelesen hat und Sie zugestimmt haben.',
+        prepared: 'Ein Ordner, den Sie zum Weitergeben vorbereiten, kommt beim Vorbereiten dazu.',
+      },
+      build: 'Etwas bauen',
+      buildTitle: 'Den Builder öffnen und mit einer leeren Fläche anfangen',
+    },
+  },
+
+  import: {
+    heading: 'Eine Veröffentlichung übernehmen',
+    intro:
+      'Encastra hat den gewählten Ordner so gelesen, wie ihn ein Empfänger lesen sollte: die Datei gegen das Dokument daneben geprüft und die Prüfung des Herausgebers hier noch einmal ausgeführt. Geschrieben wurde nichts, ausgeführt auch nichts.',
+    reading: 'Der Ordner wird gelesen…',
+    confirm: 'Importieren',
+    nothing: 'nichts',
+    copiesNothingRuns:
+      'Importieren kopiert die Dateien in Ihre Bibliothek. Es läuft nichts, bis Sie es öffnen und auf Ausführen drücken.',
+    nothingWasTakenIn: 'Es wurde nichts übernommen und auf diesem Rechner nichts verändert.',
+    sections: {
+      what: 'Was es zu sein behauptet',
+      integrity: 'Ob die Datei die beschriebene ist',
+      inside: 'Was darin steckt',
+      asks: 'Worum es bitten würde',
+      check: 'Was Encastra gefunden hat',
+    },
+    facts: {
+      publisher: 'Herausgeber',
+      name: 'Bekannt als',
+      version: 'Version',
+      kind: 'Art',
+      licence: 'Lizenz',
+      size: 'Größe',
+      kilobytes: '{size} kB',
+      runtime: 'Läuft auf',
+      projectName: 'Projekt',
+      steps: 'Schritte',
+      stepCount: {
+        one: '{count} Schritt',
+        other: '{count} Schritte',
+      },
+      switchedOff: ' ({count} abgeschaltet)',
+      versions: 'Aufbewahrte Versionen',
+      versionCount: {
+        one: '{count} Version',
+        other: '{count} Versionen',
+      },
+    },
+    kinds: {
+      project: 'Projekt',
+      template: 'Vorlage',
+      component: 'Komponente',
+    },
+    notVerified:
+      'Niemand hat geprüft, ob dieser Herausgeber der ist, den der Name nennt. Es gibt keine Konten, also hätte es auch niemand tun können.',
+    checksumMatches: 'Die Datei stimmt mit der Prüfsumme im Dokument daneben überein.',
+    checksumIsNotProvenance:
+      'Das belegt, dass die Datei seit der Vorbereitung nicht verändert wurde. Über den Urheber sagt es nichts.',
+    capabilities: {
+      none: 'Es fordert nichts außerhalb seiner selbst an.',
+      some: 'Beim Ausführen bittet es um die Nutzung von:',
+      grantsNothing:
+        'Der Import gewährt davon nichts. Jeder Lauf fragt, bevor irgendetwas erreicht wird.',
+    },
+    nothingFound: 'Hier spricht nichts dagegen, das zu übernehmen.',
+    notAnAudit:
+      'Das findet die Fehler, die mechanisch genug sind, um gefunden zu werden. Es ist kein Sicherheitsaudit, und niemand hat eines durchgeführt.',
+    disagreement: {
+      declared: 'Das Dokument sagt',
+      actual: 'Das Projekt verlangt',
+    },
+    tokens: {
+      title: 'Titel',
+      summary: 'Zusammenfassung',
+      changelog: 'Änderungsliste',
+      publisher: 'Herausgeber',
+      categories: 'Kategorien',
+      tags: 'Schlagwörter',
+      runtime: 'Laufzeit',
+    },
+    errors: {
+      notAFolder:
+        'Das ist kein Ordner. Eine Veröffentlichung ist ein Ordner mit einem Projekt und dem Dokument, das es beschreibt.',
+      folderIsALink:
+        'Dieser Ordner ist eine Verknüpfung woandershin. Encastra folgt ihr nicht, denn dann wären das Gelesene und das Gewählte nicht dasselbe. Wählen Sie den Ordner selbst.',
+      folderNotChosen:
+        'Dieser Ordner wurde in dieser Sitzung nicht ausgewählt. Wählen Sie ihn über die Ordnerauswahl, damit Encastra genau das liest, worauf Sie gezeigt haben.',
+      noDocument:
+        'In diesem Ordner gibt es keine publication.json, also sagt nichts darin, was es ist. Das ist ein Ordner voller Dateien, keine Veröffentlichung.',
+      documentIsALink:
+        'publication.json ist eine Verknüpfung auf eine andere Datei, keine Datei. Encastra liest, was im gewählten Ordner liegt, und nichts außerhalb davon.',
+      documentTooLarge:
+        'publication.json ist etwa {size} kB groß, und dieser Build liest höchstens {max} kB. Ein Veröffentlichungsdokument ist eine Seite Text; so groß ist keines.',
+      documentUnreadable:
+        'publication.json konnte nicht gelesen werden: {reason}. Bitten Sie die Person, die es vorbereitet hat, es erneut vorzubereiten.',
+      noProject:
+        'In diesem Ordner liegt keine .encastra-Datei. Eine Veröffentlichung besteht aus einem Projekt und dem Dokument dazu.',
+      moreThanOneProject:
+        'Eine Veröffentlichung ist ein Projekt, dieser Ordner enthält {count}: {names}. Wer ihn vorbereitet hat, sollte einen Ordner pro Projekt schicken.',
+      projectIsALink:
+        'Die Projektdatei ist eine Verknüpfung auf eine andere Datei, keine Datei. Encastra installiert, was im gewählten Ordner liegt, und nichts außerhalb davon.',
+      unexpectedEntries:
+        'Ein Veröffentlichungsordner enthält ein Dokument und ein Projekt, sonst nichts. Dieser enthält außerdem {names}. Encastra übernimmt keinen Ordner, für den es nicht geradestehen kann.',
+      tooManyEntries:
+        'Ein Veröffentlichungsordner enthält ein Dokument und ein Projekt, sonst nichts. Dieser enthält mehr als {max} Einträge, und das ist keine Veröffentlichung, was auch immer sie sind.',
+      projectTooLarge:
+        'Das Projekt ist etwa {size} kB groß, und dieser Build installiert höchstens {max} kB.',
+      checksumMismatch:
+        'Die Projektdatei ist nicht die, die diese Veröffentlichung beschreibt. Entweder beschreibt das Dokument eine andere Datei, oder die Datei hat sich unterwegs geändert. Fordern Sie sie erneut an.',
+      projectUnreadable:
+        'Die Projektdatei konnte nicht gelesen werden: {reason}. Möglicherweise stammt sie aus einer neueren Encastra-Version oder wurde unterwegs beschädigt.',
+      notInstallable:
+        'Dieser Build kann kein {publicationKind} installieren und wird es auch nicht vortäuschen.',
+      notAListingId:
+        '„{id}“ ist kein Veröffentlichungsname, also gibt es keinen sicheren Namen, unter dem das abgelegt werden könnte.',
+      notAVersion: '„{version}“ ist keine Version. Veröffentlichungen werden wie 1.2.0 nummeriert.',
+      notPublishersNamespace:
+        '„{listing}“ liegt nicht im Namensraum von {publisher}. Das Dokument nennt einen Herausgeber und eine Veröffentlichung, die einem anderen gehört, und Encastra kann nicht wissen, welches von beiden der Fehler ist.',
+      textTooLong:
+        'Der Eintrag {field} ist länger, als dieser Build liest (höchstens {max} Zeichen).',
+      textHasControlCharacters:
+        'Der Eintrag {field} enthält Zeichen, die verbergen können, was dort wirklich steht — solche, die einen Namen wie einen anderen aussehen lassen. Encastra lehnt ihn ab, statt still umzuschreiben, was jemand geschrieben hat.',
+      documentDisagreesWithProject:
+        'Dokument und Projekt widersprechen sich beim Punkt {about}. Die Seite, die das beschreibt, beschreibt etwas anderes als die Datei daneben.',
+      runtimeIncompatible:
+        'Diese Veröffentlichung ist für eine Laufzeit {requires} gedacht, hier läuft {have}. Für eine Version, für die es nicht gebaut wurde, wird nichts installiert.',
+      reviewRefused:
+        'Dieselbe Prüfung, die sein Herausgeber ausgeführt hat, lehnt es hier ab. Das müsste sich ändern, bevor es jemand übernehmen könnte:',
+      capabilitiesDisagree:
+        'Dokument und Projekt sind sich nicht einig darüber, worum das bittet. Zu wenige Berechtigungen anzugeben ist das offensichtliche Problem; zu viele anzugeben bringt Leute dazu, die Liste zu überfliegen — das subtilere. Beides wird abgelehnt.',
+      alreadyImported:
+        '{listing} {version} liegt bereits in Ihrer Bibliothek. Eine veröffentlichte Version ändert sich nie, es gibt hier also nichts Neues zu übernehmen.',
+      io: 'Etwas auf diesem Rechner hat den Vorgang verweigert ({reason}). Übernommen wurde nichts.',
+      unknown:
+        'Encastra hat diesen Ordner aus einem Grund abgelehnt, für den diese Version keine Worte hat. Übernommen wurde er nicht.',
+    },
+  },
+
   toolbar: {
     publish: 'Veröffentlichen',
     publishTitle: 'Dieses Projekt vorbereiten, damit jemand anderes es installieren kann',
@@ -384,6 +711,8 @@ const de: Messages = {
       allowHost: '{host} erlauben',
       allowAddress: 'Diese Adresse erlauben',
       allow: 'Erlauben',
+      scope:
+        'Erlaubt, solange dieses Projekt geöffnet ist. Jeder Lauf verwendet genau diesen Ordner oder diese Adresse; beim Schließen oder Wechseln des Projekts wird das wieder vergessen.',
       chooseFolderFirst: 'Wählen Sie zuerst einen Ordner.',
       enterAddressFirst: 'Geben Sie zuerst eine Adresse ein.',
       notASetting:
@@ -510,6 +839,23 @@ const de: Messages = {
     },
   },
 
+  // Die einzige Frage, die diese Anwendung stellt, bevor Arbeit verworfen wird.
+  unsaved: {
+    title: 'Nicht gespeicherte Änderungen',
+    reasons: {
+      new: 'Sie haben nicht gespeicherte Änderungen. Ein neues Projekt zu beginnen würde sie verwerfen.',
+      open: 'Sie haben nicht gespeicherte Änderungen. Ein anderes Projekt zu öffnen würde sie verwerfen.',
+      demo: 'Sie haben nicht gespeicherte Änderungen. Ein Beispiel zu laden würde sie verwerfen.',
+      restore:
+        'Sie haben nicht gespeicherte Änderungen. Eine frühere Version wiederherzustellen würde sie verwerfen.',
+      close: 'Sie haben nicht gespeicherte Änderungen. Encastra zu schließen würde sie verwerfen.',
+      'library-open':
+        'Sie haben nicht gespeicherte Änderungen. Etwas aus Ihrer Bibliothek zu öffnen würde sie verwerfen.',
+    },
+    save: 'Speichern und fortfahren',
+    discard: 'Änderungen verwerfen',
+    cancel: 'Abbrechen',
+  },
   messages: {
     untitledProject: 'Unbenannt',
     recordingNote: 'Dies ist eine Aufzeichnung, keine Ausführung auf diesem Rechner.',
@@ -533,6 +879,12 @@ const de: Messages = {
     restored: 'Wiederhergestellt. Die Version, von der Sie kamen, ist weiterhin im Verlauf.',
     missingComponents: 'Dieses Projekt braucht {missing}, was nicht installiert ist.',
     runtimeSilent: 'Etwas in der Laufzeitumgebung hat nicht geantwortet.',
+    libraryMissing:
+      '{name} liegt nicht mehr, wo es lag. Legen Sie es zurück oder öffnen Sie es dort, wo es jetzt ist.',
+    imported: '{name} übernommen. Ausgeführt wurde nichts.',
+    removedFromLibrary: '{name} steht nicht mehr auf der Liste. Die Datei liegt, wo sie lag.',
+    removedAndDeleted:
+      '{name} steht nicht mehr auf der Liste, und die von Encastra angelegte Kopie ist gelöscht.',
   },
 
   demos: {
@@ -723,7 +1075,7 @@ const de: Messages = {
         loading: 'Wird geladen…',
         loadError: '{name} konnte nicht geladen werden. Die aktuelle Sprache bleibt erhalten.',
         comingLater: {
-          label: 'Später verfügbar',
+          label: 'Nicht übersetzt',
           hint: 'Die Oberfläche ist so aufgebaut, dass sie diese unterstützt; übersetzt hat sie noch niemand.',
         },
       },
@@ -793,6 +1145,11 @@ const de: Messages = {
           duplicateSelection: 'Auswahl duplizieren',
           selectAll: 'Alles auswählen',
           deleteSelection: 'Auswahl löschen',
+          connectFromStep:
+            'Eine Verbindung vom ausgewählten Schritt aus beginnen, auf der Arbeitsfläche',
+          cycleConnections:
+            'Durch die Verbindungen des ausgewählten Schritts gehen, auf der Arbeitsfläche',
+          deleteConnection: 'Die ausgewählte Verbindung löschen, auf der Arbeitsfläche',
         },
         note: 'Derzeit fest, nicht neu zuweisbar. Keines davon löst aus, während Sie in ein Textfeld tippen.',
       },

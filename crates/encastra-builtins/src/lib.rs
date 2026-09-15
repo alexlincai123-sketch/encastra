@@ -37,6 +37,17 @@ mod net;
 mod system;
 mod triggers;
 
+/// How this build reads an address when deciding what a `net.http` grant covers.
+///
+/// Re-exported on its own, rather than making `net` public, because exactly one thing outside
+/// this crate needs it: the conformance test that replays a shared table of addresses through
+/// both this parser and the editor's (`apps/desktop/src/url.ts`). The two must agree, and until
+/// that test existed nothing checked that they did.
+pub use net::permission_authority;
+
+/// The ceilings the CSV reader applies, for the test that drives it end to end.
+pub use data::{MAX_CSV_CELLS, MAX_CSV_ROWS};
+
 /// Everything this build offers: the manifests, the code behind them, and the triggers.
 pub struct Installed {
     pub registry: InMemoryRegistry,

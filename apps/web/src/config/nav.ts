@@ -164,3 +164,35 @@ export const FOOTER_NAV: readonly NavGroup[] = [
     ],
   },
 ];
+
+/**
+ * Every page on the site, as a path, derived from the two navigations above rather than typed
+ * out again.
+ *
+ * `sitemap.ts` renders exactly this list plus one entry per document in `config/legal.ts`. A
+ * hand-written second list is a list that is wrong within two releases, and it already was:
+ * `/ecosystem` shipped in both navigations and was missing from the sitemap, so the one page
+ * describing the publish-and-reuse loop was not offered to a crawler at all.
+ *
+ * Two things are filtered out on the way past:
+ *
+ * - **Anchors** (`/about#name` and the like). A fragment is a position on a page that is already
+ *   in the list, not a page of its own, and a sitemap that lists one is listing a duplicate.
+ * - **`/legal/<slug>` documents.** The footer links three of the ten; `config/legal.ts` holds
+ *   all ten and is the only honest source for them, so `sitemap.ts` takes them from there
+ *   instead. `/legal` itself — the index — is a real page and stays.
+ *
+ * The home page is not in any navigation (the logo goes there) so it is prepended by hand; it is
+ * the one route this list cannot derive.
+ *
+ * `test/sitemap.test.ts` asserts every navigable href reaches this list, in both directions, so
+ * a page added to a navigation without a sitemap entry fails the build rather than quietly
+ * becoming invisible.
+ */
+export const SITE_ROUTES: readonly string[] = (() => {
+  const paths = [
+    ...PRIMARY_NAV.map((item) => item.href),
+    ...FOOTER_NAV.flatMap((group) => group.items.map((item) => item.href)),
+  ].filter((href) => !href.includes('#') && !href.startsWith('/legal/'));
+  return Array.from(new Set(['', ...paths]));
+})();

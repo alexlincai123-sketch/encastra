@@ -123,7 +123,7 @@ export function Scene06Result({ locale }: { locale: Locale }): ReactNode {
   });
 
   return (
-    <section ref={ref} className={styles.scene} aria-label="Result" data-scene="result">
+    <section ref={ref} className={styles.scene} aria-label={COPY.label} data-scene="result">
       <div className={styles.pin} data-pin>
         <div className={`${styles.stage} ${styles.centerCol}`}>
           <span className={styles.index} data-animate>
@@ -152,21 +152,21 @@ export function Scene06Result({ locale }: { locale: Locale }): ReactNode {
 
                 <div className={local.moduleRow} aria-hidden="true">
                   <div className={local.moduleCard}>
-                    <span className={local.moduleLabel}>Preview</span>
+                    <span className={local.moduleLabel}>{COPY.modules.preview}</span>
                     <Plate className={local.moduleSwatch ?? ''} />
                   </div>
                   <div className={local.moduleCard}>
-                    <span className={local.moduleLabel}>Metadata</span>
+                    <span className={local.moduleLabel}>{COPY.modules.metadata}</span>
                     <span className={local.moduleText}>
                       {RESULT_BEFORE.name} · {RESULT_BEFORE.dims}
                     </span>
                   </div>
                   <div className={local.moduleCard}>
-                    <span className={local.moduleLabel}>Step</span>
+                    <span className={local.moduleLabel}>{COPY.modules.step}</span>
                     <MiniNode name={RESIZE_NODE.name} category={categoryOf(RESIZE_NODE.id)} />
                   </div>
                   <div className={local.moduleCard}>
-                    <span className={local.moduleLabel}>Output</span>
+                    <span className={local.moduleLabel}>{COPY.modules.output}</span>
                     <span className={local.moduleText}>
                       {RESULT_AFTER.name} · {RESULT_AFTER.dims}
                     </span>

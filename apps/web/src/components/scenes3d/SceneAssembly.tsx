@@ -325,7 +325,7 @@ export function SceneAssembly({ locale }: { locale: Locale }): ReactNode {
   });
 
   return (
-    <section className={styles.scene} aria-label="Build" data-scene="assembly">
+    <section className={styles.scene} aria-label={COPY.label} data-scene="assembly">
       <div className={styles.pin} data-pin>
         <div ref={stageRef} className={styles.stage3d} />
 

@@ -1,7 +1,7 @@
 /**
  * The website's Content-Security-Policy and the headers that travel with it.
  *
- * One definition, consumed by `middleware.ts` (which mints a per-request nonce) and by
+ * One definition, consumed by `proxy.ts` (which mints a per-request nonce) and by
  * `next.config.ts` (which sets everything that does not need one). Two places writing security
  * headers would be two places to forget one.
  *
@@ -53,7 +53,7 @@ export function contentSecurityPolicy(nonce: string, isDev: boolean): string {
 
 /**
  * Everything that is the same on every request. Set from `next.config.ts` so that a route which
- * somehow bypassed the middleware still gets them.
+ * somehow bypassed `proxy.ts` still gets them.
  */
 export const STATIC_SECURITY_HEADERS: ReadonlyArray<{ key: string; value: string }> = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },

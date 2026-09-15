@@ -261,3 +261,127 @@ fn a_graph_that_does_not_validate_never_runs_at_all() {
     );
     assert!(!sandbox.out().join("result.json").exists());
 }
+
+#[test]
+fn a_value_is_released_once_its_last_consumer_has_finished() {
+    // A run's memory used to be proportional to the graph's length: every value ever produced
+    // stayed in the outcome until the run ended, so a chain of twenty thousand steps each passing
+    // a document along held twenty thousand documents at once (measured at ~3.9 GB). Now a value
+    // is dropped when the last edge out of its port has been read. What survives the run is what
+    // nothing was waiting for — the graph's terminal outputs — and nothing else.
+    let (outcome, _sandbox) = run_demo("released", r#"{"name":"Encastra","parts":3}"#, true);
+    assert_eq!(outcome.journal.status, RunStatus::Ok);
+
+    let port = |node: &str, port: &str| PortRef {
+        node: NodeId(node.into()),
+        port: port.into(),
+    };
+
+    // Consumed along the way, and gone.
+    for (node, name) in [("read", "text"), ("parse", "json"), ("write", "saved")] {
+        assert!(
+            !outcome.outputs.contains_key(&port(node, name)),
+            "{node}.{name} was consumed and should have been released"
+        );
+    }
+    // Nothing downstream was waiting for these, so they are the results a caller may want.
+    for (node, name) in [("notify", "message"), ("write", "file"), ("read", "name")] {
+        assert!(
+            outcome.outputs.contains_key(&port(node, name)),
+            "{node}.{name} has no consumer and should still be there"
+        );
+    }
+    // And the journal still summarises every value, released or not.
+    assert!(
+        outcome.journal.nodes[&NodeId("parse".into())]
+            .outputs
+            .contains_key("json")
+    );
+}
+
+/// A file read into the CSV reader, with no other steps.
+fn csv_graph() -> Graph {
+    Graph::parse(
+        &serde_json::json!({
+            "nodes": {
+                "read": { "component": "encastra.file.read@1.0.0" },
+                "csv":  { "component": "encastra.data.csv.read@1.0.0" }
+            },
+            "edges": [
+                { "from": { "node": "read", "port": "text" }, "to": { "node": "csv", "port": "text" } }
+            ]
+        })
+        .to_string(),
+    )
+    .expect("the csv graph must parse")
+}
+
+fn run_csv(name: &str, contents: &[u8]) -> (RunOutcome, Sandbox) {
+    let sandbox = Sandbox::new(name);
+    let input = sandbox.path().join("input.csv");
+    std::fs::write(&input, contents).unwrap();
+
+    let (registry, components) = encastra_builtins::install();
+    let graph = csv_graph();
+    let mut grants = GrantSet::new();
+    for (id, node) in &graph.nodes {
+        grants.allow_declared_input_handles(id, registry.get(&node.component).unwrap());
+    }
+    let mut broker = Broker::new(sandbox.path().join("run"), grants).unwrap();
+    let handle = broker.import_file(input, HandleKind::File);
+    let seed = BTreeMap::from([(
+        PortRef {
+            node: NodeId("read".into()),
+            port: "file".into(),
+        },
+        Value::Handle(handle),
+    )]);
+    let outcome = run_seeded(
+        &graph,
+        &registry,
+        &components,
+        &mut broker,
+        &AtomicBool::new(false),
+        "run-csv",
+        seed,
+    )
+    .unwrap_or_else(|v| panic!("the csv graph must validate: {:#?}", v.issues));
+    (outcome, sandbox)
+}
+
+#[test]
+fn a_csv_with_more_rows_than_the_build_turns_into_a_table_fails_that_node_cleanly() {
+    // Every cell becomes a heap string inside a map inside an array — fifty to a hundred and
+    // fifty bytes of structure per byte of input. The read ceiling bounded the text; nothing
+    // bounded what the text became. One row past the ceiling is refused, by name, and the run
+    // records it as that node's failure rather than as memory the machine no longer has.
+    use encastra_builtins::MAX_CSV_ROWS;
+
+    let mut contents = Vec::with_capacity((MAX_CSV_ROWS + 2) * 4);
+    contents.extend_from_slice(b"a,b\n");
+    for _ in 0..=MAX_CSV_ROWS {
+        contents.extend_from_slice(b"1,2\n");
+    }
+    let (outcome, _sandbox) = run_csv("csv-too-many-rows", &contents);
+
+    let csv = &outcome.journal.nodes[&NodeId("csv".into())];
+    assert_eq!(csv.status, NodeStatus::Failed, "{csv:#?}");
+    let error = csv.error.as_ref().expect("a refusal carries its reason");
+    assert_eq!(error.code, "csv-too-large");
+    assert!(
+        error.message.contains(&MAX_CSV_ROWS.to_string()),
+        "{}",
+        error.message
+    );
+
+    // The control: the same shape one row shorter is a table.
+    let mut fine = Vec::new();
+    fine.extend_from_slice(b"a,b\n");
+    for _ in 0..1_000 {
+        fine.extend_from_slice(b"1,2\n");
+    }
+    let (outcome, _sandbox) = run_csv("csv-fine", &fine);
+    let csv = &outcome.journal.nodes[&NodeId("csv".into())];
+    assert_eq!(csv.status, NodeStatus::Ok, "{csv:#?}");
+    assert_eq!(csv.outputs.get("count").map(String::as_str), Some("1000"));
+}

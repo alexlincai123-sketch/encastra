@@ -2,14 +2,16 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import { Callout, Card, CTA, PageHeader, SectionHeading } from '@/components/ui/Ui';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'contact.hero.eyebrow'),
     description: t(locale, 'contact.meta.description'),
-  };
+    path: '/contact',
+  });
 }
 
 export default async function ContactPage(): Promise<ReactNode> {

@@ -375,6 +375,32 @@ fn reject_non_integer_numbers(value: &serde_json::Value, path: &str) -> Result<(
     }
 }
 
+/// Whether a string is a valid reverse-DNS identifier: `publisher.name`, lowercase, dotted.
+///
+/// Public because this is the product's one grammar for these, and a listing id in
+/// `encastra-publish` has to be the same shape as a component id rather than a second rule that
+/// can drift away from this one.
+///
+/// It also happens to be what makes an identifier safe to use as a directory name: nothing that
+/// passes here contains a path separator, a `..`, or an empty segment. Anything that builds a
+/// path out of an id should call this first. A namespace check is not a containment check — and
+/// a prefix test whose two sides both come from the same caller is not a check at all.
+pub fn validate_identifier(id: &str) -> Result<(), String> {
+    validate_id(id).map_err(|error| error.to_string())
+}
+
+/// Whether a lower-case ASCII segment is one Windows resolves to a device rather than a file.
+///
+/// Segments reaching here are already `[a-z][a-z0-9-]*`, so the superscript-digit forms that a
+/// general filename filter has to worry about cannot occur; the eight names and two families
+/// are the whole list.
+fn is_reserved_device_stem(segment: &str) -> bool {
+    matches!(segment, "con" | "prn" | "aux" | "nul")
+        || (segment.len() == 4
+            && (segment.starts_with("com") || segment.starts_with("lpt"))
+            && segment.as_bytes()[3].is_ascii_digit())
+}
+
 fn validate_id(id: &str) -> Result<(), ManifestError> {
     if id.is_empty() || id.len() > 128 {
         return Err(ManifestError::Invalid(
@@ -387,6 +413,18 @@ fn validate_id(id: &str) -> Result<(), ManifestError> {
             "id \"{id}\" needs at least a publisher and a name, e.g. \"encastra.image.resize\""
         )));
     }
+    // The first segment is the stem of any file or folder named after the id, and Windows
+    // resolves a stem of CON, NUL, COM1 and their kin to a device in every directory — on
+    // Windows 10 unconditionally, on Windows 11 in fewer places but still in some. An id that
+    // imports as a folder on one machine and as a serial port on another is not an id.
+    if let Some(first) = segments.first()
+        && is_reserved_device_stem(first)
+    {
+        return Err(ManifestError::Invalid(format!(
+            "id \"{id}\" starts with \"{first}\", which Windows treats as a device name"
+        )));
+    }
+
     for segment in segments {
         if segment.is_empty() {
             return Err(ManifestError::Invalid(format!(
@@ -532,6 +570,38 @@ mod tests {
     fn refuses_a_port_type_the_runtime_does_not_know() {
         let e = reject(|v| v["ports"]["inputs"]["image"]["type"] = serde_json::json!("hologram"));
         assert!(e.to_string().contains("does not know"), "got {e}");
+    }
+
+    #[test]
+    fn an_id_cannot_start_with_a_windows_device_name() {
+        // The first segment becomes the stem of any folder named after the id, and Windows
+        // resolves CON, NUL, COM1 and their kin to a device in every directory. Verified on this
+        // Windows 11 build that `nul.x` creates as an ordinary folder — Microsoft relaxed the
+        // rule for names with extensions — and on Windows 10 it does not. An id that is a folder
+        // on one machine and a serial port on another is refused on both.
+        for hostile in [
+            "nul.x",
+            "con.tools",
+            "prn.print",
+            "aux.io",
+            "com1.serial",
+            "lpt9.x",
+        ] {
+            let error = reject(|v| v["id"] = serde_json::json!(hostile)).to_string();
+            assert!(error.contains("device"), "{hostile}: {error}");
+        }
+        // Only the stem. Names that merely begin with the letters are ordinary.
+        for ordinary in [
+            "console.tools",
+            "nullable.x",
+            "communication.x",
+            "com.example.x",
+        ] {
+            assert!(
+                validate_identifier(ordinary).is_ok(),
+                "{ordinary} must be accepted"
+            );
+        }
     }
 
     #[test]

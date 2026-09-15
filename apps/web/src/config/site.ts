@@ -8,7 +8,7 @@
  */
 
 /** The release this website documents. Single module, imported everywhere. */
-export const VERSION = '0.4.0-beta.1';
+export const VERSION = '0.5.0-beta.1';
 
 export const SITE = {
   name: 'Encastra',
@@ -61,6 +61,8 @@ export const STATUS = {
   windowsInstaller: 'built',
   /** Preparing a publication on your own machine. The registry it would be sent to is not built. */
   publishPreparation: 'built',
+  /** Taking a publication folder in, checked again on this machine, into a local library. Nothing runs on import. */
+  importFromFolder: 'built',
 
   macosBuild: 'planned',
   linuxBuild: 'planned',
@@ -101,16 +103,16 @@ export const RELEASE: {
   installerFormat: string;
 } = {
   /** Exactly as published in docs/RELEASE.md. */
-  installerFilename: 'Encastra_0.4.0-beta.1_x64-setup.exe',
-  installerVersion: '0.4.0-beta.1',
-  installerSize: '3.2 MB',
-  installerSha256: '35cf2974541f3cecb9afda77319e22d2198d42d6d185e1534c747b113864ff26',
+  installerFilename: 'Encastra_0.5.0-beta.1_x64-setup.exe',
+  installerVersion: '0.5.0-beta.1',
+  installerSize: '3.4 MB',
+  installerSha256: '5678e5d06b659c178c8eaae0a874cbb539eb56e571b6400df4a12f68f6d66f91',
   binaryFilename: 'encastra-desktop.exe',
-  binarySize: '8.7 MB',
-  binarySha256: '72e69fb6f0687a3b4b67629a6e748df4f267996d4ea008956dc124a35ee52d85',
-  builtOn: '2026-09-11',
+  binarySize: '9.2 MB',
+  binarySha256: 'be1945f9f8dc3dcf60e89f524f0d1f291d91585c8ba847a5e3736f1394de67a1',
+  builtOn: '2026-09-15',
   builtFor: 'Windows AMD64',
-  commit: 'a8d790d',
+  commit: '349b2ff972817798ef1175b73e5885fafe963ed6',
   signed: false,
   /** Installer format. Per user, no administrator required. See docs/RELEASE.md. */
   installerFormat: 'NSIS',
@@ -169,6 +171,13 @@ export const DOCS = [
     title: 'Project format',
     summary: 'What a .encastra file contains and the guarantees it makes.',
     audience: 'engineers',
+  },
+  {
+    slug: 'OBSERVABILITY.md',
+    title: 'Observability',
+    summary:
+      'Nothing is collected and nothing is sent. What would be worth knowing after launch, how it would be collected without carrying anyone’s data, and what is never sent under any setting.',
+    audience: 'everyone',
   },
   {
     slug: 'RELEASE.md',

@@ -4,16 +4,18 @@ import type { ReactNode } from 'react';
 
 import { Callout, Card, PageHeader } from '@/components/ui/Ui';
 import { LEGAL_DOCS } from '@/config/legal';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'legal.index.hero.eyebrow'),
     description: t(locale, 'legal.index.meta.description'),
-  };
+    path: '/legal',
+  });
 }
 
 export default async function LegalIndexPage(): Promise<ReactNode> {

@@ -21,6 +21,9 @@ import type {
   EncastraGraph,
   GrantSpec,
   InputSpec,
+  Inspected,
+  LibraryEntry,
+  LibraryListing,
   OpenProject,
   Prepared,
   PublicationDraft,
@@ -70,6 +73,48 @@ export interface Ipc {
     publisher: Publisher,
     into: string,
   ): Promise<Prepared>;
+  /**
+   * Reads a publication folder and reports what is in it. Writes nothing and runs nothing.
+   *
+   * Rejects with a serialised `ImportError` rather than an `Error` — the refusals are matched
+   * on, not read, so improving a sentence on the Rust side cannot change which explanation the
+   * interface shows. `isImportError` in `library.ts` is how a caller tells the two apart.
+   */
+  inspectPublication(folder: string): Promise<Inspected>;
+  /**
+   * Takes a publication in: copies the bytes that were verified into the library and records it.
+   *
+   * It does not open the project and it does not run it. What comes back is the entry, so the
+   * interface can decide whether to offer to open it — which is a separate thing to press.
+   */
+  importPublication(folder: string): Promise<LibraryEntry>;
+  /**
+   * Tells the window whether there is unsaved work in it.
+   *
+   * The window is closed by the operating system, not by this code: a title-bar X, Alt+F4 or a
+   * shutdown never passes through the editor at all. The only way to answer one of those with
+   * "there is unsaved work here" is for the privileged side to know it already, before the
+   * question is asked — so the answer is pushed there whenever it changes, rather than fetched
+   * at a moment when nothing can be prevented any more.
+   */
+  reportDirty(dirty: boolean): Promise<void>;
+  /**
+   * Closes the window, this time for good.
+   *
+   * Only ever called after somebody has said, in the dialog, that the unsaved work can go. The
+   * runtime marks the close as already decided before it asks for it, so its own guard lets this
+   * one through instead of prompting about the same work forever.
+   */
+  closeWindow(): Promise<void>;
+  /** Everything in the library, each with the answer to whether it is still where it was. */
+  libraryList(): Promise<LibraryListing>;
+  /**
+   * Forgets an entry, and — only when it is a copy Encastra made — deletes it too.
+   *
+   * The runtime refuses `deleteCopy` for anything it did not put there itself. A project
+   * somebody made is theirs; taking it off a list and deleting it are never the same act.
+   */
+  libraryRemove(id: string, deleteCopy: boolean): Promise<void>;
   about(): Promise<About>;
 }
 
@@ -103,9 +148,21 @@ class TauriIpc implements Ipc {
     return typeof chosen === 'string' ? chosen : null;
   }
 
+  /**
+   * Choosing a folder goes through the runtime, not through the dialog plugin.
+   *
+   * Every other chooser here opens in this process and hands the path back as a string. For a
+   * folder that is not good enough: the path becomes a permission, and a string produced on this
+   * side is indistinguishable from one a `.encastra` file supplied. A project written by somebody
+   * else could put `C:\` in a node's configuration, the prompt would display it accurately, and
+   * clicking Allow would grant the drive.
+   *
+   * `choose_folder` opens the chooser on the privileged side, so the runtime learns the path from
+   * the operating system rather than from here, and refuses a folder grant it has no record of.
+   * The editor cannot add to that record, which is the point.
+   */
   async pickFolder(): Promise<string | null> {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const chosen = await open({ multiple: false, directory: true });
+    const chosen = await this.invoke<string | null>('choose_folder');
     return typeof chosen === 'string' ? chosen : null;
   }
 
@@ -174,6 +231,30 @@ class TauriIpc implements Ipc {
     into: string,
   ): Promise<Prepared> {
     return this.invoke<Prepared>('prepare_publication', { path, draft, publisher, into });
+  }
+
+  inspectPublication(folder: string): Promise<Inspected> {
+    return this.invoke<Inspected>('inspect_publication', { folder });
+  }
+
+  importPublication(folder: string): Promise<LibraryEntry> {
+    return this.invoke<LibraryEntry>('import_publication', { folder });
+  }
+
+  reportDirty(dirty: boolean): Promise<void> {
+    return this.invoke<void>('report_dirty', { dirty });
+  }
+
+  closeWindow(): Promise<void> {
+    return this.invoke<void>('close_window');
+  }
+
+  libraryList(): Promise<LibraryListing> {
+    return this.invoke<LibraryListing>('library_list');
+  }
+
+  libraryRemove(id: string, deleteCopy: boolean): Promise<void> {
+    return this.invoke<void>('library_remove', { id, deleteCopy });
   }
 
   about(): Promise<About> {
@@ -255,10 +336,47 @@ class PreviewIpc implements Ipc {
     throw new PreviewOnlyError('Preparing a publication');
   }
 
+  async inspectPublication(): Promise<Inspected> {
+    throw new PreviewOnlyError('Reading a publication');
+  }
+
+  async importPublication(): Promise<LibraryEntry> {
+    throw new PreviewOnlyError('Importing a publication');
+  }
+
+  /**
+   * Both of these do nothing in a browser, rather than refusing.
+   *
+   * There is no window to keep open and nothing to tell about unsaved work: a browser tab
+   * already asks its own question on the way out, and it is not this application's to answer.
+   * Throwing here would turn every edit in the preview into an error in the console — a refusal
+   * is the honest answer to "run this graph", never to "there are unsaved changes".
+   */
+  async reportDirty(): Promise<void> {}
+
+  async closeWindow(): Promise<void> {}
+
+  /**
+   * An empty library, rather than a refusal.
+   *
+   * The Library screen is worth looking at in a browser, and what somebody sees there is its
+   * empty state — which is the screen that teaches. Inventing entries would be a fixture
+   * pretending to be somebody's own work, which is a different thing from a recorded journal
+   * labelled as one.
+   */
+  async libraryList(): Promise<LibraryListing> {
+    return { entries: [], quarantined: null };
+  }
+
+  async libraryRemove(): Promise<void> {
+    throw new PreviewOnlyError('Removing something from the library');
+  }
+
   async about(): Promise<About> {
     // The preview knows what it is, and says so rather than inventing a build.
     return {
       version: 'preview',
+      buildCommit: 'unknown',
       runtime: 'not attached',
       protocolSchema: 1,
       projectSchema: 1,

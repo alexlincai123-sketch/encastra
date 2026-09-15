@@ -16,3 +16,9 @@ serde_json = { workspace = true }
 semver = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+# Only the import tests need it, and only to assemble a `.encastra` file this build refuses to
+# read. `Project::to_bytes` always writes the schema this build understands, which is right for
+# it and the reason a fixture from the future has to be built entry by entry.
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }

@@ -10,6 +10,7 @@
 import { Fragment } from 'react';
 import { splitOnPlaceholder, useTranslation } from '../i18n';
 import { ipc } from '../ipc';
+import { forDisplay } from '../safe-text';
 import { useEditor } from '../store';
 import type { ComponentManifest, ConfigField, NodeRecord, Snapshot } from '../types';
 import { hostOf } from '../url';
@@ -222,18 +223,35 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
     );
   }
 
-  const folder = typeof config?.folder === 'string' ? config.folder.trim() : '';
+  // Both of these arrive verbatim from the project file, which somebody else may have written,
+  // and both are rendered back to the person as the thing they are agreeing to. Cleaned before
+  // either use — and cleaned once, so the string on the button and the string in the grant are
+  // the same string. See `safe-text`.
+  const folder = typeof config?.folder === 'string' ? forDisplay(config.folder.trim()) : '';
   // The host is taken from the address on the node, so allowing is about the place the person
   // actually typed rather than a second field they have to keep in step with it.
-  const host = hostOf(typeof config?.url === 'string' ? config.url : '');
+  const host = forDisplay(hostOf(typeof config?.url === 'string' ? config.url : ''));
 
   return (
     <section className="panel__section">
       <h3 className="panel__group-label">{t('inspector.permissions.title')}</h3>
       {needsAnswer.map((capability) => {
-        const granted = grants.find((g) => g.node === nodeId && g.kind === capability.kind);
         const wantsFolder = capability.kind === 'fs.read' || capability.kind === 'fs.write';
         const wantsHost = capability.kind === 'net.http';
+        const existing = grants.find((g) => g.node === nodeId && g.kind === capability.kind);
+        // A grant is an answer about a value, not merely about a node and a capability. If the
+        // folder or the address on the node has changed since it was given, the old answer is not
+        // an answer to the question now on screen — so the button goes back to asking, rather
+        // than reading "Allowed" while the scope it would send is one the node no longer names.
+        const granted =
+          existing &&
+          (wantsFolder
+            ? existing.folder === folder
+            : wantsHost
+              ? (existing.hosts ?? []).join(',') === host
+              : true)
+            ? existing
+            : undefined;
 
         return (
           <div className="field" key={capability.kind}>
@@ -297,6 +315,14 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
           </div>
         );
       })}
+
+      {/* How long an answer lasts, said once under the controls rather than on each of them.
+          "Allow this folder" reads like a permanent decision and is not one: a grant is held
+          for the project that is open, sent with every run of it, and dropped the moment a new
+          project, another project or a sample replaces the canvas. Somebody deciding whether to
+          press Allow is deciding about a scope, and the scope was the one thing the buttons
+          never stated. */}
+      <p className="field__doc">{t('inspector.permissions.scope')}</p>
 
       {cannot.length > 0 ? (
         <div className="cannot">

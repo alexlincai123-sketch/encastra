@@ -50,13 +50,18 @@ const SOURCE_FILES = [
   'canvas/Canvas.tsx',
   'canvas/ComponentNode.tsx',
   'canvas/Wire.tsx',
+  'canvas/ContextMenu.tsx',
+  'panels/Import.tsx',
   'panels/Inspector.tsx',
   'panels/Palette.tsx',
+  'panels/Publish.tsx',
   'panels/RunPanel.tsx',
+  'panels/UnsavedChanges.tsx',
   'onboarding/Welcome.tsx',
   'views/Builder.tsx',
   'views/Components.tsx',
   'views/Home.tsx',
+  'views/Library.tsx',
   'views/Security.tsx',
 ].map((path) => ({ path, absolute: SRC(path) }));
 
@@ -104,13 +109,22 @@ function findHardcodedText(source: string): string[] {
   // shape the formatter actually produces — open-tag-`>`, a line break, one line of text, a line
   // break, close-tag-`<` — rather than newlines in general, so it still cannot run past the next
   // real tag boundary the way the broader version could.
-  const textNode = />([^<>{}\n]+)</g;
-  const wrappedTextNode = />[ \t]*\n[ \t]*([^<>{}\n]+)\n[ \t]*</g;
+  //
+  // One more shape has to be excluded at the regex rather than by character class, because
+  // no rule about the text itself can see it: an arrow function whose body compares with
+  // `<`. `setActive((index) => (index <= 0 ? last : index - 1))` (`canvas/ContextMenu.tsx`)
+  // has a `>` from the arrow and a `<` from the comparison, and everything between them is
+  // ordinary English-looking code. Requiring that the opening `>` is not the tail of an `=>`
+  // costs nothing — JSX never writes one — and removes the whole class rather than
+  // allowlisting the one occurrence, which would come back the next time somebody writes a
+  // comparison inside an arrow.
+  const textNode = /(^|[^=])>([^<>{}\n]+)</g;
+  const wrappedTextNode = /(^|[^=])>[ \t]*\n[ \t]*([^<>{}\n]+)\n[ \t]*</g;
   for (const match of [
     ...withoutComments.matchAll(textNode),
     ...withoutComments.matchAll(wrappedTextNode),
   ]) {
-    const text = match[1]?.trim() ?? '';
+    const text = match[2]?.trim() ?? '';
     if (!text || !/[A-Za-z]/.test(text) || TECHNICAL_TEXT_ALLOWLIST.has(text)) continue;
     // One shape the wrapped-node pattern above still cannot tell from real JSX prose by
     // character class alone: a ternary chaining one conditionally-rendered element to the
@@ -158,6 +172,11 @@ describe('findHardcodedText', () => {
   it('does not flag text that already goes through t()', () => {
     expect(findHardcodedText('<p>{t("toolbar.new")}</p>')).toEqual([]);
     expect(findHardcodedText('<button title={t("x")}>{t("y")}</button>')).toEqual([]);
+  });
+
+  it('does not flag the body of an arrow function that compares with a less-than', () => {
+    // The `>` is the arrow's, the `<` is the comparison's, and between them lies code.
+    expect(findHardcodedText('setActive((i) => (i <= 0 ? last : i - 1));')).toEqual([]);
   });
 
   it('does not flag the allowlisted keyboard shortcuts', () => {

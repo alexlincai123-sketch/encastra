@@ -107,7 +107,7 @@ export function Scene07Reuse({ locale }: { locale: Locale }): ReactNode {
   });
 
   return (
-    <section ref={ref} className={styles.scene} aria-label="Reuse" data-scene="reuse">
+    <section ref={ref} className={styles.scene} aria-label={COPY.label} data-scene="reuse">
       <div className={styles.pin} data-pin>
         <div className={`${styles.stage} ${styles.centerCol}`}>
           <span className={styles.index} data-animate>
@@ -133,9 +133,7 @@ export function Scene07Reuse({ locale }: { locale: Locale }): ReactNode {
 
                 <div className={styles.reuseCard}>
                   <p className={styles.reuseCardTitle}>Image Processor</p>
-                  <p className={styles.reuseCardNote}>
-                    Watch Folder → Resize Image → Save File, saved as one template.
-                  </p>
+                  <p className={styles.reuseCardNote}>{COPY.templateNote}</p>
                 </div>
 
                 <div className={local.stackGroup} aria-hidden="true">

@@ -26,6 +26,7 @@ const en: Messages = {
     items: {
       home: 'Home',
       builder: 'Builder',
+      library: 'Library',
       components: 'Components',
       security: 'Security',
       settings: 'Settings',
@@ -46,6 +47,10 @@ const en: Messages = {
         title: 'Open',
         detailReady: 'A .encastra file you saved earlier',
         detailUnavailable: 'Needs the desktop application',
+      },
+      library: {
+        title: 'Open from your library',
+        detail: 'What you made, took in, or prepared',
       },
       browse: {
         title: 'Browse components',
@@ -92,6 +97,68 @@ const en: Messages = {
           'A workflow runs forwards. To do the same work repeatedly, start it from a trigger — Watch Folder or Timer — which runs it once per event.',
       },
       bridge: 'A step producing {bridge} in between would join them.',
+      // Every wording a refused connection is built from — see `canvas/refusal.ts`.
+      //
+      // `cannotFeed`, `listOf` and `optional` are whole constructions with a placeholder
+      // in them rather than fragments to be joined, because word order and agreement are
+      // yours to decide: German puts no article in `types` and carries the case on a fixed
+      // "Wert vom Typ …" instead, Spanish carries the article inside the phrase. Three
+      // wordings per type, because a sentence needs a different one in each place:
+      // `types` is the phrase a sentence refers to a value by, `nouns` the bare noun a
+      // construction frames, `labels` the name shown on the bridge chip and in `detail`.
+      cannotFeed: '{from} cannot be fed into a step that expects {to}.',
+      rawType: '“{name}”',
+      listOf: 'a list of {item} values',
+      optional: 'an optional {item}',
+      types: {
+        bool: 'a boolean',
+        i64: 'an integer',
+        f64: 'a number',
+        string: 'text',
+        json: 'JSON',
+        file: 'a file',
+        dir: 'a folder',
+        bytes: 'bytes',
+        image: 'an image',
+        video: 'a video',
+        audio: 'audio',
+      },
+      nouns: {
+        bool: 'boolean',
+        i64: 'integer',
+        f64: 'number',
+        string: 'text',
+        json: 'JSON',
+        file: 'file',
+        dir: 'folder',
+        bytes: 'bytes',
+        image: 'image',
+        video: 'video',
+        audio: 'audio',
+      },
+      labels: {
+        bool: 'Boolean',
+        i64: 'Integer',
+        f64: 'Number',
+        string: 'Text',
+        json: 'JSON',
+        file: 'File',
+        dir: 'Folder',
+        bytes: 'Bytes',
+        image: 'Image',
+        video: 'Video',
+        audio: 'Audio',
+      },
+      detail: {
+        notAType: '“{name}” is not something this build can read as a type.',
+        listsDoNotMatch: 'The two lists do not hold the same thing. {inner}',
+        cannotConnect: '{from} cannot connect to {to}.',
+        unknownType:
+          '“{name}” is not a type this runtime knows. The component may need a newer runtime version.',
+        siblings:
+          '{from} and {to} are both kinds of {shared}, but one is not the other. Convert through {shared} if that is what you mean.',
+        noConversion: '{from} cannot become {to}. There is no conversion between them.',
+      },
     },
     empty: {
       heading: 'Your canvas is empty',
@@ -102,6 +169,7 @@ const en: Messages = {
     // the keyboard; this is where somebody finds out that it is.
     menu: {
       label: 'Canvas actions',
+      connect: 'Connect from here…',
       duplicate: 'Duplicate',
       disable: 'Switch off',
       enable: 'Switch on',
@@ -109,16 +177,74 @@ const en: Messages = {
       deleteConnection: 'Delete connection',
       paste: 'Paste',
       selectAll: 'Select all',
+      undo: 'Undo',
+      redo: 'Redo',
+      // The same items when the right-click landed inside a selection of several steps, which
+      // keeps that selection rather than narrowing to the one under the pointer. Counted
+      // through the locale's own plural rules, never by gluing an "s" onto a word.
+      many: {
+        duplicate: {
+          one: 'Duplicate {count} step',
+          other: 'Duplicate {count} steps',
+        },
+        disable: {
+          one: 'Switch off {count} step',
+          other: 'Switch off {count} steps',
+        },
+        enable: {
+          one: 'Switch on {count} step',
+          other: 'Switch on {count} steps',
+        },
+        delete: {
+          one: 'Delete {count} step',
+          other: 'Delete {count} steps',
+        },
+      },
     },
     keysHint:
-      'Use the arrow keys to move between steps, Enter to open a step in the inspector, Escape to deselect, and Delete to remove the selected step.',
+      'Use the arrow keys to move between steps, Enter to open a step in the inspector, C to start a connection from the selected step, E to move through the connections it already has, Delete to remove whichever of the two is held, and Escape to let go.',
+    // Making a connection without a mouse. Every one of these is read out rather than seen, so
+    // they are whole sentences: a screen reader has no canvas to glance at.
+    connect: {
+      started:
+        'Connecting from {from}. {targets}. Arrow keys to choose, Enter to connect, Escape to cancel.',
+      targets: {
+        one: '{count} possible target',
+        other: '{count} possible targets',
+      },
+      connected: 'Connected.',
+      cancelled: 'Cancelled.',
+      noTargets: 'Nothing on this canvas can take what {step} produces.',
+      noOutputs: '{step} produces nothing to connect from.',
+    },
+    // Holding a connection that already exists, so it can be heard and removed.
+    connection: {
+      focused: 'Connection from {from} to {to}.',
+      removed: 'Connection removed.',
+      none: '{step} has no connections yet.',
+    },
     a11y: {
       selected: '{name}, step {index} of {total}, selected.',
+      /** One end of a connection, said as one unit: a step and one of its ports. */
+      port: '{step} · {port}',
     },
     node: {
       /** Shown on a node whose `componentRef` this build has no manifest for — the graph
        * references something that is not part of it. */
       notInstalled: 'Not installed.',
+      // The state of a step said in a shape as well as a colour, keyed exactly as
+      // `runPanel.status.*` is. Here rather than in the component because everything a person
+      // reads belongs in this tree — and because a locale that would rather not use a tick has
+      // somewhere to say so.
+      glyphs: {
+        pending: '·',
+        running: '…',
+        ok: '✓',
+        failed: '✕',
+        skipped: '–',
+        cancelled: '⊘',
+        disabled: '–',
+      },
     },
     // The badge a wire shows when the type system inserted a conversion on it. Keyed by the
     // runtime's own operation id (`Wire.tsx`'s `OP_LABELS`), not by the English phrase, so a
@@ -218,6 +344,227 @@ const en: Messages = {
       versionShape: 'A version is numbered like 1.0.0.',
     },
   },
+  // What somebody has: what they made, what they took in, and what they prepared to hand
+  // on. Every sentence here is about files on this machine — there is no account and nothing
+  // syncs, and the screen says so rather than leaving somebody to wonder.
+  library: {
+    preparedNotOpenable:
+      'A prepared publication is a folder to hand to somebody, not a project to open. Open the project it was made from instead.',
+    heading: 'Your library',
+    intro:
+      'Everything you have: the projects you made, what you took in from somebody else, and the folders you prepared to hand on. All of it is on this machine. Nothing here is synced, uploaded or shared with anyone.',
+    import: 'Import…',
+    importTitle: 'Read a publication folder somebody gave you',
+    importUnavailable: 'Needs the desktop application',
+    search: {
+      placeholder: 'Search',
+      ariaLabel: 'Search your library',
+    },
+    sort: {
+      label: 'Order',
+      name: 'By name',
+      recent: 'Most recent',
+      origin: 'By where it came from',
+    },
+    noMatches: 'Nothing here matches that.',
+    quarantined:
+      'The previous list could not be read, so it was set aside as {name} and a new one started. Nothing was deleted, and none of your projects was touched.',
+    origin: {
+      created: 'Made here',
+      imported: 'Imported',
+      prepared: 'Prepared',
+    },
+    status: {
+      missing: {
+        label: 'Not there',
+        detail:
+          'Nothing is at the place this points to any more. It was moved or deleted outside Encastra, which is yours to do — this line is out of date, not wrong.',
+      },
+      changed: {
+        label: 'Changed',
+        detail:
+          'The file is there, and what is in it differs from the last time Encastra looked. Something edited it somewhere else.',
+      },
+    },
+    facts: {
+      version: 'Version',
+      publisher: 'Publisher',
+      steps: 'Steps',
+      when: 'Last',
+    },
+    row: {
+      opened: 'Opened {when}',
+      added: 'Added {when}',
+      publisherClaim:
+        '{publisher} — claimed, not verified. There are no accounts, so nobody has checked it.',
+      steps: {
+        one: '{count} step',
+        other: '{count} steps',
+      },
+    },
+    reach: {
+      none: 'It asks for nothing outside itself.',
+      someLabel: 'It will ask to reach:',
+      asksEveryRun: 'Having it here grants none of this. Every run asks.',
+    },
+    actions: {
+      open: 'Open',
+      remove: 'Remove…',
+    },
+    remove: {
+      cancel: 'Keep it',
+      keepsFile: 'This takes it off the list only. Your file stays exactly where you put it.',
+      forget: 'Take it off the list',
+      importedNote:
+        'Encastra made this copy, so it can delete it. Your choice: the copy goes, or it stays where it is.',
+      andDeleteCopy: 'Remove and delete the copy',
+      keepCopy: 'Remove, keep the copy',
+      refused:
+        'That file is yours, and it stays where it is. Encastra only deletes copies it made itself.',
+    },
+    empty: {
+      heading: 'Nothing here yet',
+      body: 'Three things end up on this list, and each of them starts with something you do.',
+      ways: {
+        created: 'A project you save is added to it.',
+        imported:
+          'A publication folder somebody gave you is added when you import it — after Encastra has read it and you have said yes.',
+        prepared: 'A folder you prepare to hand on is added when you prepare it.',
+      },
+      build: 'Build something',
+      buildTitle: 'Open the builder and start from an empty canvas',
+    },
+  },
+
+  // Taking a publication in. `errors.*` is one sentence per refusal the runtime can return,
+  // never a bucket: a folder holding two projects and a document naming somebody else's
+  // namespace are different problems with different things to do about them. `library.ts` maps
+  // the runtime's tag to the key, and its test checks that every tag has one.
+  import: {
+    heading: 'Take in a publication',
+    intro:
+      'Encastra has read the folder you chose the way somebody receiving it should: it checked the file against the document beside it, and ran the publisher’s own check again here. Nothing has been written, and nothing has run.',
+    reading: 'Reading the folder…',
+    confirm: 'Import',
+    nothing: 'nothing',
+    copiesNothingRuns:
+      'Importing copies the files into your library. Nothing runs until you open it and press Run.',
+    nothingWasTakenIn: 'Nothing was taken in, and nothing on this machine was changed.',
+    sections: {
+      what: 'What this says it is',
+      integrity: 'Whether the file is the one described',
+      inside: 'What is inside',
+      asks: 'What it would ask for',
+      check: 'What Encastra found',
+    },
+    facts: {
+      publisher: 'Publisher',
+      name: 'Known as',
+      version: 'Version',
+      kind: 'Kind',
+      licence: 'Licence',
+      size: 'Size',
+      kilobytes: '{size} kB',
+      runtime: 'Runs on',
+      projectName: 'Project',
+      steps: 'Steps',
+      stepCount: {
+        one: '{count} step',
+        other: '{count} steps',
+      },
+      switchedOff: ' ({count} switched off)',
+      versions: 'Versions kept',
+      versionCount: {
+        one: '{count} version',
+        other: '{count} versions',
+      },
+    },
+    kinds: {
+      project: 'Project',
+      template: 'Template',
+      component: 'Component',
+    },
+    notVerified:
+      'Nobody has checked that this publisher is who the name says. There are no accounts, so there is nobody who could have.',
+    checksumMatches: 'The file matches the checksum in the document beside it.',
+    checksumIsNotProvenance:
+      'That proves the file was not altered since it was prepared. It says nothing about who prepared it.',
+    capabilities: {
+      none: 'It asks for nothing outside itself.',
+      some: 'When it runs, it will ask to use:',
+      grantsNothing: 'Importing grants none of this. Each run asks before anything is reached.',
+    },
+    nothingFound: 'Nothing here would stop this being taken in.',
+    notAnAudit:
+      'This finds the mistakes that are mechanical enough to find. It is not a security audit, and nobody has done one.',
+    disagreement: {
+      declared: 'The document says',
+      actual: 'The project asks for',
+    },
+    tokens: {
+      title: 'title',
+      summary: 'summary',
+      changelog: 'changelog',
+      publisher: 'publisher',
+      categories: 'categories',
+      tags: 'tags',
+      runtime: 'runtime',
+    },
+    errors: {
+      notAFolder:
+        'That is not a folder. A publication is a folder holding a project and the document that describes it.',
+      folderIsALink:
+        'That folder is a link to somewhere else. Encastra will not follow it, because then what it read and what you chose would not be the same thing. Pick the folder itself.',
+      folderNotChosen:
+        'That folder was not picked in this session. Choose it with the folder chooser, so that what Encastra reads is what you pointed at.',
+      noDocument:
+        'There is no publication.json in that folder, so nothing in it says what it is. That is a folder of files, not a publication.',
+      documentIsALink:
+        'publication.json is a link to another file rather than a file. Encastra reads what is in the folder you chose, and nothing outside it.',
+      documentTooLarge:
+        'publication.json is about {size} kB, and this build reads at most {max} kB. A publication document is a page of text; one this large is not one.',
+      documentUnreadable:
+        'publication.json could not be read: {reason}. Ask whoever prepared it to prepare it again.',
+      noProject:
+        'There is no .encastra file in that folder. A publication is one project and the document describing it.',
+      moreThanOneProject:
+        'A publication is one project, and that folder holds {count}: {names}. Whoever prepared it should send one folder per project.',
+      projectIsALink:
+        'The project file is a link to another file rather than a file. Encastra installs what is in the folder you chose, and nothing outside it.',
+      unexpectedEntries:
+        'A publication folder holds a document and a project, and nothing else. This one also holds {names}. Encastra will not take in a folder it cannot account for.',
+      tooManyEntries:
+        'A publication folder holds a document and a project, and nothing else. This one holds more than {max} entries, which is not a publication whatever they are.',
+      projectTooLarge: 'The project is about {size} kB, and this build installs at most {max} kB.',
+      checksumMismatch:
+        'The project file is not the one this publication describes. Either the document describes a different file, or the file changed on the way here. Ask for it again.',
+      projectUnreadable:
+        'The project file could not be read: {reason}. It may have been made by a newer version of Encastra, or damaged on the way here.',
+      notInstallable: 'This build cannot install a {publicationKind}, so it will not pretend to.',
+      notAListingId:
+        '“{id}” is not a publication name, so there is no safe name to file this under.',
+      notAVersion: '“{version}” is not a version. Publications are numbered like 1.2.0.',
+      notPublishersNamespace:
+        '“{listing}” is not inside {publisher}’s namespace. The document names one publisher and a publication belonging to another, and Encastra cannot tell which of the two is the mistake.',
+      textTooLong: 'The {field} is longer than this build will read (at most {max} characters).',
+      textHasControlCharacters:
+        'The {field} holds characters that can hide what it really says — the kind that make one name look like another. Encastra refuses it rather than quietly rewriting what somebody wrote.',
+      documentDisagreesWithProject:
+        'The document and the project disagree about the {about}. The page describing this is describing something other than the file beside it.',
+      runtimeIncompatible:
+        'This publication is for a runtime {requires}, and this one is {have}. Nothing is installed for a version it was not built for.',
+      reviewRefused:
+        'The same check its publisher ran refuses it here. These would have to change before anybody could take it in:',
+      capabilitiesDisagree:
+        'The document and the project do not agree about what this asks for. Understating the permissions is the obvious problem; overstating them teaches people to skim the list, which is the subtler one. Both are refused.',
+      alreadyImported:
+        '{listing} {version} is already in your library. A published version never changes, so there is nothing new here to take in.',
+      io: 'Something on this computer refused the operation ({reason}). Nothing was taken in.',
+      unknown:
+        'Encastra refused this folder for a reason this version has no words for. It was not taken in.',
+    },
+  },
+
   toolbar: {
     publish: 'Publish',
     publishTitle: 'Prepare this project for somebody else to install',
@@ -399,6 +746,8 @@ const en: Messages = {
       allowHost: 'Allow {host}',
       allowAddress: 'Allow this address',
       allow: 'Allow',
+      scope:
+        'Allowed while this project is open. Every run uses exactly this folder or address, and closing or switching projects forgets it.',
       chooseFolderFirst: 'Choose a folder first.',
       enterAddressFirst: 'Enter an address first.',
       notASetting:
@@ -535,6 +884,26 @@ const en: Messages = {
   // `messages.saved`/etc. are looked up with `translate()` from that plain store module, the same
   // way `canvas/Canvas.tsx` does inside `isConnectionLegal` — see `i18n/index.ts`'s own note on
   // why: a store action has no React render to call `useTranslation()` from.
+  // The only question this application asks before work is thrown away.
+  //
+  // One sentence per way of throwing it away, rather than one sentence with the action
+  // interpolated into it: "opening another project" and "closing Encastra" decline
+  // differently in most of these languages, and a sentence with a hole in it cannot.
+  unsaved: {
+    title: 'Unsaved changes',
+    reasons: {
+      new: 'You have unsaved changes. Starting a new project would lose them.',
+      open: 'You have unsaved changes. Opening another project would lose them.',
+      demo: 'You have unsaved changes. Loading a sample would lose them.',
+      restore: 'You have unsaved changes. Restoring an earlier version would lose them.',
+      close: 'You have unsaved changes. Closing Encastra would lose them.',
+      'library-open':
+        'You have unsaved changes. Opening something from your library would lose them.',
+    },
+    save: 'Save and continue',
+    discard: 'Discard changes',
+    cancel: 'Cancel',
+  },
   messages: {
     untitledProject: 'Untitled',
     recordingNote: 'This is a recording, not a run on this machine.',
@@ -558,6 +927,10 @@ const en: Messages = {
     restored: 'Restored. The version you came from is still in the history.',
     missingComponents: 'This project needs {missing}, which is not installed.',
     runtimeSilent: 'Something in the runtime did not answer.',
+    libraryMissing: '{name} is not where it was. Move it back, or open it from wherever it is now.',
+    imported: 'Imported {name}. Nothing has run.',
+    removedFromLibrary: '{name} is off the list. The file is where it was.',
+    removedAndDeleted: '{name} is off the list, and the copy Encastra made is deleted.',
   },
 
   // The three sample workflows `demos.ts` ships (the graph shape itself stays English-only
@@ -755,7 +1128,7 @@ const en: Messages = {
         loading: 'Loading…',
         loadError: 'Could not load {name}. Staying on the current one.',
         comingLater: {
-          label: 'Coming later',
+          label: 'Not translated',
           hint: 'The interface is structured to support these; nobody has translated them yet.',
         },
       },
@@ -824,6 +1197,9 @@ const en: Messages = {
           duplicateSelection: 'Duplicate the selection',
           selectAll: 'Select all',
           deleteSelection: 'Delete the selection',
+          connectFromStep: 'Start a connection from the selected step, on the canvas',
+          cycleConnections: 'Move through the connections of the selected step, on the canvas',
+          deleteConnection: 'Delete the connection being held, on the canvas',
         },
         note: 'Fixed today rather than remappable. None of these fire while you are typing into a text field.',
       },

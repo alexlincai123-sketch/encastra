@@ -14,8 +14,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::import::{MAX_CHANGELOG_CHARS, MAX_SUMMARY_CHARS, MAX_TITLE_CHARS};
 use crate::license::License;
-use crate::listing::{Kind, Publisher};
+use crate::listing::{Kind, Publisher, is_listing_id};
 use crate::money::Pricing;
 use crate::review::{Outcome, Review};
 
@@ -58,10 +59,16 @@ pub enum BundleError {
     NotYourNamespace { listing: String, publisher: String },
     #[error("a publication needs a {0}")]
     Missing(&'static str),
+    #[error("the {field} is longer than this build will publish ({max} characters)")]
+    TooLong { field: &'static str, max: usize },
+    #[error("the {0} holds characters that can hide what it really says")]
+    ControlCharacters(&'static str),
     #[error("{size} bytes is larger than this build will publish ({max})")]
     TooLarge { size: u64, max: u64 },
     #[error("this build cannot install a {0:?}, so it will not offer one")]
     NotInstallable(Kind),
+    #[error("\"{value}\" is not a usable identifier: {why}")]
+    NotAnIdentifier { value: String, why: String },
 }
 
 /// A prepared publication: the draft, plus everything measured rather than claimed.
@@ -105,6 +112,41 @@ impl PublicationBundle {
         if !draft.kind.installable_in_this_build() {
             return Err(BundleError::NotInstallable(draft.kind));
         }
+        // Both identifiers go through the product's one identifier grammar — the same one a
+        // component id passes — and *before* the namespace test below rather than after.
+        //
+        // `owns()` compares a prefix, and both sides of that comparison arrive from the same
+        // caller — the draft and the publisher are two arguments to the same command. An
+        // attacker choosing both chooses the answer: `publisher.id = "x"` with
+        // `listing_id = "x./../../evil"` satisfies "starts with x, then a dot, then more".
+        //
+        // That would not matter if the listing id stayed a name. It does not: `prepare_publication`
+        // builds a directory from it, and a `..` in a directory name is a write outside the folder
+        // the person chose. Nothing that passes here contains a separator, a `..`, or an empty
+        // segment, so the namespace check is left deciding namespaces rather than paths. Two
+        // sessions found this hole independently; one grammar is kept, and `is_listing_id` in
+        // `listing.rs` is that grammar plus a length ceiling, for the receiving side to share.
+        encastra_protocol::manifest::validate_identifier(&draft.listing_id).map_err(|why| {
+            BundleError::NotAnIdentifier {
+                value: draft.listing_id.clone(),
+                why,
+            }
+        })?;
+        if !is_listing_id(&draft.listing_id) {
+            return Err(BundleError::NotAnIdentifier {
+                value: draft.listing_id.clone(),
+                why: format!(
+                    "a publication name is at most {} characters",
+                    crate::listing::MAX_LISTING_ID_CHARS
+                ),
+            });
+        }
+        encastra_protocol::manifest::validate_identifier(&publisher.id).map_err(|why| {
+            BundleError::NotAnIdentifier {
+                value: publisher.id.clone(),
+                why,
+            }
+        })?;
         if !publisher.owns(&draft.listing_id) {
             return Err(BundleError::NotYourNamespace {
                 listing: draft.listing_id,
@@ -119,6 +161,26 @@ impl PublicationBundle {
         }
         if draft.summary.trim().is_empty() {
             return Err(BundleError::Missing("summary"));
+        }
+
+        // The same limits the receiving side applies, applied here so that a publication is not
+        // prepared into something nobody can take in. The ceilings live in `import` because that
+        // is where they have to hold against a stranger; this is the same rule said early.
+        for (field, text, max) in [
+            ("title", draft.title.as_str(), MAX_TITLE_CHARS),
+            ("summary", draft.summary.as_str(), MAX_SUMMARY_CHARS),
+            (
+                "changelog",
+                draft.changelog.as_deref().unwrap_or_default(),
+                MAX_CHANGELOG_CHARS,
+            ),
+        ] {
+            if text.chars().count() > max {
+                return Err(BundleError::TooLong { field, max });
+            }
+            if has_control_characters(text) {
+                return Err(BundleError::ControlCharacters(field));
+            }
         }
 
         let size_bytes = project_bytes.len() as u64;
@@ -151,6 +213,53 @@ impl PublicationBundle {
         self.size_bytes == project_bytes.len() as u64
             && self.checksum == encastra_project::hash(project_bytes)
     }
+}
+
+/// Whether a piece of text holds characters that make it lie about what it says.
+///
+/// Three families, all of them invisible and all of them load-bearing in a name somebody reads
+/// before deciding to trust it:
+///
+/// - **C0 and C1 control characters** — Unicode category `Cc`, which is what [`char::is_control`]
+///   answers for, so both ranges are covered by that one call. A carriage return rewrites the
+///   line somebody is looking at; an escape can move a terminal cursor anywhere on screen. Three
+///   of them are ordinary whitespace and are allowed: a line feed, a carriage return and a tab.
+///   A changelog with more than one paragraph is the normal shape of a changelog, and a summary
+///   written as two sentences on two lines is not hiding anything. Every other control character
+///   has no business in text a person reads and is refused.
+/// - **Bidirectional overrides.** `U+202E` reverses what follows, so a title can be written to
+///   display as something entirely different from what it contains. The isolates `U+2066`–
+///   `U+2069` do the same thing more politely.
+/// - **Zero-width characters.** Two publications whose names differ only by a `U+200B` look
+///   identical and are not, which is the whole trick.
+///
+/// Nothing is stripped. Removing a character changes what somebody wrote and hands back a title
+/// they never chose; the honest answer is to say what is wrong and let them fix it.
+pub fn has_control_characters(text: &str) -> bool {
+    text.chars().any(|c| {
+        (c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+            // Bidirectional embeddings, overrides and isolates: they reorder what follows.
+            || matches!(c, '\u{202a}'..='\u{202e}')
+            || matches!(c, '\u{2066}'..='\u{2069}')
+            // Zero-width characters and joiners: they hide a difference between two names.
+            || matches!(c, '\u{200b}'..='\u{200f}')
+            || c == '\u{feff}'
+            // The deprecated format characters — inhibit/activate swapping and symmetric
+            // swapping, and the Arabic shaping controls. Deprecated is not the same as inert:
+            // renderers still honour some of them, and a filter that lists U+202E and forgets
+            // U+206A has an exception with a name.
+            || matches!(c, '\u{206a}'..='\u{206f}')
+            // The Arabic letter mark and the Mongolian vowel separator: format characters that
+            // affect layout without being controls by the `is_control` definition.
+            || c == '\u{061c}'
+            || c == '\u{180e}'
+            // Line and paragraph separators: not controls, but a renderer breaks the line on
+            // them, so a title can carry a second line nobody sees in a list.
+            || c == '\u{2028}'
+            || c == '\u{2029}'
+            // Interlinear annotation anchors: invisible structure, honoured by some renderers.
+            || matches!(c, '\u{fff9}'..='\u{fffb}')
+    })
 }
 
 #[cfg(test)]
@@ -195,6 +304,121 @@ mod tests {
     }
 
     #[test]
+    fn a_listing_id_cannot_be_a_path() {
+        // The listing id becomes a directory name in `prepare_publication`. `owns()` is a prefix
+        // test, and the publisher and the draft are two arguments to the same command — so an
+        // attacker who chooses both chooses the answer, and can satisfy the namespace check with
+        // a listing id full of traversal.
+        //
+        // The publisher here is crafted to make `owns()` return true for each of these, which is
+        // the point: the namespace check passes and the identifier check is what refuses.
+        for hostile in [
+            "x./../../evil",
+            "x./..\\..\\evil",
+            "x./etc/passwd",
+            "x.C:/Windows/evil",
+            "x..",
+            "x. ",
+        ] {
+            let publisher = Publisher {
+                id: "x".into(),
+                ..publisher()
+            };
+            let mut draft = draft();
+            draft.listing_id = hostile.into();
+
+            assert!(
+                publisher.owns(hostile),
+                "the fixture must satisfy the namespace check, or this proves nothing about it"
+            );
+
+            let error = PublicationBundle::prepare(
+                draft,
+                &publisher,
+                b"a project file",
+                ">=0.4.0",
+                &passed(),
+                0,
+            )
+            .expect_err(&format!("{hostile:?} must not be accepted as a listing id"));
+
+            assert!(
+                matches!(error, BundleError::NotAnIdentifier { .. }),
+                "{hostile:?} refused for the wrong reason: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_publisher_id_cannot_be_a_path_either() {
+        // Both sides of the namespace comparison are checked, because both arrive from the same
+        // caller and the publisher's id is written into the bundle.
+        let publisher = Publisher {
+            id: "../..".into(),
+            ..publisher()
+        };
+        let mut draft = draft();
+        draft.listing_id = "../...evil".into();
+
+        let error = PublicationBundle::prepare(draft, &publisher, b"x", ">=0.4.0", &passed(), 0)
+            .expect_err("a publisher id full of traversal must not be accepted");
+        assert!(
+            matches!(error, BundleError::NotAnIdentifier { .. }),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_listing_id_is_still_accepted() {
+        // The control. Every refusal above has to be about traversal, and that argument only
+        // holds if the shape a real publisher uses still goes through.
+        assert!(prepare(draft(), &passed()).is_ok());
+    }
+
+    #[test]
+    fn the_runtime_refuses_every_code_point_the_shared_table_says_it_must() {
+        // One table, replayed here and in apps/desktop/test/safe-text.test.ts. The two lists
+        // this guards were maintained by hand on each side and had drifted: this one did not
+        // know U+206A, U+061C, U+180E, U+2028 or U+FFF9, the editor's did not know U+206A or
+        // U+061C. A character that one side strips and the other accepts is a name that reads
+        // one way in the prompt and another in the document.
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/protocol/data/hostile-text-cases.json");
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!(
+                "the shared table must be readable at {}: {e}",
+                path.display()
+            )
+        });
+        let table: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
+
+        let refused = table["refused"].as_array().expect("a refused list");
+        let allowed = table["allowed"].as_array().expect("an allowed list");
+        assert!(
+            refused.len() >= 15 && allowed.len() >= 5,
+            "the table should be worth replaying"
+        );
+
+        for case in refused {
+            let sample = case["sample"].as_str().unwrap();
+            let codepoint = case["codepoint"].as_str().unwrap();
+            assert!(
+                has_control_characters(sample),
+                "{codepoint} ({}) must be refused",
+                case["why"].as_str().unwrap_or("")
+            );
+        }
+        for case in allowed {
+            let sample = case["sample"].as_str().unwrap();
+            assert!(
+                !has_control_characters(sample),
+                "{sample:?} must be allowed: {}",
+                case["why"].as_str().unwrap_or("")
+            );
+        }
+    }
+
+    #[test]
     fn a_reviewed_project_prepares_and_measures_itself() {
         let bundle = prepare(draft(), &passed()).expect("this one is fine");
         assert_eq!(bundle.size_bytes, 14);
@@ -227,6 +451,98 @@ mod tests {
             prepare(theirs, &passed()),
             Err(BundleError::NotYourNamespace { .. })
         ));
+    }
+
+    #[test]
+    fn a_listing_id_that_is_really_a_path_is_refused() {
+        // `Publisher::owns` says yes to this one: strip `dev.alice` and what is left starts with
+        // a dot. The desktop then uses the id as a folder name, so without this check a
+        // publication could be prepared three directories above where somebody chose.
+        let mut climbing = draft();
+        climbing.listing_id = "dev.alice.../../../x".into();
+        assert!(publisher().owns(&climbing.listing_id), "this is the trap");
+        assert!(matches!(
+            prepare(climbing, &passed()),
+            Err(BundleError::NotAnIdentifier { .. })
+        ));
+
+        for id in ["dev.alice.a/b", r"dev.alice.a\b", "dev.alice..x", "dev"] {
+            let mut bad = draft();
+            bad.listing_id = id.into();
+            assert!(
+                matches!(
+                    prepare(bad, &passed()),
+                    Err(BundleError::NotAnIdentifier { .. })
+                ),
+                "{id} should not be a listing id"
+            );
+        }
+    }
+
+    #[test]
+    fn text_nobody_could_read_to_the_end_of_is_refused() {
+        let mut long = draft();
+        long.title = "a".repeat(MAX_TITLE_CHARS + 1);
+        assert_eq!(
+            prepare(long, &passed()),
+            Err(BundleError::TooLong {
+                field: "title",
+                max: MAX_TITLE_CHARS
+            })
+        );
+
+        let mut long_summary = draft();
+        long_summary.summary = "a".repeat(MAX_SUMMARY_CHARS + 1);
+        assert!(matches!(
+            prepare(long_summary, &passed()),
+            Err(BundleError::TooLong {
+                field: "summary",
+                ..
+            })
+        ));
+
+        let mut long_changelog = draft();
+        long_changelog.changelog = Some("a".repeat(MAX_CHANGELOG_CHARS + 1));
+        assert!(matches!(
+            prepare(long_changelog, &passed()),
+            Err(BundleError::TooLong {
+                field: "changelog",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_title_that_displays_as_something_else_is_refused() {
+        // A right-to-left override makes the rest of the string render backwards, so a title can
+        // be written to read as one thing and contain another.
+        let mut spoofed = draft();
+        spoofed.title = "Thumbnails\u{202e}gnp.exe".into();
+        assert_eq!(
+            prepare(spoofed, &passed()),
+            Err(BundleError::ControlCharacters("title"))
+        );
+
+        let mut invisible = draft();
+        invisible.summary = "Makes a small copy\u{200b} of every picture.".into();
+        assert_eq!(
+            prepare(invisible, &passed()),
+            Err(BundleError::ControlCharacters("summary"))
+        );
+
+        // A line break is a C0 control too, and it is the ordinary shape of a changelog. The three
+        // whitespace controls are the only carve-out; an escape sequence in the same field is
+        // still refused, so the carve-out is three characters and not a category.
+        let mut paragraphs = draft();
+        paragraphs.changelog = Some("First release.\n\nAnd a second paragraph.\tIndented.".into());
+        assert!(prepare(paragraphs, &passed()).is_ok());
+
+        let mut escape = draft();
+        escape.changelog = Some("First release.\u{1b}[2J".into());
+        assert_eq!(
+            prepare(escape, &passed()),
+            Err(BundleError::ControlCharacters("changelog"))
+        );
     }
 
     #[test]

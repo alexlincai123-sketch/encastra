@@ -140,27 +140,80 @@ interface IntroCopy {
   readonly eyebrow: string;
   readonly headline: string;
   readonly sub: string;
+  /** The accessible name of the 3D stage's `<section>`, which holds scenes 1 and 2. */
+  readonly label: string;
 }
 
-interface BuildCopy extends BodyCopy {
+/**
+ * A scene that renders its own `<section>` — scenes 3 to 10, in `components/scenes/Scene0*.tsx`.
+ *
+ * `label` is that section's accessible name. It used to be an English literal in each component
+ * (`aria-label="Connect"`), which meant a Spanish visitor got a page whose landmarks were all in
+ * a language the page was not in. It is kept separate from `eyebrow` rather than reused from it
+ * even where the two read the same today: the eyebrow is a line of display copy that can be
+ * rewritten for rhythm, and the landmark name should not silently change with it. Scene 9's are
+ * already different — "Terminal" against an eyebrow of "The same thing, typed".
+ *
+ * Scenes 1 and 2 share one `<section>` in `scenes3d/SceneAssembly.tsx`; its name is
+ * `IntroCopy.label` above, because that component reads `intro` rather than a section of its own.
+ */
+interface SceneSectionCopy extends BodyCopy {
+  readonly label: string;
+}
+
+interface ConnectCopy extends SceneSectionCopy {
+  /** The verdict under each of the two attempts. The refused one is not an error message the
+      product prints — it is this page saying, in a sentence, what the editor does. */
+  readonly acceptedNote: string;
+  readonly refusedNote: string;
+}
+
+interface BuildCopy extends SceneSectionCopy {
   readonly resolve: string;
 }
 
-interface ReuseCopy extends BodyCopy {
+interface ResultCopy extends SceneSectionCopy {
+  /** The four labelled cards of the result panel. */
+  readonly modules: {
+    readonly preview: string;
+    readonly metadata: string;
+    readonly step: string;
+    readonly output: string;
+  };
+}
+
+interface ReuseCopy extends SceneSectionCopy {
   readonly steps: readonly string[];
+  /**
+   * The note under the saved template's name. The three component names inside it stay in
+   * English in both languages — they are the names the application itself shows — and only the
+   * sentence around them translates.
+   */
+  readonly templateNote: string;
+}
+
+interface EcosystemCopy extends SceneSectionCopy {
+  /** The two outer rings of the nesting diagram; the innermost is a real component's own name. */
+  readonly tierProject: string;
+  readonly tierWorkflow: string;
+}
+
+interface TryCopy extends SceneSectionCopy {
+  readonly downloadCta: string;
+  readonly docsCta: string;
 }
 
 interface SceneCopy {
   readonly intro: IntroCopy;
   readonly whatIf: BodyCopy;
-  readonly connect: BodyCopy;
+  readonly connect: ConnectCopy;
   readonly build: BuildCopy;
-  readonly run: BodyCopy;
-  readonly result: BodyCopy;
+  readonly run: SceneSectionCopy;
+  readonly result: ResultCopy;
   readonly reuse: ReuseCopy;
-  readonly ecosystem: BodyCopy;
-  readonly terminal: BodyCopy;
-  readonly try: BodyCopy;
+  readonly ecosystem: EcosystemCopy;
+  readonly terminal: SceneSectionCopy;
+  readonly try: TryCopy;
 }
 
 export const SCENE_COPY: SceneCopy = {
@@ -169,6 +222,7 @@ export const SCENE_COPY: SceneCopy = {
     eyebrow: 'Encastra',
     headline: 'SOFTWARE SHOULD NOT ALWAYS START FROM ZERO.',
     sub: 'A local-first desktop application that runs a typed graph of components. Scroll.',
+    label: 'Assembly',
   },
   whatIf: {
     index: '02',
@@ -178,12 +232,16 @@ export const SCENE_COPY: SceneCopy = {
   },
   connect: {
     index: '03',
+    label: 'Connect',
     eyebrow: 'Connect',
     headline: 'A line means something before it means anything else',
     body: 'Draw a wire and the type system answers on the spot. A file can become an image — narrowing, and the editor shows you the conversion that could fail. A number cannot: there is no path from a count to an image, so the connection is refused, not attempted.',
+    acceptedNote: '✓ Connected — a real, narrowing conversion',
+    refusedNote: 'Refused — no path from a number to an image',
   },
   build: {
     index: '04',
+    label: 'Build',
     eyebrow: 'Build',
     headline: 'Structure, not chaos',
     body: 'Three steps. Eight. Twenty — nearly the whole palette, wired up at once. Pull back far enough and what looked like scatter reads as a system with one way in.',
@@ -191,40 +249,57 @@ export const SCENE_COPY: SceneCopy = {
   },
   run: {
     index: '05',
+    label: 'Run',
     eyebrow: 'Run',
     headline: 'Nothing runs until you press run',
     body: 'Every step goes idle, then running, then done — in order, visible while it happens, the same journal the runtime writes for real.',
   },
   result: {
     index: '06',
+    label: 'Result',
     eyebrow: 'Result',
     headline: 'One file in, one file out',
     body: 'holiday.png at 800×400 becomes holiday-small.png at 200×100, saved into the folder you allowed. Then the workflow that made it comes apart — the run is over, not the graph.',
+    modules: {
+      preview: 'Preview',
+      metadata: 'Metadata',
+      step: 'Step',
+      output: 'Output',
+    },
   },
   reuse: {
     index: '07',
+    label: 'Reuse',
     eyebrow: 'Reuse',
     headline: 'Build it once. Keep it.',
     body: 'The three steps collapse into one template — Image Processor, the same one that ships with the app. Save it. Reuse it in another project. Hand someone the .encastra file — a plain, deterministic file, not an account.',
     steps: ['Build', 'Save', 'Reuse', 'Share'],
+    templateNote: 'Watch Folder → Resize Image → Save File, saved as one template.',
   },
   ecosystem: {
     index: '08',
+    label: 'Compose',
     eyebrow: 'Compose',
     headline: 'A component sits inside a workflow. A workflow sits inside a project.',
     body: 'Every project is one .encastra file — the graph, its lockfile, its variables, its version history. Nothing above the component is a separate system with its own rules; it is the same graph, one size up, each time.',
+    tierProject: 'Project · one .encastra file',
+    tierWorkflow: 'Workflow',
   },
   terminal: {
     index: '09',
+    label: 'Terminal',
     eyebrow: 'The same thing, typed',
     headline: 'Everything above, from a shell',
     body: 'Every component the app ships also exists as a command. This transcript is recorded, not live — the story keeps going, it just stops drawing itself and starts printing itself.',
   },
   try: {
     index: '10',
+    label: 'Try it',
     eyebrow: 'Try it',
     headline: 'BUILD SOFTWARE LIKE SYSTEMS.',
     body: `Windows only, for now. Not code-signed — the published SHA-256 is what you have instead of a publisher's signature.`,
+    downloadCta: 'Download the beta',
+    docsCta: 'Read the documentation',
   },
 };
 
@@ -234,12 +309,9 @@ export const SCENE_COPY: SceneCopy = {
  * change. `test/i18n.test.ts` checks the two objects carry exactly the same keys in both
  * directions, the same way it checks `dictionaries/en.ts` against `dictionaries/es.ts`.
  *
- * `intro` and `whatIf` are translated here for completeness and because a half-translated data
- * file is worse than a whole one, but neither currently reaches the screen in Spanish: both are
- * rendered by `components/scenes3d/SceneAssembly.tsx`, which is out of scope for this pass (see
- * `HomeExperience.tsx`'s own note on why) and does not read `SCENE_COPY` at all today. Scenes 3
- * through 10, in `components/scenes/Scene0*.tsx`, do read it, via `sceneCopy()` below, and are
- * the scenes a Spanish visitor actually sees translated.
+ * `intro` reaches the screen through `components/scenes3d/SceneAssembly.tsx`, which reads it via
+ * `sceneCopy()` below — headline, subtitle and the section's accessible name. Scenes 3 through
+ * 10, in `components/scenes/Scene0*.tsx`, read their own sections the same way.
  */
 const SCENE_COPY_ES: SceneCopy = {
   intro: {
@@ -247,6 +319,7 @@ const SCENE_COPY_ES: SceneCopy = {
     eyebrow: 'Encastra',
     headline: 'EL SOFTWARE NO SIEMPRE TIENE QUE EMPEZAR DE CERO.',
     sub: 'Una aplicación de escritorio local-first que ejecuta un grafo tipado de componentes. Desplázate.',
+    label: 'Ensamblaje',
   },
   whatIf: {
     index: '02',
@@ -256,12 +329,16 @@ const SCENE_COPY_ES: SceneCopy = {
   },
   connect: {
     index: '03',
+    label: 'Conectar',
     eyebrow: 'Conectar',
     headline: 'Una línea significa algo antes de significar cualquier otra cosa',
     body: 'Dibuja un cable y el sistema de tipos responde al instante. Un archivo puede convertirse en una imagen — una conversión que estrecha el tipo, y el editor te muestra el paso que podría fallar. Un número no puede: no existe ningún camino de un recuento a una imagen, así que la conexión se rechaza, no se intenta.',
+    acceptedNote: '✓ Conectada — una conversión real que estrecha el tipo',
+    refusedNote: 'Rechazada — no hay camino de un número a una imagen',
   },
   build: {
     index: '04',
+    label: 'Construir',
     eyebrow: 'Construir',
     headline: 'Estructura, no caos',
     body: 'Tres pasos. Ocho. Veinte — casi toda la paleta, conectada a la vez. Aléjate lo suficiente y lo que parecía dispersión se lee como un sistema con una sola entrada.',
@@ -269,41 +346,58 @@ const SCENE_COPY_ES: SceneCopy = {
   },
   run: {
     index: '05',
+    label: 'Ejecutar',
     eyebrow: 'Ejecutar',
     headline: 'Nada se ejecuta hasta que pulsas ejecutar',
     body: 'Cada paso pasa de inactivo a en ejecución y luego a terminado — en orden, visible mientras ocurre, el mismo registro que escribe el runtime de verdad.',
   },
   result: {
     index: '06',
+    label: 'Resultado',
     eyebrow: 'Resultado',
     headline: 'Un archivo entra, un archivo sale',
     body: 'holiday.png a 800×400 se convierte en holiday-small.png a 200×100, guardado en la carpeta que permitiste. Luego el flujo de trabajo que lo hizo se deshace — termina la ejecución, no el grafo.',
+    modules: {
+      preview: 'Vista previa',
+      metadata: 'Metadatos',
+      step: 'Paso',
+      output: 'Salida',
+    },
   },
   reuse: {
     index: '07',
+    label: 'Reutilizar',
     eyebrow: 'Reutilizar',
     headline: 'Constrúyelo una vez. Consérvalo.',
     body: 'Los tres pasos se reducen a una sola plantilla — Image Processor, la misma que trae la aplicación. Guárdala. Reutilízala en otro proyecto. Pásale a alguien el archivo .encastra — un archivo plano y determinista, no una cuenta.',
     steps: ['Construir', 'Guardar', 'Reutilizar', 'Compartir'],
+    templateNote: 'Watch Folder → Resize Image → Save File, guardado como una sola plantilla.',
   },
   ecosystem: {
     index: '08',
+    label: 'Componer',
     eyebrow: 'Componer',
     headline:
       'Un componente vive dentro de un flujo de trabajo. Un flujo de trabajo vive dentro de un proyecto.',
     body: 'Cada proyecto es un único archivo .encastra — el grafo, su lockfile, sus variables, su historial de versiones. Nada por encima del componente es un sistema aparte con sus propias reglas; es el mismo grafo, una talla más grande, cada vez.',
+    tierProject: 'Proyecto · un solo archivo .encastra',
+    tierWorkflow: 'Flujo de trabajo',
   },
   terminal: {
     index: '09',
+    label: 'Terminal',
     eyebrow: 'Lo mismo, pero escrito',
     headline: 'Todo lo anterior, desde una terminal',
     body: 'Cada componente que trae la aplicación también existe como comando. Esta transcripción está grabada, no es en directo — la historia continúa, solo que deja de dibujarse a sí misma y empieza a imprimirse.',
   },
   try: {
     index: '10',
+    label: 'Pruébalo',
     eyebrow: 'Pruébalo',
     headline: 'CONSTRUYE SOFTWARE COMO SISTEMAS.',
     body: 'Solo Windows, por ahora. Sin firmar — el SHA-256 publicado es lo que tienes en lugar de la firma de un editor.',
+    downloadCta: 'Descarga la beta',
+    docsCta: 'Lee la documentación',
   },
 };
 

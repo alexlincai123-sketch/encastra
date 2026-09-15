@@ -170,12 +170,45 @@ const en: Messages = {
   graph: {
     needsPermission: 'needs your permission',
     routesTo: 'routes to',
+    /** Read out beside a required port, where a sighted reader sees an asterisk. */
+    required: 'required',
     state: {
       running: 'running',
       ok: 'ok',
       failed: 'failed',
       skipped: 'skipped',
     },
+  },
+
+  /**
+   * The chrome around the home page's terminal (`components/terminal/Terminal.tsx`) — the
+   * caption, the playback controls and the note a visitor with reduced motion gets instead of
+   * them.
+   *
+   * The transcript itself (`lib/terminal-script.ts`) is **not** here and is not translated: it
+   * reproduces what the real CLI prints, and a command or an output line rewritten in Spanish
+   * would be a line the product never emits. The frame around it is this site's own voice and
+   * does translate.
+   */
+  terminal: {
+    caption: 'Recorded demonstration, not a live terminal',
+    transcriptIntro: 'Recorded terminal transcript, shown here in full for assistive technology:',
+    controlsLegend: 'Playback controls',
+    play: 'Play',
+    pause: 'Pause',
+    restart: 'Restart',
+    speed: 'Playback speed, currently {speed}×. Press to change.',
+    reducedNote:
+      'Reduced motion is on, so this shows the finished transcript rather than typing it out.',
+  },
+
+  /** The 404 page (`app/not-found.tsx`). */
+  notFound: {
+    eyebrow: '404',
+    title: 'This page does not exist',
+    lead: 'The address you followed does not match any page on this site. It may be mistyped, or it may point at something that was never built.',
+    home: 'Go to the home page',
+    docs: 'Read the documentation',
   },
 
   /** The permission-request mock (`components/ui/PermissionMock.tsx`). */
@@ -1035,12 +1068,12 @@ const en: Messages = {
     },
     hero: {
       eyebrow: 'Ecosystem',
-      title: 'Build it, publish it, and one day hand it to somebody',
-      lead: 'Encastra builds software out of components. Everything that follows from that — publishing what you made, finding what other people made, installing it without trusting them — is mostly designed and not built. This page says which is which.',
+      title: 'Build it, publish it, hand it to somebody — by hand, for now',
+      lead: 'Encastra builds software out of components. Publishing what you made and taking in what somebody handed you both work today, offline, as a folder a person carries. Finding what other people made, and getting it without trusting them, is designed and not built. This page says which is which.',
     },
     loop: {
       eyebrow: 'The loop',
-      title: 'Five moments, two of which work',
+      title: 'Five moments, three of which work',
       lead: 'Each one carries the state it is actually in, read from the same table the rest of this site reads.',
       build: {
         title: 'Build',
@@ -1056,11 +1089,11 @@ const en: Messages = {
       },
       install: {
         title: 'Install',
-        body: 'Nothing can be installed from outside the application. A component from somebody else would need the sandbox that is designed and not built; a project from somebody else needs a registry to come from and a signature to be checked against.',
+        body: 'A publication folder somebody handed you can be imported: the application checks that the file is the one the document describes, runs the same review the publisher ran — against its own components, not their word — refuses a document that understates or overstates what the project asks for, and copies the verified bytes into your library. Nothing runs on import; opening is a separate step, and running still asks. The checksum proves the file was not altered, not who made it — there is no signature, and no registry to fetch from. A component from somebody else still cannot be installed at all.',
       },
       reuse: {
         title: 'Reuse',
-        body: 'A project file is already portable, already carries its own version history, and already pins every component it uses by content. Someone who hands you one, by any means, hands you something you can open and change.',
+        body: 'A project file is already portable, already carries its own version history, and already pins every component it uses by content. Someone who hands you one, by any means, hands you something you can open and change — and the library keeps what you made, what you imported and what you prepared, with a content hash that says whether each is still what it was.',
       },
     },
     today: {

@@ -107,7 +107,7 @@ export function Scene03Connect({ locale }: { locale: Locale }): ReactNode {
   });
 
   return (
-    <section ref={ref} className={styles.scene} aria-label="Connect" data-scene="connect">
+    <section ref={ref} className={styles.scene} aria-label={COPY.label} data-scene="connect">
       <div className={`${styles.pin} u-stage`} data-pin>
         <div className={`${styles.stage} ${styles.centerCol} ${scene.composition} u-depth`}>
           <span className={styles.index} data-animate>
@@ -124,7 +124,7 @@ export function Scene03Connect({ locale }: { locale: Locale }): ReactNode {
             <div className={styles.connectAttempt} data-attempt="ok">
               <div className={styles.connectPair}>
                 <div className={styles.connectNode}>
-                  <GraphNode node={SOURCE} />
+                  <GraphNode node={SOURCE} locale={locale} />
                 </div>
                 <div className={scene.wireSlot}>
                   {/* The wire carries no label of its own here. `Wire` centres its badge on
@@ -139,18 +139,18 @@ export function Scene03Connect({ locale }: { locale: Locale }): ReactNode {
                   </span>
                 </div>
                 <div className={styles.connectNode}>
-                  <GraphNode node={TARGET} highlighted />
+                  <GraphNode node={TARGET} highlighted locale={locale} />
                 </div>
               </div>
               <span className={styles.connectLabel} data-tone="ok" data-animate>
-                ✓ Connected — a real, narrowing conversion
+                {COPY.acceptedNote}
               </span>
             </div>
 
             <div className={styles.connectAttempt} data-attempt="bad">
               <div className={styles.connectPair}>
                 <div className={styles.connectNode}>
-                  <GraphNode node={REFUSED_SOURCE} />
+                  <GraphNode node={REFUSED_SOURCE} locale={locale} />
                 </div>
                 <div className={scene.wireSlot}>
                   <Wire label={connectRefusedLabel(locale)} refused />
@@ -159,11 +159,11 @@ export function Scene03Connect({ locale }: { locale: Locale }): ReactNode {
                   </span>
                 </div>
                 <div className={styles.connectNode}>
-                  <GraphNode node={TARGET_REFUSED} />
+                  <GraphNode node={TARGET_REFUSED} locale={locale} />
                 </div>
               </div>
               <span className={styles.connectLabel} data-tone="danger" data-animate>
-                Refused — no path from a number to an image
+                {COPY.refusedNote}
               </span>
             </div>
           </div>

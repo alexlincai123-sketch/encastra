@@ -50,14 +50,7 @@ export function Home() {
       </header>
 
       <section className="home__actions">
-        <button
-          type="button"
-          className="action action--primary"
-          onClick={() => {
-            newProject();
-            setView('builder');
-          }}
-        >
+        <button type="button" className="action action--primary" onClick={() => newProject()}>
           <span className="action__title">{t('home.actions.new.title')}</span>
           <span className="action__detail">{t('home.actions.new.detail')}</span>
         </button>
@@ -74,6 +67,11 @@ export function Home() {
               ? t('home.actions.open.detailReady')
               : t('home.actions.open.detailUnavailable')}
           </span>
+        </button>
+
+        <button type="button" className="action" onClick={() => setView('library')}>
+          <span className="action__title">{t('home.actions.library.title')}</span>
+          <span className="action__detail">{t('home.actions.library.detail')}</span>
         </button>
 
         <button type="button" className="action" onClick={() => setView('components')}>

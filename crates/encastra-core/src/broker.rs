@@ -78,11 +78,43 @@ impl GrantSet {
     }
 
     /// Records a decision the user made.
+    ///
+    /// Prefer [`grant_declared`](Self::grant_declared) anywhere the decision arrives from
+    /// outside this process. This one asks no questions, which is right for a caller that
+    /// already knows what it is doing and wrong for one relaying a message.
     pub fn grant(&mut self, node: &NodeId, kind: &str, scope: GrantScope) {
         self.per_node.entry(node.clone()).or_default().push(Grant {
             kind: kind.to_owned(),
             scope,
         });
+    }
+
+    /// Records a decision the user made, if the component ever asked for that capability.
+    ///
+    /// The manifest is the component's statement of what it needs, and the dialog is built from
+    /// it — so a grant for something a component never declared did not come from a question
+    /// anybody was asked. It is either a bug or a forgery, and in both cases the right answer is
+    /// the same: it grants nothing.
+    ///
+    /// This matters because the decisions arrive from the editor, which is a webview. The
+    /// existing rule says a manifest asking for something does not grant it; without this, the
+    /// converse was not true, and a grant for something never asked for was honoured in full.
+    /// A component could be handed an authority its own declaration — the thing the permission
+    /// dialog and the capabilities panel are both drawn from — never mentions.
+    ///
+    /// Returns whether the grant was admitted.
+    pub fn grant_declared(
+        &mut self,
+        node: &NodeId,
+        manifest: &ComponentManifest,
+        kind: &str,
+        scope: GrantScope,
+    ) -> bool {
+        if !manifest.capabilities.iter().any(|c| c.kind == kind) {
+            return false;
+        }
+        self.grant(node, kind, scope);
+        true
     }
 
     fn grants_for<'a>(&'a self, node: &NodeId, kind: &str) -> impl Iterator<Item = &'a Grant> {
@@ -95,7 +127,13 @@ impl GrantSet {
             .filter(move |g| g.kind == kind)
     }
 
-    fn has(&self, node: &NodeId, kind: &str) -> bool {
+    /// Whether this node holds that capability at all.
+    ///
+    /// A read, not an authority: it answers a question about the set, and grants nothing. Public
+    /// so that whatever assembles a `GrantSet` can be tested on what it actually produced rather
+    /// than on what it was asked for — the difference between those two is where the grant that
+    /// nobody made used to live.
+    pub fn has(&self, node: &NodeId, kind: &str) -> bool {
         self.grants_for(node, kind).next().is_some()
     }
 }
@@ -213,12 +251,7 @@ impl Broker {
                 "That value is no longer available.",
             ));
         };
-        std::fs::read(&entry.path).map_err(|e| {
-            NodeError::new(
-                "read-failed",
-                format!("Could not read the file ({}).", e.kind()),
-            )
-        })
+        read_bounded(&entry.path)
     }
 
     /// Records that the host has verified an artifact's content and it is more specific than
@@ -291,22 +324,12 @@ impl Broker {
         }
 
         let path = entry.path.clone();
-        match std::fs::read(&path) {
-            Ok(bytes) => {
-                self.allow(node, "fs.read", detail);
-                Ok(bytes)
-            }
-            Err(e) => {
-                // The error carries the OS message but never the path: a journal entry is
-                // rendered on screen, and a person showing somebody a failed run should not be
-                // showing them their directory layout.
-                self.allow(node, "fs.read", detail);
-                Err(NodeError::new(
-                    "read-failed",
-                    format!("Could not read the connected file ({}).", e.kind()),
-                ))
-            }
-        }
+        // The error carries the OS error kind but never the path: a journal entry is rendered on
+        // screen, and a person showing somebody a failed run should not be showing them their
+        // directory layout.
+        let result = read_bounded(&path);
+        self.allow(node, "fs.read", detail);
+        result
     }
 
     /// Creates somewhere for this node to put a result.
@@ -419,13 +442,35 @@ impl Broker {
             return Err(self.deny(node, "fs.write", detail, "that handle does not exist"));
         };
 
-        let destination = directory.join(sanitise_filename(filename));
         let resolved_dir = match resolve_existing_dir(directory) {
             Some(d) => d,
             None => {
                 return Err(self.deny(node, "fs.write", detail, "that folder does not exist"));
             }
         };
+
+        // Built from the *resolved* directory, not the one that was passed in. The containment
+        // check below decides about `resolved_dir`; writing to `directory.join(..)` instead
+        // would mean the path that was checked and the path that is written are two different
+        // paths, and any symlink or junction between them is an escape the check never saw.
+        let destination = resolved_dir.join(sanitise_filename(filename));
+
+        // The directory is resolved, but the leaf is not, and a copy follows a link at the leaf
+        // as readily as anywhere else. A name already in the granted folder that is a link to
+        // somewhere outside it would take the write with it — and a granted folder is somewhere
+        // files arrive from elsewhere, which is the entire reason to grant one.
+        //
+        // `symlink_metadata` does not follow the link, which is what makes the question askable.
+        if std::fs::symlink_metadata(&destination).is_ok_and(|meta| meta.file_type().is_symlink()) {
+            return Err(self
+                .deny(
+                    node,
+                    "fs.write",
+                    detail,
+                    "a link of that name is already there, and writing through it would leave the folder",
+                )
+                .with_hint("Remove or rename that entry, or write under a different name."));
+        }
 
         if !granted
             .iter()
@@ -550,6 +595,20 @@ impl Broker {
         node: &NodeId,
         directory: &Path,
     ) -> Result<Vec<DirEntry>, NodeError> {
+        self.list_dir_to(node, directory, MAX_DIR_ENTRIES)
+    }
+
+    /// The body of [`list_dir`](Self::list_dir), with the ceiling as an argument.
+    ///
+    /// Split out for the same reason as [`read_bounded_to`]: a test that has to create fifty
+    /// thousand files to reach a branch is a test nobody writes, and an untested branch is a
+    /// branch that does not work.
+    fn list_dir_to(
+        &mut self,
+        node: &NodeId,
+        directory: &Path,
+        limit: usize,
+    ) -> Result<Vec<DirEntry>, NodeError> {
         let detail = directory
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -578,24 +637,44 @@ impl Broker {
             )
         })?;
 
-        let mut files: Vec<DirEntry> = entries
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file()))
-            .filter_map(|entry| {
-                let metadata = entry.metadata().ok()?;
-                Some(DirEntry {
-                    name: entry.file_name().to_string_lossy().into_owned(),
-                    path: entry.path(),
-                    size: metadata.len(),
-                    modified_ms: metadata
-                        .modified()
-                        .ok()
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_millis() as u64)
-                        .unwrap_or(0),
-                })
-            })
-            .collect();
+        // Bounded as it is built, not after. A watched folder is somewhere other people put
+        // files — that is what watching one is for — so the length of this list is not the
+        // grantor's to decide, and it is re-read every polling interval. Refused rather than
+        // truncated: a watcher that silently skipped files would be worse than one that says
+        // the folder is too full to watch.
+        let mut files: Vec<DirEntry> = Vec::new();
+        for entry in entries {
+            let Ok(entry) = entry else { continue };
+            if !entry.file_type().is_ok_and(|t| t.is_file()) {
+                continue;
+            }
+            if files.len() >= limit {
+                return Err(self
+                    .deny(
+                        node,
+                        "fs.read",
+                        detail,
+                        "that folder holds more files than this build will list",
+                    )
+                    .with_hint(
+                        "Point this at a folder with fewer files, or move the processed ones out.",
+                    ));
+            }
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            files.push(DirEntry {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                path: entry.path(),
+                size: metadata.len(),
+                modified_ms: metadata
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+            });
+        }
         files.sort_by(|a, b| a.path.cmp(&b.path));
 
         self.allow(node, "fs.read", format!("listed {}", files.len()));
@@ -618,7 +697,17 @@ impl Broker {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "file".to_owned());
 
-        let Some(parent) = path.parent().and_then(resolve_existing_dir) else {
+        // The *file* is resolved, not just the folder it appears to be in. Resolving the parent
+        // alone answers "does this name live in an allowed folder", which is not the question:
+        // a symlink or junction sitting in an allowed folder is a name in the right place whose
+        // content is somewhere else entirely. Anyone who can drop a file into a watched folder —
+        // which is what a watched folder is for — could otherwise hand the run a pointer to
+        // anything the user can read, and the handle that comes back would look ordinary.
+        let Some(resolved) = std::fs::canonicalize(path).ok().filter(|p| p.is_file()) else {
+            return Err(self.deny(node, "fs.read", name, "that file is not one this can open"));
+        };
+
+        let Some(parent) = resolved.parent().map(Path::to_path_buf) else {
             return Err(self.deny(
                 node,
                 "fs.read",
@@ -635,7 +724,9 @@ impl Broker {
             return Err(self.deny(node, "fs.read", name, "that folder has not been allowed"));
         }
 
-        let handle = self.import_file(path.to_path_buf(), kind);
+        // The resolved path is what gets stored, so every later read goes to the place that was
+        // actually checked rather than back through the link.
+        let handle = self.import_file(resolved, kind);
         self.allow(node, "fs.read", format!("opened {}", handle.id));
         Ok(handle)
     }
@@ -750,17 +841,221 @@ fn sanitise_filename(name: &str) -> String {
         .filter(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' '))
         .collect();
     let trimmed = cleaned.trim().trim_start_matches('.').trim();
-    if trimmed.is_empty() {
-        "output".to_owned()
-    } else {
-        trimmed.chars().take(120).collect()
+    let truncated: String = trimmed.chars().take(120).collect();
+
+    // Windows discards trailing dots and spaces when it opens a file, so "result.txt." and
+    // "result.txt" are one file to the OS and two strings here. Settling it now means the name
+    // this returns is the name that ends up on disk.
+    let settled = truncated.trim_end_matches(['.', ' ']).trim();
+
+    if settled.is_empty() {
+        return "output".to_owned();
     }
+    if is_reserved_device_name(settled) {
+        // Prefixed rather than refused: the component asked to write a result, and a result it
+        // cannot name is still a result. The prefix is the smallest change that makes the name
+        // an ordinary file again.
+        return format!("_{settled}");
+    }
+    settled.to_owned()
+}
+
+/// Whether a name is one Windows resolves to a device instead of a file, in any directory.
+///
+/// `CON`, `NUL`, `COM1` and their kin are not paths — opening one talks to hardware or to the
+/// bit bucket wherever it appears, so a granted folder does not contain them. A component that
+/// named its output `NUL` would have its result silently discarded, and one that named it `COM1`
+/// would be writing to a serial port. Neither is a containment breach; both are the filesystem
+/// meaning something other than what the name says, which is the thing this function exists to
+/// prevent. The extension is irrelevant to Windows here, so it is ignored.
+fn is_reserved_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end();
+    let upper = stem.to_ascii_uppercase();
+
+    if matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        return true;
+    }
+
+    // COM0-9 and LPT0-9. `is_numeric` rather than `is_ascii_digit` because Windows also accepts
+    // the superscript forms (COM¹), and those survive an alphanumeric filter.
+    let mut chars = upper.chars();
+    let prefix: String = chars.by_ref().take(3).collect();
+    let rest: Vec<char> = chars.collect();
+    matches!(prefix.as_str(), "COM" | "LPT") && rest.len() == 1 && rest[0].is_numeric()
 }
 
 /// Canonicalises a directory, resolving symlinks. Containment is checked on the result, never
 /// on the string that was passed in.
 fn resolve_existing_dir(path: &Path) -> Option<PathBuf> {
     std::fs::canonicalize(path).ok().filter(|p| p.is_dir())
+}
+
+/// Resolves a folder offered as the scope of a grant, refusing the ones that are not really a
+/// folder-shaped decision.
+///
+/// A grant names a folder a person chose. This refuses the handful of "folders" that no dialog
+/// meaningfully offers: a whole drive, the system directory, the profile root. "Allow this
+/// component to write to `C:\`" is not a permission anybody means to give, and the difference
+/// between that and `C:\Users\me\Invoices` is the difference between a scoped capability and an
+/// unscoped one.
+///
+/// It exists because the dialog is drawn by the webview. What the user was asked and what
+/// arrives here are two different things, and only this side is in a position to insist.
+///
+/// Returns the resolved path, which is the one that should be stored: checking one path and
+/// keeping another is how the check stops meaning anything.
+pub fn resolve_grant_directory(dir: &Path) -> Result<PathBuf, String> {
+    let resolved = std::fs::canonicalize(dir)
+        .map_err(|e| format!("that folder could not be opened ({})", e.kind()))?;
+
+    if !resolved.is_dir() {
+        return Err("that is not a folder".to_owned());
+    }
+    if resolved.parent().is_none() {
+        return Err("a whole drive is not something a component can be given".to_owned());
+    }
+    if sensitive_roots().contains(&resolved) {
+        return Err("that folder belongs to the system, not to a workflow".to_owned());
+    }
+    if forbidden_trees()
+        .iter()
+        .any(|tree| resolved.starts_with(tree))
+    {
+        return Err("that folder decides what runs when you log in".to_owned());
+    }
+    Ok(resolved)
+}
+
+/// Directories that may not be the scope of a grant, nor contain one.
+///
+/// The roots above are refused because they are absurdly wide. These are refused because of what
+/// writing into them *does*: anything placed in a startup folder runs the next time the person
+/// logs in, so a grant there is not a permission to save a file, it is a permission to choose
+/// what the machine executes. A workflow that writes its results into the startup folder is not
+/// a workflow anybody asked for.
+///
+/// Matched as a prefix rather than exactly, because a subfolder of a startup folder starts the
+/// same way. This is a short list of things with a known meaning, not an attempt to enumerate
+/// every unwise destination — see the residual risks in the audit for what it does not cover.
+fn forbidden_trees() -> Vec<PathBuf> {
+    let mut trees: Vec<PathBuf> = Vec::new();
+    let mut add = |path: PathBuf| {
+        if let Ok(resolved) = std::fs::canonicalize(&path) {
+            trees.push(resolved);
+        }
+    };
+
+    const STARTUP: &str = r"Microsoft\Windows\Start Menu\Programs\Startup";
+    for key in ["APPDATA", "ProgramData"] {
+        if let Some(value) = std::env::var_os(key) {
+            add(PathBuf::from(value).join(STARTUP));
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        add(PathBuf::from(home).join(".config/autostart"));
+    }
+
+    trees
+}
+
+/// Directories that may never themselves be the scope of a grant.
+///
+/// Only the roots, by exact match — a folder *inside* one of these is an ordinary choice, and
+/// refusing `C:\Users\me\Documents` because it sits under the profile would refuse the common
+/// case. Resolved on both sides so the comparison is between real paths.
+fn sensitive_roots() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    let mut add = |path: PathBuf| {
+        if let Ok(resolved) = std::fs::canonicalize(&path) {
+            roots.push(resolved);
+        }
+    };
+
+    for key in [
+        "SystemRoot",
+        "windir",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramData",
+        "USERPROFILE",
+        "PUBLIC",
+        "HOME",
+    ] {
+        if let Some(value) = std::env::var_os(key) {
+            let path = PathBuf::from(value);
+            // The container of every profile, which has no environment variable of its own.
+            if let Some(parent) = path.parent() {
+                add(parent.to_path_buf());
+            }
+            add(path);
+        }
+    }
+
+    for path in [
+        "/", "/etc", "/usr", "/bin", "/sbin", "/var", "/home", "/root", "/boot",
+    ] {
+        add(PathBuf::from(path));
+    }
+
+    roots
+}
+
+/// The most files a single folder listing may return.
+///
+/// `list_dir` reads a folder the user granted, but the *contents* of that folder are not theirs
+/// to decide — a watched folder is somewhere files arrive from elsewhere, and a trigger re-reads
+/// it every polling interval. Without a ceiling, the size of that allocation, repeated several
+/// times a second, belongs to whoever can write into the folder.
+///
+/// Far above any folder a person watches on purpose.
+pub const MAX_DIR_ENTRIES: usize = 50_000;
+
+/// The most any one file this runtime opens may weigh.
+///
+/// Every read here lands in a `Vec` — the runtime passes bytes between components, it does not
+/// stream them. Without a ceiling, the size of that allocation is chosen by whoever put the file
+/// where the run could reach it, which for a watched folder is not necessarily the person who
+/// granted it. Generous enough for the media this product works on; bounded, which is the point.
+pub const MAX_READ_BYTES: u64 = 512 * 1024 * 1024;
+
+/// Reads a file, having first asked how big it is.
+///
+/// The size is checked before the allocation rather than after, so an enormous file costs a
+/// `metadata` call instead of the memory it claims.
+fn read_bounded(path: &Path) -> Result<Vec<u8>, NodeError> {
+    read_bounded_to(path, MAX_READ_BYTES)
+}
+
+/// The body of [`read_bounded`], with the ceiling as an argument.
+///
+/// Split out so the refusal branch can be tested against a small limit. A test that has to
+/// produce half a gigabyte to reach a branch is a test that does not get written, and the
+/// version of this that only ever exercised the "small file" path was passing while the branch
+/// it claimed to cover had never run once.
+fn read_bounded_to(path: &Path, limit: u64) -> Result<Vec<u8>, NodeError> {
+    let size = std::fs::metadata(path)
+        .map_err(|e| {
+            NodeError::new(
+                "read-failed",
+                format!("Could not read the file ({}).", e.kind()),
+            )
+        })?
+        .len();
+
+    if size > limit {
+        return Err(NodeError::new(
+            "too-large",
+            format!("That file is {size} bytes, and this build reads at most {limit}."),
+        )
+        .with_hint("Nothing was read. Use a smaller file, or split it before this step."));
+    }
+
+    std::fs::read(path).map_err(|e| {
+        NodeError::new(
+            "read-failed",
+            format!("Could not read the file ({}).", e.kind()),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -831,11 +1126,21 @@ mod tests {
         assert_eq!(err.code, "denied");
         assert!(err.message.contains("connected"), "{}", err.message);
 
+        // A handle id that was never issued. Reachability is granted first, so that execution
+        // gets past that check and actually reaches the one about existence — otherwise this
+        // just re-runs the assertion above under a different name.
         let forged = Handle {
             id: 9999,
             kind: HandleKind::File,
         };
-        assert!(f.broker.open_input(&f.node, forged).is_err());
+        f.broker.make_reachable(&f.node, forged);
+        let err = f.broker.open_input(&f.node, forged).unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(
+            err.message.contains("does not exist"),
+            "a forged id must be refused for not existing, not for something else: {}",
+            err.message
+        );
     }
 
     #[test]
@@ -963,6 +1268,40 @@ mod tests {
         let escape = allowed.join("inner").join("..");
         let err = broker.save_to(&node, out, &escape, "x.txt").unwrap_err();
         assert_eq!(err.code, "denied");
+        // Three different refusals in `save_to` all carry the code "denied". Naming the reason
+        // is what stops this passing because the folder happened not to exist.
+        assert!(err.message.contains("outside"), "{}", err.message);
+    }
+
+    #[test]
+    fn a_folder_with_more_files_than_the_build_lists_is_refused_not_truncated() {
+        // A watched folder is somewhere other people put files. Silently returning the first N
+        // would mean a watcher that skips work without saying so; the refusal is the honest
+        // answer. The ceiling is an argument here so the branch can be reached without creating
+        // fifty thousand files.
+        let dir = tempdir::TempDir::new();
+        let watched = dir.path().join("watched");
+        std::fs::create_dir_all(&watched).unwrap();
+        for i in 0..5 {
+            std::fs::write(watched.join(format!("f{i}.txt")), b"x").unwrap();
+        }
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.read", GrantScope::Directory(watched.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+
+        // Under the ceiling, all five come back — the control that makes the refusal meaningful.
+        assert_eq!(broker.list_dir_to(&node, &watched, 5).unwrap().len(), 5);
+
+        let err = broker.list_dir_to(&node, &watched, 3).unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("more files"), "{}", err.message);
+
+        // And the public entry point uses the documented ceiling, so the branch above is the
+        // one production reaches.
+        assert_eq!(MAX_DIR_ENTRIES, 50_000);
+        assert_eq!(broker.list_dir(&node, &watched).unwrap().len(), 5);
     }
 
     #[test]
@@ -1025,6 +1364,558 @@ mod tests {
         assert_eq!(sanitise_filename(""), "output");
         assert_eq!(sanitise_filename("..."), "output");
         assert_eq!(sanitise_filename("report.csv"), "report.csv");
+    }
+
+    #[test]
+    fn a_filename_cannot_be_a_windows_device() {
+        // These do not name a file in any directory — Windows resolves them to hardware or to
+        // the bit bucket. A result written to "NUL" is a result silently thrown away, and one
+        // written to "COM1" goes out of a serial port. Neither is what the folder grant meant.
+        for device in [
+            "NUL", "nul", "CON", "con", "PRN", "AUX", "COM1", "lpt9", "NUL.txt", "com1.png",
+        ] {
+            let safe = sanitise_filename(device);
+            assert!(
+                safe.starts_with('_'),
+                "{device} must not survive as a device name, got {safe}"
+            );
+            assert!(!is_reserved_device_name(&safe), "{safe} is still a device");
+        }
+
+        // And an ordinary name that merely looks similar is left alone.
+        for ordinary in [
+            "console.log",
+            "communication.txt",
+            "nullable.json",
+            "com.txt",
+        ] {
+            assert_eq!(sanitise_filename(ordinary), ordinary);
+        }
+    }
+
+    #[test]
+    fn a_filename_cannot_keep_a_trailing_dot_that_windows_would_drop() {
+        // "result.txt." and "result.txt" are one file to the OS. Settling it here means the
+        // name this returns is the name that ends up on disk.
+        assert_eq!(sanitise_filename("result.txt."), "result.txt");
+        assert_eq!(sanitise_filename("result.txt   "), "result.txt");
+        assert_eq!(sanitise_filename("result.txt. . ."), "result.txt");
+    }
+
+    #[test]
+    fn a_grant_for_something_the_component_never_declared_grants_nothing() {
+        // The dialog a person answers is built from the manifest. A grant for a capability the
+        // manifest does not mention did not come from a question anybody was asked, so it is
+        // either a bug or a forgery — and the editor that sends it is a webview.
+        let node = NodeId("n".into());
+        let manifest = manifest_declaring("fs.read", SCOPE_INPUT_HANDLES);
+
+        let mut grants = GrantSet::new();
+        let admitted = grants.grant_declared(
+            &node,
+            &manifest,
+            "net.http",
+            GrantScope::HttpHosts(vec!["example.com".into()]),
+        );
+        assert!(
+            !admitted,
+            "a capability never declared must not be grantable"
+        );
+        assert!(!grants.has(&node, "net.http"));
+
+        // The same call for something the manifest does declare is admitted in full.
+        assert!(grants.grant_declared(&node, &manifest, "fs.read", GrantScope::Allowed));
+        assert!(grants.has(&node, "fs.read"));
+    }
+
+    #[test]
+    fn a_component_cannot_be_handed_an_undeclared_capability_even_with_a_folder() {
+        // The interesting half: the forged grant carries a real, existing, resolvable folder.
+        // What refuses it is the manifest, not the path.
+        let dir = tempdir::TempDir::new();
+        let target = dir.path().join("target");
+        std::fs::create_dir_all(&target).unwrap();
+
+        let node = NodeId("n".into());
+        let manifest = manifest_declaring("fs.read", SCOPE_INPUT_HANDLES);
+        let mut grants = GrantSet::new();
+        grants.grant_declared(
+            &node,
+            &manifest,
+            "fs.write",
+            GrantScope::Directory(target.clone()),
+        );
+
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let out = broker
+            .create_output(&node, HandleKind::File, "x.txt")
+            .unwrap();
+        broker.write_output(&node, out, b"data").unwrap();
+
+        let err = broker.save_to(&node, out, &target, "x.txt").unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(
+            !target.join("x.txt").exists(),
+            "nothing may have been written"
+        );
+    }
+
+    #[test]
+    fn a_whole_drive_is_not_a_folder_a_component_can_be_given() {
+        // "Allow this component to write to C:\" is not a decision any dialog offers, so it is
+        // not one this side accepts relaying.
+        let root = if cfg!(windows) { "C:\\" } else { "/" };
+        let err = resolve_grant_directory(Path::new(root))
+            .expect_err("a filesystem root must be refused as a grant scope");
+        // `resolve_grant_directory` has four refusals. Naming this one stops the test passing
+        // because a root was mistaken for, say, a sensitive directory.
+        assert!(err.contains("whole drive"), "{err}");
+
+        // An ordinary folder inside one still resolves.
+        let dir = tempdir::TempDir::new();
+        let inner = dir.path().join("invoices");
+        std::fs::create_dir_all(&inner).unwrap();
+        let resolved = resolve_grant_directory(&inner).expect("an ordinary folder is fine");
+        assert!(resolved.is_dir());
+    }
+
+    #[test]
+    fn the_folder_that_decides_what_runs_at_login_is_not_grantable() {
+        // A malicious project chooses the folder string the dialog shows and then grants. The
+        // startup folder is the one destination where "save a file here" means "run this next
+        // time you log in", so it is refused however plausible the prompt looked.
+        let Some(appdata) = std::env::var_os("APPDATA") else {
+            eprintln!("skipped: no APPDATA on this platform");
+            return;
+        };
+        let startup = PathBuf::from(appdata).join(r"Microsoft\Windows\Start Menu\Programs\Startup");
+        if !startup.is_dir() {
+            eprintln!("skipped: no startup folder on this machine");
+            return;
+        }
+
+        let err = resolve_grant_directory(&startup)
+            .expect_err("the startup folder must not be grantable");
+        assert!(err.contains("decides what runs"), "{err}");
+
+        // The refusal must be this folder's, not some other rule's: the resolved startup path
+        // has to actually be one of the trees the check is built from.
+        let resolved = std::fs::canonicalize(&startup).unwrap();
+        assert!(
+            forbidden_trees().contains(&resolved),
+            "the startup folder must be one of the forbidden trees"
+        );
+
+        // And a folder inside it, because a subfolder of a startup folder starts the same way.
+        let inside = startup.join("encastra-test-subfolder");
+        if std::fs::create_dir_all(&inside).is_ok() {
+            let nested = resolve_grant_directory(&inside);
+            let _ = std::fs::remove_dir(&inside);
+            assert!(
+                nested.is_err(),
+                "a folder inside the startup folder must be refused too"
+            );
+        }
+    }
+
+    #[test]
+    fn a_folder_that_does_not_exist_is_not_a_grant() {
+        let dir = tempdir::TempDir::new();
+        assert!(resolve_grant_directory(&dir.path().join("nope")).is_err());
+
+        // Nor is a file dressed as one.
+        let file = dir.path().join("a.txt");
+        std::fs::write(&file, b"x").unwrap();
+        assert!(resolve_grant_directory(&file).is_err());
+    }
+
+    #[test]
+    fn saving_writes_to_the_folder_that_was_actually_checked() {
+        // The containment check resolves the directory; the write must use that same resolved
+        // path. Building the destination from the unresolved one would mean the path that was
+        // checked and the path that is written are two different paths.
+        let dir = tempdir::TempDir::new();
+        let allowed = dir.path().join("allowed");
+        std::fs::create_dir_all(&allowed).unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.write", GrantScope::Directory(allowed.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let out = broker
+            .create_output(&node, HandleKind::File, "r.txt")
+            .unwrap();
+        broker.write_output(&node, out, b"data").unwrap();
+
+        // Reached by a path with a dot segment in it: same folder, different string.
+        let indirect = allowed.join(".");
+        let written = broker.save_to(&node, out, &indirect, "r.txt").unwrap();
+
+        let resolved_allowed = std::fs::canonicalize(&allowed).unwrap();
+        assert!(
+            written.starts_with(&resolved_allowed),
+            "the file must land inside the resolved grant, got {}",
+            written.display()
+        );
+        assert!(written.exists());
+    }
+
+    #[test]
+    fn a_file_larger_than_the_ceiling_is_refused_without_being_read() {
+        // Every read lands in a Vec. A watched folder is a place other people put files, so the
+        // size of that allocation must not be theirs to choose.
+        let dir = tempdir::TempDir::new();
+        let source = dir.path().join("big.bin");
+        std::fs::write(&source, b"small for now").unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.allow_declared_input_handles(
+            &node,
+            &manifest_declaring("fs.read", SCOPE_INPUT_HANDLES),
+        );
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let handle = broker.import_file(source, HandleKind::File);
+        broker.make_reachable(&node, handle);
+
+        // What is asserted here is that the ceiling did not break the ordinary case. Writing
+        // half a gigabyte to exercise the far side of it would make the suite unusable; the
+        // refusal path is covered by the unit below, which calls the bounded reader directly.
+        assert_eq!(broker.open_input(&node, handle).unwrap(), b"small for now");
+    }
+
+    #[test]
+    fn the_bounded_reader_refuses_before_it_allocates() {
+        let dir = tempdir::TempDir::new();
+        let path = dir.path().join("f.bin");
+        std::fs::write(&path, vec![0u8; 2048]).unwrap();
+
+        // Under the ceiling: read normally. This is the control that proves the fixture is
+        // otherwise fine, so the refusal below is about the size and nothing else.
+        assert_eq!(read_bounded_to(&path, 4096).unwrap().len(), 2048);
+
+        // Over it: refused, by name. An earlier version of this test only ever exercised the
+        // line above, because reaching the real 512 MB ceiling would have meant writing half a
+        // gigabyte — so the branch it claimed to cover had never run. The ceiling is an argument
+        // now precisely so that this assertion exists.
+        let err = read_bounded_to(&path, 1024).unwrap_err();
+        assert_eq!(err.code, "too-large");
+        assert!(err.message.contains("2048"), "{}", err.message);
+        assert!(
+            err.hint.is_some(),
+            "a refusal should say what to do about it"
+        );
+
+        // Exactly at the ceiling is allowed: the limit is a maximum, not a strict bound.
+        assert_eq!(read_bounded_to(&path, 2048).unwrap().len(), 2048);
+
+        // A path that is not there fails as an error, never a panic.
+        let err = read_bounded(&dir.path().join("absent.bin")).unwrap_err();
+        assert_eq!(err.code, "read-failed");
+        assert!(
+            !err.message.contains("absent.bin"),
+            "an error must not carry the path: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn the_public_reader_is_the_bounded_one_at_the_documented_ceiling() {
+        // `read_bounded_to` is tested against a small limit for practicality. This is what ties
+        // that branch to the number the rest of the system is documented as enforcing — without
+        // it, the constant could drift to u64::MAX and every test above would still pass.
+        let dir = tempdir::TempDir::new();
+        let path = dir.path().join("f.bin");
+        std::fs::write(&path, b"x").unwrap();
+
+        assert_eq!(MAX_READ_BYTES, 512 * 1024 * 1024);
+        assert_eq!(read_bounded(&path).unwrap(), b"x");
+        assert!(read_bounded_to(&path, 0).is_err(), "a zero ceiling refuses");
+    }
+
+    #[test]
+    fn the_profile_root_and_the_system_directory_are_not_grantable() {
+        // `sensitive_roots` had no test at all. These are the scopes that are technically a
+        // folder but are not a decision anybody makes in a dialog: the whole user profile, the
+        // container of every profile, the Windows directory, Program Files.
+        let mut refused = 0;
+        for key in ["USERPROFILE", "SystemRoot", "ProgramFiles", "HOME"] {
+            let Some(value) = std::env::var_os(key) else {
+                continue;
+            };
+            let path = PathBuf::from(&value);
+            if !path.is_dir() {
+                continue;
+            }
+
+            let err = resolve_grant_directory(&path)
+                .expect_err(&format!("{key} must not be grantable as a scope"));
+            assert!(
+                err.contains("belongs to the system"),
+                "{key} refused for the wrong reason: {err}"
+            );
+            refused += 1;
+
+            // The container of every profile, which has no variable of its own.
+            if key == "USERPROFILE"
+                && let Some(parent) = path.parent()
+                && parent.is_dir()
+                && parent.parent().is_some()
+            {
+                assert!(
+                    resolve_grant_directory(parent).is_err(),
+                    "the folder holding every profile must not be grantable either"
+                );
+            }
+        }
+
+        assert!(
+            refused > 0,
+            "this platform exposed none of the roots the check is about"
+        );
+    }
+
+    #[test]
+    fn listing_a_folder_nobody_allowed_is_refused_and_written_down() {
+        // `list_dir` is the read-side twin of `save_to` and had no test at all.
+        let dir = tempdir::TempDir::new();
+        let allowed = dir.path().join("allowed");
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&allowed).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::fs::write(elsewhere.join("secret.txt"), b"theirs").unwrap();
+        std::fs::write(allowed.join("ours.txt"), b"ours").unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.read", GrantScope::Directory(allowed.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+
+        // The allowed folder lists, which proves the fixture works and the refusal below is
+        // about the folder rather than about the setup.
+        let listed = broker.list_dir(&node, &allowed).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "ours.txt");
+
+        let err = broker.list_dir(&node, &elsewhere).unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("not been allowed"), "{}", err.message);
+
+        // A folder that is not there is a different refusal, not the same one.
+        let absent = broker
+            .list_dir(&node, &dir.path().join("nope"))
+            .unwrap_err();
+        assert_eq!(absent.code, "denied");
+        assert!(
+            absent.message.contains("does not exist"),
+            "{}",
+            absent.message
+        );
+
+        // Both refusals are in the journal, which is the other half of the guarantee.
+        let calls = broker.take_calls(&node);
+        assert_eq!(calls.len(), 3);
+        assert!(calls[0].allowed);
+        assert!(!calls[1].allowed && calls[1].denied_because.is_some());
+        assert!(!calls[2].allowed && calls[2].denied_because.is_some());
+    }
+
+    #[test]
+    fn the_clipboard_and_notifications_need_the_component_to_have_declared_them() {
+        // Neither had any test. Both are capabilities a component can hold, and both are the
+        // kind that a person would not expect a file-resizing workflow to exercise.
+        let dir = tempdir::TempDir::new();
+        let node = NodeId("n".into());
+        let mut broker = Broker::new(dir.path().join("run"), GrantSet::new()).unwrap();
+
+        let err = broker.use_clipboard(&node, "copy").unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("clipboard"), "{}", err.message);
+
+        let err = broker.notify(&node, "done").unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("notification"), "{}", err.message);
+
+        assert!(!broker.has_capability(&node, "system.clipboard"));
+        assert!(!broker.has_capability(&node, "system.notify"));
+
+        // With the grant, both succeed — so the refusals above are about the grant.
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "system.clipboard", GrantScope::Allowed);
+        grants.grant(&node, "system.notify", GrantScope::Allowed);
+        let mut broker = Broker::new(dir.path().join("run2"), grants).unwrap();
+        assert!(broker.use_clipboard(&node, "copy").is_ok());
+        assert!(broker.notify(&node, "done").is_ok());
+    }
+
+    #[test]
+    fn a_node_cannot_write_through_a_handle_it_does_not_own() {
+        // `write_output`'s two refusals had no tests. A handle is a plain number, so "some other
+        // node's scratch output" is one increment away from a node's own.
+        let dir = tempdir::TempDir::new();
+        let mine = NodeId("mine".into());
+        let theirs = NodeId("theirs".into());
+        let mut broker = Broker::new(dir.path().join("run"), GrantSet::new()).unwrap();
+
+        let handle = broker
+            .create_output(&mine, HandleKind::File, "out.txt")
+            .unwrap();
+        assert!(broker.write_output(&mine, handle, b"ok").is_ok());
+
+        let err = broker
+            .write_output(&theirs, handle, b"hijacked")
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("does not own"), "{}", err.message);
+
+        let forged = Handle {
+            id: 4242,
+            kind: HandleKind::File,
+        };
+        let err = broker.write_output(&mine, forged, b"x").unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("does not exist"), "{}", err.message);
+
+        // And the file the first write produced still says what the owner wrote.
+        assert_eq!(
+            std::fs::read(broker.path_of(handle).unwrap()).unwrap(),
+            b"ok"
+        );
+    }
+
+    #[test]
+    fn a_dangling_or_non_file_path_is_not_importable() {
+        // `import_guarded` refuses anything that does not canonicalise to a file. A directory
+        // inside an allowed folder is the readily available case.
+        let dir = tempdir::TempDir::new();
+        let watched = dir.path().join("watched");
+        std::fs::create_dir_all(watched.join("subfolder")).unwrap();
+        std::fs::write(watched.join("real.txt"), b"fine").unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.read", GrantScope::Directory(watched.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+
+        // Positive control first.
+        assert!(
+            broker
+                .import_guarded(&node, &watched.join("real.txt"), HandleKind::File)
+                .is_ok()
+        );
+
+        let err = broker
+            .import_guarded(&node, &watched.join("subfolder"), HandleKind::File)
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(
+            err.message.contains("not one this can open"),
+            "{}",
+            err.message
+        );
+
+        let err = broker
+            .import_guarded(&node, &watched.join("absent.txt"), HandleKind::File)
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+    }
+
+    #[test]
+    fn a_symlink_in_an_allowed_folder_cannot_reach_outside_it() {
+        // A watched folder is, by definition, somewhere files arrive from elsewhere. If the
+        // check resolved only the parent, a link sitting in the allowed folder would be a name
+        // in the right place whose content is anywhere the user can read.
+        let dir = tempdir::TempDir::new();
+        let watched = dir.path().join("watched");
+        let private = dir.path().join("private");
+        std::fs::create_dir_all(&watched).unwrap();
+        std::fs::create_dir_all(&private).unwrap();
+        let secret = private.join("secret.txt");
+        std::fs::write(&secret, b"not yours").unwrap();
+
+        let link = watched.join("ordinary.txt");
+        if !make_file_symlink(&secret, &link) {
+            // Windows needs a privilege or Developer Mode to create one. The property still
+            // holds; this run simply cannot build the fixture that demonstrates it.
+            eprintln!("skipped: this platform would not create a symlink");
+            return;
+        }
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.read", GrantScope::Directory(watched.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+
+        let err = broker
+            .import_guarded(&node, &link, HandleKind::File)
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+
+        // And an ordinary file in the same folder is still importable, so the fix did not simply
+        // break the feature.
+        let real = watched.join("real.txt");
+        std::fs::write(&real, b"fine").unwrap();
+        assert!(
+            broker
+                .import_guarded(&node, &real, HandleKind::File)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_link_already_in_the_granted_folder_does_not_take_the_write_with_it() {
+        // The folder is resolved, but a copy follows a link at the leaf just as readily. A
+        // granted folder is somewhere files arrive from elsewhere — that is what it is for — so
+        // a name already sitting there is not necessarily one this run put there.
+        let dir = tempdir::TempDir::new();
+        let allowed = dir.path().join("allowed");
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&allowed).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let outside = elsewhere.join("theirs.txt");
+        std::fs::write(&outside, b"theirs").unwrap();
+
+        let trap = allowed.join("result.txt");
+        if !make_file_symlink(&outside, &trap) {
+            eprintln!("skipped: this platform would not create a symlink");
+            return;
+        }
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.write", GrantScope::Directory(allowed.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let out = broker
+            .create_output(&node, HandleKind::File, "result.txt")
+            .unwrap();
+        broker.write_output(&node, out, b"ours").unwrap();
+
+        let err = broker
+            .save_to(&node, out, &allowed, "result.txt")
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert_eq!(
+            std::fs::read(&outside).unwrap(),
+            b"theirs",
+            "the file outside the grant must be untouched"
+        );
+    }
+
+    /// Creates a file symlink if the platform allows it, reporting whether it did.
+    fn make_file_symlink(target: &Path, link: &Path) -> bool {
+        #[cfg(windows)]
+        {
+            std::os::windows::fs::symlink_file(target, link).is_ok()
+        }
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link).is_ok()
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            let _ = (target, link);
+            false
+        }
     }
 
     #[test]

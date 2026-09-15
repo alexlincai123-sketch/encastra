@@ -94,10 +94,10 @@ export function GraphNode({
       {inputs.length > 0 || outputs.length > 0 ? (
         <div className={styles.ports}>
           {inputs.map((port) => (
-            <Port key={`in-${port.label}`} port={port} direction="in" />
+            <Port key={`in-${port.label}`} port={port} direction="in" locale={locale} />
           ))}
           {outputs.map((port) => (
-            <Port key={`out-${port.label}`} port={port} direction="out" />
+            <Port key={`out-${port.label}`} port={port} direction="out" locale={locale} />
           ))}
         </div>
       ) : null}
@@ -112,7 +112,15 @@ export function GraphNode({
   );
 }
 
-function Port({ port, direction }: { port: GraphPort; direction: 'in' | 'out' }): ReactNode {
+function Port({
+  port,
+  direction,
+  locale,
+}: {
+  port: GraphPort;
+  direction: 'in' | 'out';
+  locale: Locale;
+}): ReactNode {
   return (
     <span className={styles.port} data-direction={direction}>
       <span
@@ -127,7 +135,11 @@ function Port({ port, direction }: { port: GraphPort; direction: 'in' | 'out' })
             <span className={styles.portRequired} aria-hidden="true">
               *
             </span>
-            <span className="visually-hidden"> (required)</span>
+            {/* The asterisk beside it is decorative; this is the same fact in words, for a
+                reader who never sees it. Written as one interpolated string rather than text
+                around a `{t(...)}` so the leading space survives whatever the formatter
+                decides to do with the line. */}
+            <span className="visually-hidden">{` (${t(locale, 'graph.required')})`}</span>
           </>
         ) : null}
       </span>

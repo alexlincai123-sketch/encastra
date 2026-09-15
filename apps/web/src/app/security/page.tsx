@@ -2,16 +2,18 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import { Callout, Card, CTA, PageHeader, SectionHeading, SourceRef } from '@/components/ui/Ui';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'security.hero.eyebrow'),
     description: t(locale, 'security.meta.description'),
-  };
+    path: '/security',
+  });
 }
 
 const SCOPE_KEYS = ['inputHandles', 'directory', 'httpHosts', 'allowed'] as const;
@@ -103,9 +105,13 @@ export default async function SecurityPage(): Promise<ReactNode> {
             <table className="data">
               <thead>
                 <tr>
-                  <th>{t(locale, 'security.asksFor.component')}</th>
-                  <th>{t(locale, 'security.asksFor.asksForColumn')}</th>
-                  <th>{t(locale, 'security.asksFor.scopeColumn')}</th>
+                  {/* `scope="col"` so a screen reader announces the right heading with each
+                      cell; without it the association is inferred, and three columns of
+                      capability names are exactly the table where being told the wrong one
+                      matters. */}
+                  <th scope="col">{t(locale, 'security.asksFor.component')}</th>
+                  <th scope="col">{t(locale, 'security.asksFor.asksForColumn')}</th>
+                  <th scope="col">{t(locale, 'security.asksFor.scopeColumn')}</th>
                 </tr>
               </thead>
               <tbody>

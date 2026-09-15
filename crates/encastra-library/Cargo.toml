@@ -1,0 +1,25 @@
+[package]
+name = "encastra-library"
+description = "The local index of the projects a person has: what they made, what they took in, and what they prepared to hand on."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# For `hash`, which is what an entry's identity and its "has this changed?" both rest on.
+encastra-project = { path = "../encastra-project" }
+# For the shape of an import. The dependency runs this way and must not be reversed: taking a
+# publication in is a decision, and keeping a list of what was taken in is bookkeeping. The
+# decision must not be able to depend on the bookkeeping.
+encastra-publish = { path = "../encastra-publish" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Only to build a real publication and import it, so that what the index records is measured
+# from something that went through the whole path rather than typed into a fixture.
+encastra-core = { path = "../encastra-core" }
+encastra-protocol = { path = "../encastra-protocol" }

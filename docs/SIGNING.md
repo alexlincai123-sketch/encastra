@@ -62,19 +62,30 @@ in.
    ```powershell
    Get-ChildItem Cert:\CurrentUser\My | Select-Object Subject, Thumbprint
    ```
-3. Put the thumbprint in `tauri.conf.json` — it is not a secret; it identifies a certificate,
-   it does not authorise use of it.
-4. `npm run tauri:build`.
-5. Verify, and do not skip this:
+3. Give Tauri the thumbprint as a config overlay, **not** by editing `tauri.conf.json`: the
+   binary records whether it was built from a clean commit, and an edited tracked file makes the
+   build `-dirty`, which the manifest refuses. The thumbprint is not a secret; it identifies a
+   certificate, it does not authorise use of it.
+   ```powershell
+   '{"bundle":{"windows":{"certificateThumbprint":"<thumbprint>"}}}' | Set-Content $env:TEMP\signing.json
+   npm run tauri:build -- --config $env:TEMP\signing.json
+   ```
+   This is what `.github/workflows/release.yml` does with the certificate from its secrets.
+4. Verify, and do not skip this:
    ```powershell
    Get-AuthenticodeSignature .\Encastra_<version>_x64-setup.exe | Format-List
    ```
    `Status` must be `Valid` and the timestamp must be present.
-6. Regenerate `docs/RELEASE.md` with `python scripts/release_manifest.py` — the hash changes,
-   because signing changes the file.
-7. Update the "not signed" statements in Settings → About, the download page and
-   `apps/web/src/config/site.ts` (`signed: false`). **They are deliberately written as facts, not
-   as placeholders, so they have to be changed by hand when the fact changes.**
+5. Regenerate the manifest with `python scripts/release_manifest.py --require-signature` — the
+   hash changes, because signing changes the file. It rewrites `docs/RELEASE.md` and the
+   `RELEASE` constant in `apps/web/src/config/site.ts`, `signed: true` included, from what
+   Windows says about the files rather than from anything typed.
+6. Update the "not signed" statement in Settings → About and on the download page. **They are
+   deliberately written as facts, not as placeholders, so they have to be changed by hand when
+   the fact changes.**
+7. A signed build is no longer byte-identical to an unsigned rebuild of the same commit — the
+   signature is appended. `scripts/pe_diff.py` shows exactly which bytes; everything outside the
+   certificate table and the header checksum must still be identical.
 
 ## Rules for when it happens
 

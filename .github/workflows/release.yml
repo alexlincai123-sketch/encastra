@@ -1,0 +1,253 @@
+name: Release
+
+# A release is the one artefact that leaves this repository and runs on somebody else's machine.
+# Everything below exists so that it cannot be cut from a tree that is failing its own checks,
+# and so that shipping unsigned is a decision somebody makes rather than what happens by default.
+#
+# This workflow does not create a GitHub release or push anything anywhere. It builds, verifies,
+# and uploads the artefact for a person to look at. Publishing stays manual on purpose: there is
+# no signing certificate yet, and an automated publish of an unsigned installer is the thing this
+# is supposed to prevent.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      allow_unsigned:
+        description: >-
+          Publish without a code-signing certificate. This is a real decision: an unsigned
+          installer cannot be distinguished from a tampered one by anybody who receives it.
+          The manifest records that it was taken.
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  gates:
+    name: Security gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          components: rustfmt, clippy
+
+      # A tag is a claim about a version. `v0.5.0-beta.1` on a tree whose tauri.conf.json says
+      # 0.5.0-beta.2 produces an installer named one thing and a release named another.
+      - name: The tag names the version the tree declares
+        if: github.ref_type == 'tag'
+        run: |
+          declared=$(python3 -c "import json;print(json.load(open('apps/desktop/src-tauri/tauri.conf.json'))['version'])")
+          if [ "${GITHUB_REF_NAME#v}" != "$declared" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} but the tree declares ${declared}"
+            exit 1
+          fi
+
+      # The manifest on this commit must be internally consistent before anything is built from
+      # it: the build commit it names exists and is an ancestor, only publication files changed
+      # since, and the website's copy of the hashes agrees. Artefacts are not present yet; the
+      # hashes themselves are checked after the build below.
+      - name: The published manifest is consistent with the history
+        run: python3 scripts/release_manifest.py --verify
+
+      - name: The release scripts, against a synthetic executable
+        run: python3 -m unittest discover -s scripts/tests -v
+
+      - name: Tauri's Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf
+
+      # The same gates CI runs, re-run here rather than assumed. A release triggered from a tag
+      # can point at a commit whose CI run was cancelled, was never required, or predates a
+      # setting change. "It passed once" is not a property of the thing being shipped.
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: TypeScript tests
+        run: npm run test
+      - name: One version, declared in one place
+        run: python3 scripts/version.py --check
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Rust tests, including the security suite
+        run: cargo test --workspace
+
+      - name: The symlink escape tests must actually run, not skip
+        run: |
+          set -o pipefail
+          cargo test -p encastra-core --lib -- --nocapture --exact \
+            broker::tests::a_symlink_in_an_allowed_folder_cannot_reach_outside_it \
+            broker::tests::a_link_already_in_the_granted_folder_does_not_take_the_write_with_it \
+            2>&1 | tee symlink-tests.log
+          if grep -q 'skipped' symlink-tests.log; then
+            echo "::error::A symlink escape test skipped. Not shipping on that."
+            exit 1
+          fi
+
+      - name: npm advisories
+        run: npm audit --audit-level=high
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build and verify the installer
+    needs: gates
+    runs-on: windows-latest
+    env:
+      # The `secrets` context is not available in a step's `if`, so the question "is there a
+      # certificate at all" is answered once here, as a boolean string, and tested below. The
+      # secret's value never appears — only whether it is empty.
+      HAS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+      - uses: Swatinem/rust-cache@v2
+
+      # Signing, when there is something to sign with.
+      #
+      # Nothing here fabricates a certificate. If the secrets are absent — which is the state
+      # today — this step does nothing, the build comes out unsigned, and the manifest step below
+      # refuses unless the run explicitly asked to publish unsigned. See docs/SIGNING.md.
+      #
+      # The .pfx never touches the repository and never reaches a log: it arrives base64 in a
+      # secret, is written to a temporary file outside the working directory, imported, and the
+      # file is removed. The thumbprint goes to Tauri as a `--config` overlay file outside the
+      # tree, never into tauri.conf.json: editing a tracked file would make the build "dirty"
+      # in the binary's own eyes and the manifest would refuse to describe it.
+      - name: Import the code-signing certificate
+        id: signing
+        if: env.HAS_CERTIFICATE == 'true'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx -Force
+          # The thumbprint identifies the certificate in the store. It is not a secret, but it is
+          # also not committed: it goes into an overlay merged over tauri.conf.json for this build.
+          $overlay = Join-Path $env:RUNNER_TEMP 'signing.json'
+          @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint } } } |
+            ConvertTo-Json -Depth 8 | Set-Content $overlay -Encoding utf8
+          "TAURI_CONFIG_OVERLAY=$overlay" | Out-File -Append -FilePath $env:GITHUB_ENV
+          Write-Output "A certificate was imported; this build will be signed."
+
+      # Built from the commit the published manifest names, which is the commit whose bytes it
+      # describes — not from the tag, which sits on the publication commit one after it. The
+      # `--verify` in the gates job already proved the two differ only in publication files.
+      - name: Check out the build commit the manifest names
+        shell: bash
+        run: |
+          build=$(python scripts/release_manifest.py --build-commit)
+          echo "build commit $build (tag/ref commit ${{ github.sha }})"
+          git -c advice.detachedHead=false checkout "$build"
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ -n "$TAURI_CONFIG_OVERLAY" ]; then
+            npm run tauri:build -- --config "$TAURI_CONFIG_OVERLAY"
+          else
+            npm run tauri:build
+          fi
+
+      # The manifest that was published, put back beside the artefacts this machine just built.
+      # After the build, not before: the build script stamps the binary `-dirty` if a tracked
+      # file differs from the commit, and the tree at the build commit carries the previous
+      # manifest.
+      - name: Restore the published manifest and website record
+        shell: bash
+        run: |
+          git show "${{ github.sha }}:docs/RELEASE.md" > docs/RELEASE.md
+          git show "${{ github.sha }}:apps/web/src/config/site.ts" > apps/web/src/config/site.ts
+
+      # An independent machine built the build commit with the pinned toolchain. Unsigned, its
+      # bytes must be the published bytes — that is what "the installer matches the final code"
+      # means, and it is checked here rather than assumed. A signed build differs from the
+      # published unsigned hashes by its signature, so for it the manifest is regenerated from
+      # the signed artefacts and uploaded, and `--require-signature` is the gate.
+      - name: The build reproduces the published hashes
+        if: env.HAS_CERTIFICATE != 'true'
+        shell: bash
+        run: python scripts/release_manifest.py --verify
+
+      - name: A signed build regenerates the manifest and must verify as signed
+        if: env.HAS_CERTIFICATE == 'true'
+        shell: bash
+        run: python scripts/release_manifest.py --require-signature
+
+      # `--allow-unsigned` is what a person passes locally to publish a pre-release unsigned; it
+      # refuses any version that is not a pre-release, with no override. The dispatch input
+      # exists so that an unsigned run is a recorded decision; it does not weaken that guard.
+      - name: An unsigned release is a pre-release, published on purpose
+        if: env.HAS_CERTIFICATE != 'true'
+        shell: bash
+        run: |
+          if [ "${{ inputs.allow_unsigned }}" != "true" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "::error::This tree has no certificate. Publishing unsigned needs the allow_unsigned input."
+            exit 1
+          fi
+          echo "::warning::These artefacts are UNSIGNED. Whoever receives this installer cannot tell it from a tampered one."
+          python - <<'PY'
+          import json, re, sys
+          version = json.load(open("apps/desktop/src-tauri/tauri.conf.json"))["version"]
+          if not re.match(r"^\d+\.\d+\.\d+-", version):
+              print(f"::error::{version} is not a pre-release and there is no certificate; a production release is signed or it does not happen.")
+              sys.exit(1)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: encastra-installer
+          path: |
+            target/release/bundle/nsis/*.exe
+            docs/RELEASE.md
+          if-no-files-found: error
+          retention-days: 30

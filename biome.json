@@ -13,7 +13,8 @@
       "!**/.next",
       "!**/node_modules",
       "!packages/protocol/data/*.json",
-      "!apps/web/next-env.d.ts"
+      "!apps/web/next-env.d.ts",
+      "!fuzz/corpus"
     ]
   },
   "formatter": {

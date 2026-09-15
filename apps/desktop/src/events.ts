@@ -85,3 +85,21 @@ export async function subscribe(handlers: Handlers): Promise<() => void> {
     for (const off of unlisteners) off();
   };
 }
+
+/**
+ * The window being asked to close, before it does.
+ *
+ * Separate from `subscribe` above because it is not progress from a run: it is the operating
+ * system asking a question the editor is the only one who can answer. The runtime has already
+ * refused the close by the time this arrives — see `on_window_event` in `src-tauri/src/lib.rs` —
+ * so nothing is lost while somebody reads the dialog, and the window closes only when the
+ * editor asks for it again through `ipc.closeWindow()`.
+ *
+ * In the browser preview there is nothing to listen to: a tab's own "leave site?" prompt is the
+ * browser's, and this application does not get to answer it.
+ */
+export async function onCloseRequested(handler: () => void): Promise<() => void> {
+  if (!inTauri()) return () => {};
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen('encastra://close-requested', () => handler());
+}

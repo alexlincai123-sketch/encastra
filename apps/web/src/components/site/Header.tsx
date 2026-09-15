@@ -27,6 +27,27 @@ export function Header({ locale }: { locale: Locale }): ReactNode {
     setOpen(false);
   }, [pathname]);
 
+  // Scrolling closes it too. The panel is part of a sticky header, so an open one grows the
+  // header past the `--site-header` height the rest of the page lays itself out against, and the
+  // overflow sits on top of whatever the visitor scrolled to — on the home page, mid-scene. The
+  // listener is passive (it only reads a state flag; it never calls `preventDefault`), so it
+  // cannot make the scroll it observes janky, and it is only attached while the panel is open.
+  useEffect(() => {
+    if (!open) return;
+    const openedAt = window.scrollY;
+    function onScroll(): void {
+      // A few pixels of tolerance before it counts as scrolling. Opening the panel can nudge the
+      // scroll position by itself on a phone — a collapsing address bar, the layout growing — and
+      // a menu that shuts the instant it is opened is worse than one that stays open too long.
+      if (Math.abs(window.scrollY - openedAt) < 8) return;
+      setOpen(false);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, [open]);
+
   // Escape closes it and returns focus to the control that opened it, which is what a keyboard
   // user expects and what makes the panel escapable at all.
   useEffect(() => {

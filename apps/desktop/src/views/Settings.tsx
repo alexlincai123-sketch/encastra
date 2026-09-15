@@ -347,6 +347,13 @@ const SHORTCUTS: readonly { readonly keys: string; readonly actionKey: string }[
   { keys: 'Ctrl / Cmd + D', actionKey: 'duplicateSelection' },
   { keys: 'Ctrl / Cmd + A', actionKey: 'selectAll' },
   { keys: 'Delete / Backspace', actionKey: 'deleteSelection' },
+  // The three that belong to the canvas rather than to the window. They are listed for the
+  // reason the note below the table gives: a shortcut nobody can find is folklore — and joining
+  // two steps without a mouse is not a convenience, it is the only way somebody who cannot use
+  // one builds anything at all.
+  { keys: 'C', actionKey: 'connectFromStep' },
+  { keys: 'E', actionKey: 'cycleConnections' },
+  { keys: 'Delete / Backspace', actionKey: 'deleteConnection' },
 ];
 
 function EditorSection() {
@@ -363,8 +370,11 @@ function EditorSection() {
             </tr>
           </thead>
           <tbody>
+            {/* Keyed by both halves: one chord can do two things in two places — Delete removes
+                the selected step, or the connection the canvas is holding — and a key of the
+                chord alone would collide. */}
             {SHORTCUTS.map((shortcut) => (
-              <tr key={shortcut.keys}>
+              <tr key={`${shortcut.keys}-${shortcut.actionKey}`}>
                 <td>
                   <code>{shortcut.keys}</code>
                 </td>

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/Ui';
 import { STATUS } from '@/config/site';
 import type { Locale } from '@/lib/i18n';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 /**
  * The ecosystem page.
@@ -29,10 +29,12 @@ import { getLocale, t } from '@/lib/i18n';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'ecosystem.hero.eyebrow'),
     description: t(locale, 'ecosystem.meta.description'),
-  };
+    path: '/ecosystem',
+  });
 }
 
 /** The five moments of the loop, each with the state it is actually in. */
@@ -40,7 +42,7 @@ const LOOP = [
   { id: 'build', state: STATUS.desktopApp },
   { id: 'publish', state: STATUS.publishPreparation },
   { id: 'discover', state: STATUS.registry },
-  { id: 'install', state: STATUS.registry },
+  { id: 'install', state: STATUS.importFromFolder },
   { id: 'reuse', state: STATUS.projectFormat },
 ] as const;
 

@@ -53,16 +53,31 @@ state. Building it per call would let two calls disagree about what is installed
 
 | Command | What it does |
 |---|---|
+| `choose_folder` | opens the native folder chooser on the Rust side, resolves and sanity-checks the choice, and records it — the only way a folder becomes grantable, publishable-into or importable-from this session |
 | `list_components` | every manifest this build offers, for the palette |
 | `type_graph` | the coercion table, served by the runtime that enforces it |
 | `validate_graph` | validation for a graph plus the ports the application will supply |
 | `run_graph` | one-shot and synchronous: assemble grants, import the picked files, run, return a journal |
-| `start_workflow` / `stop_workflow` / `workflow_status` | the session path — runs on a worker thread and reports progress as events |
+| `start_workflow` / `stop_workflow` | the session path — runs on a worker thread and reports progress as events |
+| `workflow_status` | a one-line answer about the running session; kept for tooling, not called by the editor, which listens to the events instead |
 | `save_project` / `open_project` | the `.encastra` container |
 | `restore_version` / `compare_versions` | version history |
+| `review_publication` / `prepare_publication` | reads a saved project the way somebody receiving it would, and writes a publication folder — the review runs again inside the second one, and its answer is the one that decides |
+| `inspect_publication` | reads a publication folder somebody was given and reports what is in it; writes nothing, runs nothing |
+| `import_publication` | copies the bytes that were verified into the library and records them — it does **not** open or run the project |
+| `library_list` | every entry, each with whether the file it names is still there and still what it was |
+| `library_remove` | forgets an entry, and — only for a copy Encastra made itself — deletes it too |
+| `report_dirty` / `close_window` | whether the canvas holds unsaved work, and the close that happens once somebody has said it may go |
 | `about` | versions, taken from the build rather than typed anywhere |
 
 A few of these are worth spelling out.
+
+**`report_dirty` exists because a window is closed by the operating system.** A title-bar X,
+Alt+F4 or a session ending never passes through the editor, so by the time anything could be
+asked of it the work is already gone. The editor pushes the answer to "is there unsaved work
+here" whenever it changes; the close handler refuses a close while that answer is yes and asks
+the editor to put the question to the person. Refusing is the safe half of the failure — if the
+editor never answers, the window stays open with the work still in it.
 
 **`type_graph` looks redundant and is not.** The editor already has the rule table at build
 time. Serving it from the runtime as well means a *running* application can be asked which rules
@@ -90,6 +105,27 @@ component that asked.
 **One workflow at a time.** `start_workflow` refuses if something is already running. Two
 workflows writing into the same folders at once is a surprise nobody asked for, and the editor
 shows one graph.
+
+**Importing never runs anything.** `import_publication` copies files into the library and adds a
+line to a list. It does not open the project, does not resolve a variable, does not follow a link
+out of the folder it was given, and grants no permission at all — every run still asks. Opening
+what was imported is a separate thing a person presses, and running it is a third. The refusals
+are returned as a serialised `ImportError` rather than as a sentence, so the interface branches
+on the reason rather than on English.
+
+**The library only deletes what it made.** `library_remove` forgets an entry by default. Deleting
+the copy on disk is a second argument, and the runtime refuses it for anything whose origin is
+not `Imported` — a project somebody made is theirs, and this software did not put that file there.
+An index it cannot read is never written over either: a file it cannot parse is renamed aside and
+reported once, and one from another version is left exactly as it is while every command that
+would write says why it will not.
+
+**Every command that takes a project checks the extension.** `open_project`, `save_project`,
+`restore_version`, `compare_versions`, `review_publication` and `prepare_publication` all require
+a path ending in `.encastra`, case-insensitively, so a path this application will write is one it
+will later agree to read. It is not a security check and cannot be one — the path comes from a
+dialog the person drove, and `Project::open` is where a file that is not a project is actually
+found out.
 
 ---
 
@@ -136,8 +172,8 @@ while it is running rather than only in retrospect.
 ## 4. The editor
 
 `App.tsx` is a shell: a sidebar, one view at a time, a toolbar that changes with the view, and a
-status bar that is the same everywhere. There are five places — Home, Builder, Components,
-Security, Settings — and no more. Marketplace and Community are not in the sidebar because they
+status bar that is the same everywhere. There are six places — Home, Builder, Library,
+Components, Security, Settings — and no more. Marketplace and Community are not in the sidebar because they
 do not exist, and a navigation item that opens an empty "coming soon" page teaches people that
 half the application is decoration.
 
@@ -319,7 +355,10 @@ node.
   is no keystore integration. See [PROJECT-FORMAT](PROJECT-FORMAT.md) §5.
 - **Install a component.** The palette shows what is compiled in. There is no registry, no
   install flow, and no way to run a third-party component at all — see
-  [COMPONENT-SDK](COMPONENT-SDK.md).
+  [COMPONENT-SDK](COMPONENT-SDK.md). Importing a *publication* is a different thing and does
+  exist: a publication is a project and the document describing it, it arrives as a folder
+  somebody handed over rather than from anywhere online, and taking it in copies files and
+  nothing else. Nothing runs until the project is opened and Run is pressed.
 - **Update itself.** [ADR-0008](adr/0008-signing-and-revocation.md) specifies the updater's
   verification rules; there is no updater.
 - **Show a run's history.** A journal lives as long as the window holds it. Nothing is written to

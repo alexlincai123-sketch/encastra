@@ -118,7 +118,7 @@ export function Scene08Ecosystem({ locale }: { locale: Locale }): ReactNode {
   });
 
   return (
-    <section ref={ref} className={styles.scene} aria-label="Compose" data-scene="ecosystem">
+    <section ref={ref} className={styles.scene} aria-label={COPY.label} data-scene="ecosystem">
       <div className={`${styles.pin} u-stage`} data-pin>
         {/* `u-depth` also has to sit here, not only on `.field` below: `transform-style: flat`
             (the default) on any element between the perspective root and a translateZ'd
@@ -159,11 +159,11 @@ export function Scene08Ecosystem({ locale }: { locale: Locale }): ReactNode {
             <div className={eco.nestWrap}>
               <div className={styles.tierWrap}>
                 <div className={styles.tierProject}>
-                  <span className={styles.tierLabel}>Project · one .encastra file</span>
+                  <span className={styles.tierLabel}>{COPY.tierProject}</span>
                   <div className={styles.tierWorkflow}>
-                    <span className={styles.tierLabel}>Workflow</span>
+                    <span className={styles.tierLabel}>{COPY.tierWorkflow}</span>
                     <div className={styles.tierComponent}>
-                      <GraphNode node={COMPONENT} />
+                      <GraphNode node={COMPONENT} locale={locale} />
                     </div>
                   </div>
                 </div>

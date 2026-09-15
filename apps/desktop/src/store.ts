@@ -34,13 +34,17 @@ import {
 // `canvas/Canvas.tsx` does inside `isConnectionLegal` — see `i18n/index.ts`'s own note on why.
 import { selectPlural, translate, useI18n } from './i18n';
 import { ipc } from './ipc';
+import { decideRemoval, isImportError } from './library';
 import { usePreferences } from './preferences';
 import type {
   About,
   ComponentManifest,
   EncastraGraph,
+  EntryWithStatus,
   GrantSpec,
+  ImportError,
   InputSpec,
+  Inspected,
   NodeStatus,
   OpenProject,
   Snapshot as ProjectSnapshot,
@@ -49,7 +53,24 @@ import type {
 } from './types';
 
 /** Where the person is in the application. */
-export type View = 'home' | 'builder' | 'components' | 'security' | 'settings';
+export type View = 'home' | 'builder' | 'library' | 'components' | 'security' | 'settings';
+
+/**
+ * Why the canvas is about to be replaced — which is to say, which sentence the prompt shows.
+ *
+ * A reason rather than a ready-made sentence, because the sentence is a translation and the
+ * store does not hold translated text: "opening another project" and "closing Encastra" decline
+ * differently in most of the six languages, so each reason owns a whole sentence of its own in
+ * the message tree rather than being interpolated into a shared one.
+ */
+export type DiscardReason = 'new' | 'open' | 'demo' | 'restore' | 'close' | 'library-open';
+
+/** Something that would replace the canvas, held back until the work on it has been decided. */
+export interface PendingDiscard {
+  readonly reason: DiscardReason;
+  /** What was about to happen, run unchanged once the work is saved or deliberately dropped. */
+  readonly proceed: () => void;
+}
 
 export interface NodeData extends Record<string, unknown> {
   componentRef: string;
@@ -97,6 +118,36 @@ interface EditorState {
   /** True when the canvas differs from what was last written to disk. */
   dirty: boolean;
 
+  /** What this person has: what they made, what they took in, what they prepared. */
+  library: EntryWithStatus[];
+  /**
+   * The name an unreadable index was moved to, if there was one. The runtime reports it once;
+   * this holds it until somebody has read it and dismissed it.
+   */
+  libraryQuarantined: string | null;
+  /** False until the list has been asked for once, so an empty library and an unread one differ. */
+  libraryLoaded: boolean;
+  /** Whether the import dialog is open. One flag, because there is one of it. */
+  importOpen: boolean;
+  /**
+   * What was read out of a chosen folder, and the folder it was read from.
+   *
+   * Holding one of these means nothing has been written: inspecting is a read. Importing is a
+   * second, separate thing somebody presses, and it never happens on its own.
+   */
+  importInspected: { folder: string; inspected: Inspected } | null;
+  /** Why the folder was refused. A structured refusal where there is one, a sentence otherwise. */
+  importError: ImportError | string | null;
+
+  /**
+   * The question about unsaved work currently on screen, and what is waiting behind it.
+   *
+   * One field for every way of losing a canvas, rather than a flag per entry point: there is
+   * one prompt, it can only be showing one question, and whatever it was asked about is held
+   * here unchanged until somebody answers.
+   */
+  pendingDiscard: PendingDiscard | null;
+
   loadComponents: () => Promise<void>;
   addNode: (componentRef: string, position: { x: number; y: number }) => void;
   select: (id: string | null) => void;
@@ -105,6 +156,15 @@ interface EditorState {
   deleteSelected: () => void;
   /** Removes one step by id, whichever step is selected — what a right-click acts on. */
   deleteStep: (nodeId: string) => void;
+  /**
+   * The same two actions over several steps at once, as one entry in the history.
+   *
+   * A right-click inside a selection acts on the whole selection, and doing that by calling the
+   * singular action once per step would leave a selection of six needing six presses of undo to
+   * put back — which is not what anybody means by "undo that".
+   */
+  deleteSteps: (nodeIds: readonly string[]) => void;
+  toggleDisabledMany: (nodeIds: readonly string[]) => void;
   /** Removes one connection by id, leaving both steps where they are. */
   deleteConnection: (edgeId: string) => void;
   onNodesChange: (changes: NodeChange<EditorNode>[]) => void;
@@ -125,10 +185,30 @@ interface EditorState {
   saveProject: (options?: { as?: boolean; label?: string }) => Promise<void>;
   restoreVersion: (snapshot: string) => Promise<void>;
 
+  /** Puts the question on screen and holds `proceed` until it is answered. */
+  requestDiscard: (reason: DiscardReason, proceed: () => void) => void;
+  /** The work may go: run what was waiting. */
+  confirmDiscard: () => void;
+  /** Nothing happens, and the canvas is exactly as it was. */
+  cancelDiscard: () => void;
+  /** Saves first, and continues only if the save actually wrote something. */
+  saveThenProceed: () => Promise<void>;
+
   setView: (view: View) => void;
   /** Whether the publication panel is open. One flag, because there is one of it. */
   publishOpen: boolean;
   setPublishOpen: (open: boolean) => void;
+
+  /** Puts away the note about an index that could not be read. It is news once. */
+  dismissLibraryNote: () => void;
+  loadLibrary: () => Promise<void>;
+  /** Opens something already in the library, without asking where it is. */
+  openFromLibrary: (row: EntryWithStatus) => Promise<void>;
+  removeFromLibrary: (row: EntryWithStatus, deleteCopy: boolean) => Promise<void>;
+  setImportOpen: (open: boolean) => void;
+  /** Asks for a folder and reads it. Nothing is imported: that is `confirmImport`. */
+  beginImport: () => Promise<void>;
+  confirmImport: () => Promise<void>;
   attachRuntime: () => Promise<() => void>;
   startWorkflow: () => Promise<void>;
   stopWorkflow: () => Promise<void>;
@@ -186,6 +266,13 @@ export const useEditor = create<EditorState>((set, get) => ({
   about: null,
   history: emptyHistory,
   clipboard: null,
+  library: [],
+  libraryQuarantined: null,
+  libraryLoaded: false,
+  importOpen: false,
+  importInspected: null,
+  importError: null,
+  pendingDiscard: null,
 
   async loadComponents() {
     try {
@@ -299,6 +386,41 @@ export const useEditor = create<EditorState>((set, get) => ({
     });
   },
 
+  deleteSteps(nodeIds) {
+    const doomed = new Set(nodeIds);
+    set((s) => {
+      if (!s.nodes.some((n) => doomed.has(n.id))) return {};
+      return {
+        history: record(s.history, { nodes: s.nodes, edges: s.edges }),
+        nodes: s.nodes.filter((n) => !doomed.has(n.id)),
+        // Connections that pointed at any of them go too, rather than dangling.
+        edges: s.edges.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)),
+        selectedNodeId:
+          s.selectedNodeId !== null && doomed.has(s.selectedNodeId) ? null : s.selectedNodeId,
+        validation: null,
+        dirty: true,
+      };
+    });
+  },
+
+  toggleDisabledMany(nodeIds) {
+    const chosen = new Set(nodeIds);
+    set((s) => {
+      const affected = s.nodes.filter((n) => chosen.has(n.id));
+      if (affected.length === 0) return {};
+      // One verb for the whole selection. A switch that turned some on and others off would
+      // leave nobody able to say what the menu item is about to do: everything goes off unless
+      // everything is already off, in which case everything comes back on. The label the menu
+      // shows is chosen from the same rule, so the word and the effect cannot disagree.
+      const disabled = !affected.every((n) => n.data.disabled === true);
+      return {
+        nodes: s.nodes.map((n) => (chosen.has(n.id) ? { ...n, data: { ...n.data, disabled } } : n)),
+        validation: null,
+        dirty: true,
+      };
+    });
+  },
+
   deleteConnection(edgeId) {
     set((s) => {
       if (!s.edges.some((e) => e.id === edgeId)) return {};
@@ -321,7 +443,13 @@ export const useEditor = create<EditorState>((set, get) => ({
         nodes: applyNodeChanges(changes, s.nodes),
         // Dragging a node changes the file even though it does not change what runs. The
         // history diff is where that distinction belongs, not the save prompt.
-        dirty: s.dirty || changes.some((c) => c.type !== 'select'),
+        //
+        // A `dimensions` change is React Flow measuring a node it has just rendered — it arrives
+        // for every node the moment a project opens, and again whenever a culled node scrolls
+        // back into view. Nothing about the file changed. Counting it made every opened project
+        // read as unsaved before anybody touched it, which disabled Publish and made the
+        // unsaved-work prompt cry wolf on the window's close button.
+        dirty: s.dirty || changes.some((c) => isEdit(c.type)),
         history:
           dragEnded || structural
             ? record(s.history, { nodes: s.nodes, edges: s.edges })
@@ -334,7 +462,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     set((s) => ({
       edges: applyEdgeChanges(changes, s.edges),
       validation: null,
-      dirty: s.dirty || changes.some((c) => c.type !== 'select'),
+      dirty: s.dirty || changes.some((c) => isEdit(c.type)),
     }));
   },
 
@@ -473,38 +601,71 @@ export const useEditor = create<EditorState>((set, get) => ({
     return graph;
   },
 
+  /**
+   * Five ways to replace the canvas, one question in front of all five.
+   *
+   * The check lives here rather than in the callers because there are more ways to reach these
+   * than there are of them — a toolbar button, a keyboard shortcut, a row in the library, a
+   * sample on the Home screen, a version in the inspector — and a guard on a button is a guard
+   * somebody can walk around. The work itself moved into the private `do…` functions below, so
+   * asking and doing are separated exactly once: what runs after "Discard" is the same code
+   * that would have run immediately, not a second copy of it that could drift.
+   *
+   * `reopenProject` deliberately has no guard. It runs once at start-up, against a canvas
+   * nobody has touched yet, and a prompt there would be a question about nothing.
+   */
   newProject() {
-    set({
-      nodes: [],
-      edges: [],
-      selectedNodeId: null,
-      validation: null,
-      journal: null,
-      journalIsRecording: false,
-      inputs: [],
-      grants: [],
-      projectPath: null,
-      projectName: '',
-      versions: [],
-      dirty: false,
-      history: emptyHistory,
-      liveNodes: {},
-      message: null,
-    });
+    if (get().dirty) {
+      get().requestDiscard('new', () => doNewProject(set));
+      return;
+    }
+    doNewProject(set);
   },
 
   async openProject() {
-    set({ busy: true, message: null });
-    try {
-      const path = await ipc.pickProjectToOpen();
-      if (!path) return;
-      applyProject(set, await ipc.openProject(path));
-      rememberProject(path);
-    } catch (error) {
-      set({ message: { tone: 'error', text: describe(error) } });
-    } finally {
-      set({ busy: false });
+    if (get().dirty) {
+      get().requestDiscard('open', () => {
+        void doOpenProject(set, get);
+      });
+      return;
     }
+    await doOpenProject(set, get);
+  },
+
+  requestDiscard(reason, proceed) {
+    set({ pendingDiscard: { reason, proceed } });
+  },
+
+  confirmDiscard() {
+    const pending = get().pendingDiscard;
+    if (!pending) return;
+    // Cleared before the work runs rather than after: `proceed` may open a project, that may
+    // fail, and it says so in the status bar — with a prompt still on screen underneath it,
+    // asking about a canvas that has already gone.
+    set({ pendingDiscard: null });
+    pending.proceed();
+  },
+
+  cancelDiscard() {
+    set({ pendingDiscard: null });
+  },
+
+  /**
+   * Saves, and goes on only if the save actually wrote something.
+   *
+   * A save ends in one of three ways and only one of them may continue: it wrote the file, or
+   * somebody backed out of the file chooser, or it failed and said why. `saveProject` reports
+   * none of that in its return — it resolves either way — so `dirty` is what tells them apart.
+   * The two that did not write leave the work exactly where it was, which means the question is
+   * still worth asking: the prompt stays where it is, with the reason underneath it.
+   */
+  async saveThenProceed() {
+    const pending = get().pendingDiscard;
+    if (!pending) return;
+    await get().saveProject();
+    if (get().dirty) return;
+    set({ pendingDiscard: null });
+    pending.proceed();
   },
 
   /**
@@ -548,6 +709,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           text: translate(`messages.saved.${selectPlural(locale, kept)}`, { count: kept }),
         },
       });
+      await get().loadLibrary();
     } catch (error) {
       set({ message: { tone: 'error', text: describe(error) } });
     } finally {
@@ -559,6 +721,140 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   setPublishOpen(open) {
     set({ publishOpen: open });
+  },
+
+  dismissLibraryNote() {
+    set({ libraryQuarantined: null });
+  },
+
+  /**
+   * Reads the whole list, every time.
+   *
+   * Each row carries whether the file it names is still there, which is a question about the
+   * filesystem and cannot be cached: somebody moving a project in Explorer does not tell this
+   * application about it. The list is short by construction, and a stale "Present" on something
+   * that has gone would be worse than asking again.
+   */
+  async loadLibrary() {
+    try {
+      const listing = await ipc.libraryList();
+      set((s) => ({
+        library: listing.entries,
+        libraryLoaded: true,
+        // The runtime reports a quarantined index once. Keeping what is already here means a
+        // second listing does not silently clear a note nobody has read yet.
+        libraryQuarantined: listing.quarantined ?? s.libraryQuarantined,
+      }));
+    } catch (error) {
+      set({ libraryLoaded: true, message: { tone: 'error', text: describe(error) } });
+    }
+  },
+
+  async openFromLibrary(row) {
+    // Nothing destructive is offered here: the file is somewhere else or gone, and this
+    // software has no business guessing where, nor tidying away somebody's record of it.
+    //
+    // Checked before the unsaved-work question, too — nothing is going to replace the canvas,
+    // so asking whether it may be replaced would be asking about something that cannot happen.
+    if (row.status === 'missing') {
+      set({
+        message: {
+          tone: 'error',
+          text: translate('messages.libraryMissing', { name: row.entry.name }),
+        },
+      });
+      return;
+    }
+
+    if (get().dirty) {
+      get().requestDiscard('library-open', () => {
+        void doOpenFromLibrary(set, get, row);
+      });
+      return;
+    }
+    await doOpenFromLibrary(set, get, row);
+  },
+
+  async removeFromLibrary(row, deleteCopy) {
+    const decision = decideRemoval(row.entry, deleteCopy);
+    if (!decision.allowed) {
+      set({ message: { tone: 'error', text: translate('library.remove.refused') } });
+      return;
+    }
+
+    set({ busy: true, message: null });
+    try {
+      await ipc.libraryRemove(decision.id, decision.deleteCopy);
+      await get().loadLibrary();
+      set({
+        message: {
+          tone: 'info',
+          text: translate(
+            decision.deleteCopy ? 'messages.removedAndDeleted' : 'messages.removedFromLibrary',
+            { name: row.entry.name },
+          ),
+        },
+      });
+    } catch (error) {
+      set({ message: { tone: 'error', text: describe(error) } });
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  setImportOpen(open) {
+    // Closing throws away what was read, so reopening reads the folder again rather than
+    // showing an answer about a folder somebody may have changed in between.
+    set(
+      open ? { importOpen: true } : { importOpen: false, importInspected: null, importError: null },
+    );
+  },
+
+  /**
+   * Asks for a folder and reads it. Nothing is taken in here, ever.
+   *
+   * Inspecting writes nothing, opens nothing and runs nothing; what it produces is something to
+   * read. Importing is a second thing somebody presses, having read it.
+   */
+  async beginImport() {
+    if (get().busy) return;
+    // Busy from the moment the chooser opens, not from the moment it returns: a second press of
+    // Import while the first chooser is up used to open a second chooser.
+    set({ importInspected: null, importError: null, busy: true });
+    try {
+      const folder = await ipc.pickFolder();
+      if (!folder) return;
+      set({ importOpen: true });
+      set({ importInspected: { folder, inspected: await ipc.inspectPublication(folder) } });
+    } catch (error) {
+      set({ importOpen: true, importError: asImportFailure(error) });
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  async confirmImport() {
+    const pending = get().importInspected;
+    if (!pending) return;
+
+    set({ busy: true, importError: null, message: null });
+    try {
+      const entry = await ipc.importPublication(pending.folder);
+      await get().loadLibrary();
+      set({
+        importOpen: false,
+        importInspected: null,
+        view: 'library',
+        message: {
+          tone: 'info',
+          text: translate('messages.imported', { name: entry.name }),
+        },
+      });
+    } catch (error) {
+      set({ importError: asImportFailure(error) });
+    } finally {
+      set({ busy: false });
+    }
   },
 
   setView(view) {
@@ -650,57 +946,26 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   loadDemo(demo) {
-    const nodes: EditorNode[] = Object.entries(demo.graph.nodes).map(([id, node]) => ({
-      id,
-      type: 'component',
-      position: node.position,
-      data: {
-        componentRef: node.component,
-        config: { ...node.config },
-        disabled: node.disabled ?? false,
-      },
-    }));
-    const edges: Edge[] = demo.graph.edges.map((edge) => ({
-      id: `${edge.from.node}.${edge.from.port}->${edge.to.node}.${edge.to.port}`,
-      source: edge.from.node,
-      sourceHandle: edge.from.port,
-      target: edge.to.node,
-      targetHandle: edge.to.port,
-      type: 'wire',
-    }));
-
-    set({
-      nodes,
-      edges,
-      selectedNodeId: null,
-      validation: null,
-      journal: null,
-      liveNodes: {},
-      inputs: [],
-      grants: [],
-      // A sample is not the person's project until they save it somewhere, so it starts
-      // unattached — saving will ask where to put it rather than overwriting anything.
-      projectPath: null,
-      projectName: translate(demo.nameKey),
-      versions: [],
-      dirty: true,
-      history: emptyHistory,
-      view: 'builder',
-      message: {
-        tone: 'info',
-        // Not lower-cased the way the English joins it inline — a translated need can be a
-        // German noun phrase, and German capitalises nouns everywhere, not only at a sentence's
-        // start, so forcing lower case would misspell it.
-        text: translate('messages.demoLoaded', {
-          name: translate(demo.nameKey),
-          needs: demo.needsKeys.map((key) => translate(key)).join(', '),
-        }),
-      },
-    });
+    if (get().dirty) {
+      get().requestDiscard('demo', () => doLoadDemo(set, demo));
+      return;
+    }
+    doLoadDemo(set, demo);
   },
 
   dismissNotifications() {
     set({ notifications: [] });
+  },
+
+  async restoreVersion(snapshot) {
+    if (!get().projectPath) return;
+    if (get().dirty) {
+      get().requestDiscard('restore', () => {
+        void doRestoreVersion(set, get, snapshot);
+      });
+      return;
+    }
+    await doRestoreVersion(set, get, snapshot);
   },
 
   undo() {
@@ -764,26 +1029,170 @@ export const useEditor = create<EditorState>((set, get) => ({
     const s = get();
     return s.liveNodes[id] ?? s.journal?.nodes[id]?.status;
   },
-
-  async restoreVersion(snapshot) {
-    const path = get().projectPath;
-    if (!path) return;
-    set({ busy: true, message: null });
-    try {
-      applyProject(set, await ipc.restoreVersion(path, snapshot));
-      set({
-        message: {
-          tone: 'info',
-          text: translate('messages.restored'),
-        },
-      });
-    } catch (error) {
-      set({ message: { tone: 'error', text: describe(error) } });
-    } finally {
-      set({ busy: false });
-    }
-  },
 }));
+
+/**
+ * The two halves of the store, as the private functions below need them.
+ *
+ * The same narrow shape `applyProject` has always taken: each of these replaces the canvas
+ * outright, so none of them has any business reading a draft of the state it is about to
+ * overwrite.
+ */
+type SetEditor = (partial: Partial<EditorState>) => void;
+type GetEditor = () => EditorState;
+
+/**
+ * What each entry point actually does, with no question attached.
+ *
+ * Private, and deliberately: the exported store methods are the only way in, so the prompt
+ * cannot be skipped by calling the work directly from a panel. Keeping the bodies here rather
+ * than inline in the guarded method keeps `confirmDiscard` honest — the thing it runs later is
+ * the very same function that would have run immediately.
+ */
+/**
+ * Whether a React Flow change is something a person did to the file.
+ *
+ * `select` is where the focus is; `dimensions` is the library measuring what it drew. Neither is
+ * in the saved graph, so neither makes the project unsaved. Exported for the store's tests.
+ */
+export function isEdit(type: string): boolean {
+  return type !== 'select' && type !== 'dimensions';
+}
+
+function doNewProject(set: SetEditor): void {
+  set({
+    // Whoever asked for a new project wants to be where it is made; Home used to switch the
+    // view before the unsaved-work question was answered, which landed a person who cancelled
+    // in the Builder they had not chosen to go to.
+    view: 'builder',
+    nodes: [],
+    edges: [],
+    selectedNodeId: null,
+    validation: null,
+    journal: null,
+    journalIsRecording: false,
+    inputs: [],
+    grants: [],
+    projectPath: null,
+    projectName: '',
+    versions: [],
+    dirty: false,
+    history: emptyHistory,
+    liveNodes: {},
+    message: null,
+  });
+}
+
+async function doOpenProject(set: SetEditor, get: GetEditor): Promise<void> {
+  set({ busy: true, message: null });
+  try {
+    const path = await ipc.pickProjectToOpen();
+    if (!path) return;
+    applyProject(set, await ipc.openProject(path));
+    rememberProject(path);
+    // Opening from Home used to leave the person on Home, with the project loaded somewhere
+    // behind it. Opening from the library already went to the Builder; the two ways of opening
+    // the same thing should end in the same place.
+    set({ view: 'builder' });
+    // The runtime has just recorded this in the library. Re-listing is how this side finds
+    // out, rather than editing its own copy and hoping the two agree.
+    await get().loadLibrary();
+  } catch (error) {
+    set({ message: { tone: 'error', text: describe(error) } });
+  } finally {
+    set({ busy: false });
+  }
+}
+
+async function doOpenFromLibrary(
+  set: SetEditor,
+  get: GetEditor,
+  row: EntryWithStatus,
+): Promise<void> {
+  set({ busy: true, message: null });
+  try {
+    applyProject(set, await ipc.openProject(row.entry.path));
+    rememberProject(row.entry.path);
+    set({ view: 'builder' });
+    // Opening is what makes this the most recent thing, and the runtime is where that is
+    // recorded. Re-listing is how this side finds out, rather than editing its own copy and
+    // hoping the two agree.
+    await get().loadLibrary();
+  } catch (error) {
+    set({ message: { tone: 'error', text: describe(error) } });
+  } finally {
+    set({ busy: false });
+  }
+}
+
+async function doRestoreVersion(set: SetEditor, get: GetEditor, snapshot: string): Promise<void> {
+  const path = get().projectPath;
+  if (!path) return;
+  set({ busy: true, message: null });
+  try {
+    applyProject(set, await ipc.restoreVersion(path, snapshot));
+    set({
+      message: {
+        tone: 'info',
+        text: translate('messages.restored'),
+      },
+    });
+  } catch (error) {
+    set({ message: { tone: 'error', text: describe(error) } });
+  } finally {
+    set({ busy: false });
+  }
+}
+
+function doLoadDemo(set: SetEditor, demo: Demo): void {
+  const nodes: EditorNode[] = Object.entries(demo.graph.nodes).map(([id, node]) => ({
+    id,
+    type: 'component',
+    position: node.position,
+    data: {
+      componentRef: node.component,
+      config: { ...node.config },
+      disabled: node.disabled ?? false,
+    },
+  }));
+  const edges: Edge[] = demo.graph.edges.map((edge) => ({
+    id: `${edge.from.node}.${edge.from.port}->${edge.to.node}.${edge.to.port}`,
+    source: edge.from.node,
+    sourceHandle: edge.from.port,
+    target: edge.to.node,
+    targetHandle: edge.to.port,
+    type: 'wire',
+  }));
+
+  set({
+    nodes,
+    edges,
+    selectedNodeId: null,
+    validation: null,
+    journal: null,
+    liveNodes: {},
+    inputs: [],
+    grants: [],
+    // A sample is not the person's project until they save it somewhere, so it starts
+    // unattached — saving will ask where to put it rather than overwriting anything.
+    projectPath: null,
+    projectName: translate(demo.nameKey),
+    versions: [],
+    dirty: true,
+    history: emptyHistory,
+    view: 'builder',
+    message: {
+      tone: 'info',
+      // Not lower-cased the way the English joins it inline — a translated need can be a
+      // German noun phrase, and German capitalises nouns everywhere, not only at a sentence's
+      // start, so forcing lower case would misspell it.
+      text: translate('messages.demoLoaded', {
+        name: translate(demo.nameKey),
+        needs: demo.needsKeys.map((key) => translate(key)).join(', '),
+      }),
+    },
+  });
+}
 
 /** Replaces the canvas with what a project file contains. */
 /**
@@ -874,11 +1283,58 @@ function summarise(journal: RunJournal): string {
   }
 }
 
+/**
+ * A rejection from a command that refuses in a shape, kept in that shape.
+ *
+ * `inspect_publication` and `import_publication` reject with a serialised `ImportError`, and
+ * everything else rejects with an `Error` or a string. Telling them apart here is the
+ * difference between the interface showing a sentence somebody can act on and showing them the
+ * JSON the runtime happened to send.
+ */
+function asImportFailure(error: unknown): ImportError | string {
+  return isImportError(error) ? error : describe(error);
+}
+
 function describe(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
+  // A structured refusal has a `kind`, and the import flow is the only thing that can say
+  // anything useful about one — `asImportFailure` keeps it in its shape for exactly that reason.
+  // Flattening it here would turn a refusal somebody can act on into "the runtime said nothing".
+  if (isImportError(error)) return translate('messages.runtimeSilent');
+  // Anything else carrying a `message` is a rejection that crossed the bridge as a plain object
+  // rather than as an `Error` — which is what a rejected Tauri command looks like on this side,
+  // and which used to be reported as silence even though the runtime had said precisely what
+  // was wrong.
+  if (typeof error === 'object' && error !== null) {
+    const { message } = error as { message?: unknown };
+    if (typeof message === 'string' && message.length > 0) return message;
+  }
   return translate('messages.runtimeSilent');
 }
+
+/**
+ * Keeps the window's copy of "is there unsaved work here" in step with this one.
+ *
+ * The window is closed by the operating system — a title-bar X, Alt+F4, a session ending — and
+ * none of those routes through the editor. By the time anything here could be asked, the answer
+ * would already be too late to matter, so the answer is pushed the moment it changes instead.
+ *
+ * A subscription rather than a line inside every action that touches `dirty`: there are a dozen
+ * of those and one of them will eventually be written without the line. Only the transitions are
+ * sent, because `dirty` is set on nearly every keystroke-sized change and a message per node drag
+ * would be a lot of noise for a boolean that changed twice.
+ */
+let reportedDirty = false;
+useEditor.subscribe((state) => {
+  if (state.dirty === reportedDirty) return;
+  reportedDirty = state.dirty;
+  ipc.reportDirty(state.dirty).catch(() => {
+    // Best effort, and deliberately silent. A runtime that does not know this command is an
+    // older build of the shell around a newer editor: the close guard is what degrades, and
+    // interrupting somebody's editing to tell them so would help nobody.
+  });
+});
 
 /**
  * Development only: the store, reachable from the console and from browser-driven tests.

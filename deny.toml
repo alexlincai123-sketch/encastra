@@ -1,4 +1,9 @@
 # cargo-deny: supply-chain policy. Enforced in CI (see .github/workflows/ci.yml).
+#
+# This file was failing three of its four checks for long enough that nobody was reading it, and
+# a real advisory (RUSTSEC on rustls, fixed in 0.23.45) was sitting unread among the noise. A gate
+# that is always red reports nothing. Every entry below is therefore either a decision with a
+# reason attached or a date by which somebody has to look again.
 
 [graph]
 all-features = true
@@ -7,12 +12,45 @@ all-features = true
 # An unpatched advisory fails the build. Exceptions go in `ignore` WITH a reason and a date,
 # never by relaxing this line.
 yanked = "deny"
-ignore = []
+ignore = [
+  # --- Unmaintained, transitive, no known vulnerability. Reviewed 2026-09-15. ---
+  #
+  # "Unmaintained" is a statement about a repository, not about a defect: none of these carries a
+  # vulnerability advisory. Each is listed individually, with where it actually comes from, so
+  # that adding a seventh is a decision rather than something inherited from a blanket rule.
+  #
+  # cargo-deny errors on an `ignore` that matches nothing, which is what keeps this list from
+  # going stale silently — a dependency bump that drops one of these will fail the build until
+  # the line is removed.
+  #
+  # Revisit 2026-12-15, or sooner if any gains a vulnerability advisory. The way out of all six
+  # is an upstream Tauri bump, not an edit here.
+
+  # proc-macro-error <- glib-macros <- glib <- atk <- gtk <- muda <- tauri.
+  # Verified with `cargo tree -i proc-macro-error --target all`: it is reachable only through the
+  # GTK stack, which is the Linux backend. Encastra ships Windows-only, so this is not compiled
+  # into anything we distribute. Superseded upstream by proc-macro-error2.
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: unmaintained. Linux/GTK build path only, not in the shipped Windows binary. No advisory. Revisit 2026-12-15." },
+
+  # The unic-* family: unic-ucd-ident <- urlpattern <- tauri-utils <- tauri (verified with
+  # `cargo tree -i unic-ucd-ident`). Unicode character-property tables — pure lookup data, no
+  # I/O, no parsing of anything Encastra hands them.
+  { id = "RUSTSEC-2025-0081", reason = "unic-char-property: unmaintained, Unicode tables via urlpattern <- tauri. No advisory. Revisit 2026-12-15." },
+  { id = "RUSTSEC-2025-0075", reason = "unic-char-range: unmaintained, Unicode tables via urlpattern <- tauri. No advisory. Revisit 2026-12-15." },
+  { id = "RUSTSEC-2025-0080", reason = "unic-common: unmaintained, Unicode tables via urlpattern <- tauri. No advisory. Revisit 2026-12-15." },
+  { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident: unmaintained, Unicode tables via urlpattern <- tauri. No advisory. Revisit 2026-12-15." },
+  { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version: unmaintained, Unicode tables via urlpattern <- tauri. No advisory. Revisit 2026-12-15." },
+]
 
 [licenses]
 # Allowlist, not a denylist: a dependency arriving under an unexpected licence should fail
 # loudly rather than slip through because nobody thought to ban it.
+#
+# Encastra ships as a proprietary binary (`license = "UNLICENSED"`, `publish = false`), so the
+# question each entry answers is: what does this licence oblige us to do when we ship a compiled
+# binary that links it?
 allow = [
+  # --- Permissive, no obligation beyond retaining notices. ---
   "MIT",
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
@@ -21,12 +59,55 @@ allow = [
   "ISC",
   "Unicode-3.0",
   "Zlib",
+  "MIT-0",
+
+  # Boost Software License 1.0. Permissive and explicitly exempts binary distribution from the
+  # notice requirement. Reaches us through ryu (serde_json's float formatter), clipboard-win and
+  # error-code (the Windows clipboard backend behind arboard).
+  "BSL-1.0",
+
+  # Public-domain dedication. Only dunce, which is dual CC0-1.0/MIT-0.
+  "CC0-1.0",
+
+  # Community Data License Agreement, permissive. Only webpki-roots, which is the Mozilla CA
+  # root store shipped as data rather than as code. No copyleft, no attribution requirement on
+  # distribution. Refusing it would mean no TLS verification.
+  "CDLA-Permissive-2.0",
+
+  # Mozilla Public License 2.0 — the one entry on this list that is copyleft, and therefore the
+  # one that is a decision rather than a formality.
+  #
+  # MPL-2.0 is FILE-level: the obligation attaches to the MPL-covered source files, not to
+  # anything that links them. Shipping a proprietary binary that includes unmodified MPL crates
+  # requires making those files' source available, which crates.io already does, and obliges
+  # nothing about Encastra's own code. It is not GPL and it does not reach across the link.
+  #
+  # THE CONDITION THIS DEPENDS ON: we do not modify them. If any of these is ever vendored and
+  # patched, the modified files must be published under MPL-2.0. That is a real obligation and
+  # the reason this entry has a comment rather than a bare string.
+  #
+  # Reaches us as: cssparser, cssparser-macros, selectors, dtoa-short (the CSS selector engine
+  # behind dom_query, via Tauri) and option-ext (via dirs).
+  #
+  # Recorded in docs/security/RELEASE_SECURITY.md as a standing licence decision.
+  "MPL-2.0",
 ]
 confidence-threshold = 0.9
+
+# The crates in this workspace declare `license = "UNLICENSED"`, which is not an SPDX
+# expression — deliberately, because they are not published. Without this, cargo-deny reports
+# our own code as an unlicensed dependency and the check can never pass.
+private = { ignore = true }
 
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# A path dependency inside this workspace has no version requirement, which is a wildcard by
+# cargo-deny's reckoning. It resolves to a sibling directory in this repository, not to anything
+# a registry could substitute, so it is not the risk `wildcards = "deny"` exists to catch — and
+# turning that line off to accommodate it would also stop catching real wildcards on third-party
+# crates, which is the whole point.
+allow-wildcard-paths = true
 # Adding a second implementation of something we already have is how dependency trees rot.
 deny = []
 

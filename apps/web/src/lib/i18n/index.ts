@@ -17,4 +17,5 @@ export { setLocaleAction } from './actions';
 export { getLocale } from './get-locale';
 export { isLocale, LOCALE_COOKIE, LOCALE_NAMES, LOCALES, type Locale } from './locale';
 export type { Messages } from './messages';
+export { type PageMetadataInput, pageMetadata } from './page-metadata';
 export { getDictionary, t } from './translate';

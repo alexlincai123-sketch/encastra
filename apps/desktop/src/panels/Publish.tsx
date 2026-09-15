@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useFocusTrap } from '../a11y/focus';
 import { useTranslation } from '../i18n';
 import { ipc } from '../ipc';
 import { type DraftFields, draftProblems, listingId } from '../publish';
@@ -55,6 +56,9 @@ export function Publish() {
   useEffect(() => {
     if (open) panel.current?.focus();
   }, [open]);
+  // And stays there: `aria-modal="true"` below says Tab cannot leave, and this is what makes that
+  // true. Closing hands focus back to the button that opened the panel.
+  useFocusTrap(panel, open);
 
   // The title starts as the project's own name, because it almost always is.
   useEffect(() => {
@@ -123,6 +127,9 @@ export function Publish() {
         verified: false,
       };
       setPrepared(await ipc.preparePublication(projectPath, draft, publisher, into));
+      // The runtime has just recorded the folder in the library. Re-listing is how this side
+      // finds out, rather than editing its own copy and hoping the two agree.
+      await useEditor.getState().loadLibrary();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

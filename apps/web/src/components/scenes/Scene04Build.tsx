@@ -185,7 +185,7 @@ export function Scene04Build({ locale }: { locale: Locale }): ReactNode {
   });
 
   return (
-    <section ref={ref} className={styles.scene} aria-label="Build" data-scene="build">
+    <section ref={ref} className={styles.scene} aria-label={COPY.label} data-scene="build">
       <div className={styles.pin} data-pin>
         <div className={styles.buildStage}>
           <span className={styles.index} data-animate>

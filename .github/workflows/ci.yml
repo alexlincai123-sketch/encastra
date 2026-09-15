@@ -51,6 +51,19 @@ jobs:
           UPDATE_MATRIX=1 npx vitest run --silent
           git diff --exit-code -- packages/protocol/data/compat-matrix.json
 
+      - name: One version, declared in one place
+        # scripts/version.py has had a --check mode all along and nothing called it. A version
+        # that disagrees between Cargo.toml, the package manifests and tauri.conf.json produces a
+        # release whose installer, binary and published hash describe different builds.
+        run: python3 scripts/version.py --check
+
+      - name: The release scripts, against a synthetic executable
+        # release_manifest.py refuses a binary no commit explains and an unsigned production
+        # version; pe_diff.py tells a code change from a linker timestamp. Both are tested here
+        # against a hand-built PE image, on the platform where the release gates run.
+        run: python3 -m unittest discover -s scripts/tests -v
+
+
   rust:
     name: Rust — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -88,6 +101,71 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests (includes the editor/runtime conformance gate)
         run: cargo test --workspace
+
+      - name: The fuzz corpus must be committed and still what the code produces
+        # The seeds are generated and committed. This is the command that regenerates them; a
+        # diff means the corpus on disk is stale, and the libFuzzer targets in fuzz/ would start
+        # from something nobody reviewed.
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          UPDATE_FUZZ_CORPUS=1 cargo test -p encastra-project --test fuzz_smoke --quiet
+          git diff --exit-code -- fuzz/corpus
+
+      # Two security tests build their fixture with a symlink and return early, printing
+      # "skipped", where the platform will not create one — which on Windows means without
+      # Developer Mode or SeCreateSymbolicLinkPrivilege. That is honest behaviour for a test, and
+      # it is exactly how a control ends up with no coverage while CI stays green: a skip and a
+      # pass are the same colour in every dashboard.
+      #
+      # Linux creates symlinks freely, so on Linux these must actually run. If they ever skip
+      # here, the escape defences they cover are untested everywhere, and this fails.
+      - name: The symlink escape tests must actually run, not skip
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -o pipefail
+          cargo test -p encastra-core --lib -- --nocapture --exact \
+            broker::tests::a_symlink_in_an_allowed_folder_cannot_reach_outside_it \
+            broker::tests::a_link_already_in_the_granted_folder_does_not_take_the_write_with_it \
+            2>&1 | tee symlink-tests.log
+          if grep -q 'skipped' symlink-tests.log; then
+            echo "::error::A symlink escape test skipped on Linux. These cover the two paths by
+            which a link in a watched folder reaches outside it, and a skip means neither is
+            verified anywhere."
+            exit 1
+          fi
+
+      # The receiving side of a publication has the same shape of test: a file that is a link
+      # where the project or the document should be must be refused, and the fixture needs a
+      # symlink the platform will create. Linux will; it must not skip here.
+      - name: The publication link-refusal test must actually run, not skip
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -o pipefail
+          cargo test -p encastra-publish --test import_publication -- --nocapture --exact             a_link_where_a_file_should_be_is_never_followed             2>&1 | tee import-link-test.log
+          if grep -q 'skipped' import-link-test.log; then
+            echo "::error::The publication link-refusal test skipped on Linux, so nothing
+            verifies that a linked project or document inside a publication folder is refused
+            rather than followed."
+            exit 1
+          fi
+
+      # The mirror of the above. The startup-folder refusal is about a Windows path, and the test
+      # returns early where there is no profile to find it in — so Windows is the only job that
+      # can prove that control works.
+      - name: The startup-folder refusal must actually run on Windows
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p encastra-core --lib -- --nocapture --exact \
+            broker::tests::the_folder_that_decides_what_runs_at_login_is_not_grantable \
+            2>&1 | tee startup-test.log
+          if grep -q 'skipped' startup-test.log; then
+            echo "::error::The startup-folder grant refusal skipped on Windows, so nothing
+            verifies that a malicious project cannot have a workflow write into the folder that
+            decides what runs at login."
+            exit 1
+          fi
 
   supply-chain:
     name: Supply chain — advisories and licences

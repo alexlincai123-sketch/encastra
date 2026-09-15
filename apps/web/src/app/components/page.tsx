@@ -4,19 +4,21 @@ import type { ReactNode } from 'react';
 import { PageHeader, SourceRef } from '@/components/ui/Ui';
 import { COMPONENT_COUNT, COMPONENTS, TRIGGER_COUNT } from '@/lib/components.data';
 import type { ComponentRecord, PortRecord } from '@/lib/components.types';
-import { getLocale, type Locale, t } from '@/lib/i18n';
+import { getLocale, type Locale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'nav.primary.components'),
     description: t(locale, 'components.meta.description', {
       count: String(COMPONENT_COUNT),
       triggers: String(TRIGGER_COUNT),
     }),
-  };
+    path: '/components',
+  });
 }
 
 function categoriesOf(components: readonly ComponentRecord[]): readonly string[] {

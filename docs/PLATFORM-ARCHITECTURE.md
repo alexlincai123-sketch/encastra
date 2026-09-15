@@ -4,10 +4,13 @@ Everything in this document is **design**. None of it exists in the shipped prod
 in the application or the website presents any of it as working.
 
 **One exception, added 2026-09-15.** The part of publishing that needs no server now
-exists: the shape of a publication, and the check that refuses one, in
-`crates/encastra-publish`, reached from the desktop application's Publish panel
-(ADR-0011). It produces a folder on the machine that made it. There is still no registry,
-no account, no upload and no money — everything else below remains design.
+exists, at both ends: the shape of a publication and the check that refuses one, in
+`crates/encastra-publish`, reached from the desktop application's Publish panel (ADR-0011);
+and the receiving side — a folder can be inspected and imported into a local library, with
+the same check run again on the receiving machine and nothing executed (ADR-0012,
+`crates/encastra-library`). A publication travels as a folder a person carries. There is
+still no registry, no account, no upload, no signature and no money — everything else below
+remains design.
 
 It is written down now for one reason: these pieces constrain each other. The sandbox decides
 what a component may declare; the declaration decides what the registry must record; the record
@@ -78,9 +81,19 @@ than as prose. Two things follow:
 - **The capability list in a release record is gathered, not typed.** It comes from the manifests
   of the components the project actually uses, which is the only version of that field anybody
   should trust.
+- **A publication can be taken in today, offline, and nothing runs when it is.** The receiving
+  machine reads the two files, verifies the project's bytes against the document, runs the
+  same review against its own components, refuses a document that disagrees with the project
+  about its runtime or its permissions, and only then copies the verified bytes into a local
+  library. Opening is a separate act; running still asks, per run, like any other project
+  (ADR-0012).
+- **A local library remembers what is on this machine** — created, imported, prepared — with a
+  content hash taken when each was last seen, so a file that changed or went missing is shown
+  as such rather than opened on trust.
 
 What this does **not** do: sign anything (the checksum is integrity, not provenance — ADR-0008),
-verify a publisher (there are no accounts), or move a publication anywhere. See ADR-0011.
+verify a publisher (there are no accounts, and the interface says so wherever a publisher's
+name appears), or move a publication anywhere on its own. See ADR-0011 and ADR-0012.
 
 
 **Status: designed, not built.**

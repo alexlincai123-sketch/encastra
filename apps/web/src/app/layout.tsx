@@ -75,6 +75,11 @@ export async function generateMetadata(): Promise<Metadata> {
     description,
     applicationName: SITE.name,
     robots: { index: true, follow: true },
+    // The site-wide default, and the whole of it for a response no page produced — `not-found.tsx`
+    // renders inside this layout and exports no metadata of its own. Every real page overrides
+    // this block through `lib/i18n/page-metadata.ts`, because Next.js replaces a layout's
+    // `openGraph` rather than merging into it: without a per-page override they all unfurled as
+    // the home page. See that file for the full account.
     openGraph: {
       type: 'website',
       siteName: SITE.name,
@@ -82,8 +87,11 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       url: SITE.url,
     },
-    // No Twitter card image is declared: there is no image to declare, and pointing at one that
-    // does not exist would render as a broken preview.
+    // `summary` is the text-only card. No image is declared anywhere on this site: there is none
+    // to declare, and pointing at one that does not exist renders as a broken preview. Set once
+    // here and never overridden, so every page inherits it — an unset field on a page keeps the
+    // layout's value.
+    twitter: { card: 'summary' },
     other: { 'encastra:version': VERSION },
   };
 }

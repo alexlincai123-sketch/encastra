@@ -277,27 +277,35 @@ Stated plainly, because a security document that only lists controls is marketin
 2. **Nothing is signed and nothing is verified.**
    [ADR-0008](adr/0008-signing-and-revocation.md) specifies Ed25519 signing, a counter-signing
    registry, verification at install and at every load, and a signed revocation list. None of it
-   is implemented. `lock.json` stores a manifest digest and no code checks it on open. There is
-   no registry to install from.
+   is implemented. `lock.json` stores a manifest digest; opening a project does not check it,
+   and importing a publication does — the review refuses a component whose manifest no longer
+   matches the pinned digest ([ADR-0012](adr/0012-a-publication-is-checked-again-by-whoever-receives-it.md)).
+   There is no registry to install from. A publication travels as a folder a person carries,
+   its checksum proves the file was not altered on the way, and nothing proves who prepared it:
+   the interface says "not verified" next to every publisher name, because it is not.
 
-3. **No timeout, fuel ceiling or memory ceiling on a node.** Cancellation is a cooperative flag
-   checked between nodes and by components that choose to check it. A component that loops
-   without checking is not stopped. [ARCHITECTURE](ARCHITECTURE.md) §5.1 describes these
-   controls in the present tense; they arrive with the Wasm host.
+3. **No timeout, fuel ceiling or memory ceiling on a single node.** Cancellation is a
+   cooperative flag checked between nodes and by components that choose to check it; a component
+   that loops without checking is not stopped. Per-node interruption arrives with the Wasm host.
+   The *run* is bounded: an outer deadline (`MAX_RUN_DURATION`), a ceiling on the bytes held at
+   once across the run (`MAX_LIVE_VALUE_BYTES`), a value released once its last consumer has
+   finished, and per-node log ceilings — see [security/LIMITS](security/LIMITS.md).
 
-4. **The broker has no sensitive-location deny-list.** [THREAT-MODEL](THREAT-MODEL.md) T7 says
-   the broker "refuses to grant capabilities over sensitive locations (the app's own data, the
-   keystore, system directories) regardless of user consent". `broker.rs` checks *containment*
-   within a granted root; it does not check whether that root is somewhere it should refuse. A
-   user who grants a system directory gets a grant over a system directory.
+4. **The broker's sensitive-location refusals are a list, not a rule.** *(Was "no deny-list";
+   partly fixed.)* `resolve_grant_directory` refuses filesystem roots, the system and program
+   directories, the profile root and the startup folders as trees, and a folder grant is only
+   accepted for a folder the person picked in the native chooser this session. What remains true
+   is that a list is never complete: an unwise folder that is not on it is granted if a person
+   grants it.
 
 5. **Secrets are declared and never resolved.** `variables.json` records that a variable is
    secret; nothing reads it, and there is no keystore integration. The invariant that a secret
    value cannot reach the project file is real and tested. The mechanism that would make secrets
    usable is not built, so today a workflow needing a token has nowhere safe to put one.
 
-6. **Grants are per run and are not remembered.** There is no Security Center in the shipped
-   shell, no record of what has been allowed before, and no distinction between "allowed once"
+6. **Grants live while a project is open and are not remembered across sessions.** The Security
+   view shows what is installed, what each component can reach and what has been allowed in the
+   open workflow; nothing is written down, and there is no distinction between "allowed once"
    and "allowed always".
 
 7. **Both front ends now express the whole grant model.** *(Was a limitation; fixed.)* The
@@ -323,10 +331,13 @@ Stated plainly, because a security document that only lists controls is marketin
    `a_step_wired_to_the_name_cannot_read_the_file` pins it. That test was checked by reverting
    the fix and confirming it fails.
 
-9. **The desktop bridge trusts its own front end.** Tauri commands accept a graph, an input list
-   and a grant list from the WebView and apply them. That is the correct trust relationship —
-   the WebView is first-party and the CSP in §10 is what keeps foreign code out of it — but it
-   means an XSS in the editor would be a grant-forging bug, not merely a defacement.
+9. **The desktop bridge checks what it can and still relays a decision.** Tauri commands take a
+   graph, inputs and grants from the WebView; a grant is dropped unless its node exists, its
+   component declared the capability, and its folder resolves to one the person picked in the
+   native chooser this session. What the runtime cannot check is that the person *meant* it: the
+   sentence they agreed to is still drawn by the WebView. The CSP in §10 is what keeps foreign
+   code out of it, and an XSS there would still be a consent-forging bug, not merely a
+   defacement.
 
 10. **No external audit.** This model has been reviewed by the people who built it and by the
     tests in [TESTING](TESTING.md) §5. That is not the same thing, and an audit is a

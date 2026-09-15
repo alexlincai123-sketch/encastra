@@ -171,6 +171,20 @@ fn separator(ctx: &NodeContext<'_>) -> Result<u8, NodeError> {
     }
 }
 
+/// The most rows a CSV may become.
+///
+/// Not a guess at what is useful: what bounds the memory a `Value::Json` table takes, since each
+/// cell costs far more as a JSON node than as text. A million rows of a handful of columns is
+/// generous for a tool that hands the result to the next node as one value.
+pub const MAX_CSV_ROWS: usize = 1_000_000;
+
+/// The most cells a CSV may become, whatever its shape.
+///
+/// Rows alone would let a file of ten million one-byte columns through. Ten million cells at
+/// roughly a hundred bytes of JSON structure each is the order of a gigabyte, which is where a
+/// single node's value should stop.
+pub const MAX_CSV_CELLS: usize = 10_000_000;
+
 impl CoreComponent for ReadCsv {
     fn manifest(&self) -> &ComponentManifest {
         &READ_CSV
@@ -207,10 +221,27 @@ impl CoreComponent for ReadCsv {
 
         let mut rows = Vec::new();
         let mut ragged = 0usize;
+        let mut cells = 0usize;
         for record in reader.records() {
             let record = record.map_err(|e| {
                 NodeError::new("invalid-csv", format!("A row could not be read: {e}."))
             })?;
+
+            // Every cell becomes a heap string inside a map inside an array: fifty to a hundred
+            // and fifty bytes of structure per byte of input for a file of one-character cells.
+            // The read ceiling bounds the text; without this, nothing bounded what the text
+            // becomes. Refused rather than truncated — a table missing its last rows is a
+            // different table, and a silently different one.
+            cells += record.len();
+            if rows.len() >= MAX_CSV_ROWS || cells > MAX_CSV_CELLS {
+                return Err(NodeError::new(
+                    "csv-too-large",
+                    format!(
+                        "This file has more than {MAX_CSV_ROWS} rows or {MAX_CSV_CELLS} cells,                          which is more than this build turns into a table."
+                    ),
+                )
+                .with_hint("Split the file, or filter it before this step."));
+            }
 
             if has_header {
                 if record.len() != headers.len() {

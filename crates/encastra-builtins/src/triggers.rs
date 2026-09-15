@@ -141,7 +141,12 @@ impl Trigger for Watcher {
             .collect();
 
         // A file that has gone is forgotten, so putting the same name back starts it again.
-        let still_here: Vec<PathBuf> = present.iter().map(|e| e.path.clone()).collect();
+        // A set, not a Vec: `retain` asks "is it still here" once per remembered path, and a
+        // linear search for each made every poll quadratic in the folder's size. At the listing
+        // ceiling that is over two billion comparisons every six hundred milliseconds — from a
+        // folder whose contents are chosen by whoever can write into it.
+        let still_here: std::collections::BTreeSet<&PathBuf> =
+            present.iter().map(|e| &e.path).collect();
         self.observed.retain(|path, _| still_here.contains(path));
         self.emitted.retain(|path, _| still_here.contains(path));
 

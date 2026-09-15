@@ -2,8 +2,9 @@
 
 **Build software from parts that actually fit.**
 
-Encastra is a local-first runtime that executes a typed graph of sandboxed components, plus
-the ecosystem around it: a visual editor, a component registry, an SDK, and a marketplace.
+Encastra is a local-first runtime that executes a typed graph of components, with a visual
+editor around it. The rest of the ecosystem — a sandbox for strangers' components, a registry,
+an SDK, a marketplace — is designed and not built; the status table below says which is which.
 
 > *encastrar* (Spanish, from Latin *incastrare*) — to interlock or couple two pieces so that
 > each holds the other.
@@ -21,11 +22,12 @@ Three primitives, and everything else is a surface on top of them:
 - **Project format** — what you save and share: a graph plus a lockfile that pins every
   component by content hash, so a project that ran yesterday runs today.
 
-The interesting problem is not the canvas. It is that a stranger's component runs on your
-machine. Encastra's answer is that third-party components have **no ambient authority at
-all** — they execute as WebAssembly components with nothing but the capabilities you granted,
-and they never see a filesystem path. See [ARCHITECTURE](docs/ARCHITECTURE.md) §2 and
-[THREAT-MODEL](docs/THREAT-MODEL.md) T1.
+The interesting problem is not the canvas. It is that one day a stranger's component would run
+on your machine. Encastra's answer is designed and not yet built: third-party components would
+have **no ambient authority at all** — WebAssembly components with nothing but the capabilities
+you granted, never seeing a filesystem path. Today only first-party components run, and they go
+through the same capability broker that would gate a stranger's. See
+[ARCHITECTURE](docs/ARCHITECTURE.md) §2 and [THREAT-MODEL](docs/THREAT-MODEL.md) T1.
 
 **No AI in the runtime.** Workflows execute without a model in the loop, by design.
 
@@ -33,8 +35,11 @@ and they never see a filesystem path. See [ARCHITECTURE](docs/ARCHITECTURE.md) �
 
 ## Status
 
-**Beta 0.2.0-beta.1.** A desktop application that builds and runs workflows on this
-machine, and now explains itself while you do it.
+**Beta.** The exact build, its hash and how to verify it are in [RELEASE](docs/RELEASE.md); the
+version is set in one place (`Cargo.toml`, `[workspace.package]`) and copied everywhere else by
+`scripts/version.py`. A desktop application that builds and runs workflows on this machine,
+explains itself while you do it, and can hand a project to somebody else as a publication that
+their copy checks again before taking in.
 
 | Piece | State |
 |---|---|
@@ -51,9 +56,12 @@ machine, and now explains itself while you do it.
 | First run — welcome, and a guided first workflow that waits rather than drives | working |
 | Settings — navigated and categorised, every control wired to something real | working |
 | Keyboard — the canvas is reachable and navigable without a mouse | working |
-| Website — what Encastra is, how it works, tutorials, download | working |
+| Website — what Encastra is, how it works, tutorials, download, the ecosystem and what of it exists | working, English and Spanish |
+| Publish — a saved project reviewed for secrets, personal paths, unreadable components and licence conflicts, then written as a publication folder | working, offline, refuses rather than warns |
+| Import — a publication folder verified, reviewed again on this machine, and copied into a local library without running | working, offline |
+| Library — what is on this machine: created, imported, prepared; status by content hash | working, local only |
 | **Third-party components (WebAssembly sandbox)** | **not built** — designed and documented only |
-| **Registry, marketplace, accounts, payments, updates** | **not built** |
+| **Registry, marketplace, accounts, signing, payments, updates** | **not built** — a publication travels as a folder a person carries |
 
 The checkpoint this beta had to pass, and does:
 
@@ -104,14 +112,18 @@ cargo test --workspace   # tests (Rust), including the cross-language conformanc
 ```
 apps/desktop      Tauri 2 + React editor
 apps/web          Next.js marketing and docs
-apps/admin        moderation, advisories, revocation
 packages/protocol component protocol: type system, manifest schema   ← the shared rules live here
-packages/…        project-format · ui · types · sdk
-crates/…          encastra-protocol · encastra-core · encastra-host · encastra-builtins · encastra-publish
-components/       the first-party component set
-services/api      backend
+packages/ui       design tokens
+crates/           encastra-protocol · encastra-core · encastra-project · encastra-builtins
+                  encastra-publish · encastra-library · encastra-cli
+examples/         graphs the CLI runs
 docs/             architecture, threat model, roadmap, ADRs
 ```
+
+Not present, and not pretended to be: an `apps/admin`, a `services/api`, an `encastra-host`
+crate for the WebAssembly sandbox, or a `components/` directory of third-party parts. The
+first-party component set is `crates/encastra-builtins`. Each of the missing pieces is design
+only — see [PLATFORM-ARCHITECTURE](docs/PLATFORM-ARCHITECTURE.md).
 
 ### One rule worth knowing before you touch anything
 

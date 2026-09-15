@@ -6,9 +6,9 @@ import { STATIC_SECURITY_HEADERS } from './src/lib/security';
  * No CMS, no database, no auth, no privileged route handlers. The whole site is pages and data
  * files, which is why the configuration is short.
  *
- * The Content-Security-Policy is set in `middleware.ts` rather than here, because it carries a
+ * The Content-Security-Policy is set in `src/proxy.ts` rather than here, because it carries a
  * per-request nonce. Everything that does not need one is set here so it applies even to a
- * response the middleware did not touch.
+ * response that file did not touch.
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,

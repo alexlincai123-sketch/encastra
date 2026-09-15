@@ -1,0 +1,1 @@
+{"schema":1,"id":"encastra.file.read","version":"1.0.0","name":"Read File","runtime":">=0.1.0","kind":"core","ports":{"inputs":{"file":{"type":"file"}},"outputs":{"text":{"type":"text"}}},"capabilities":[{"kind":"fs.read","scope":"input-handles","reason":"It reads the file you connect to it."}]}

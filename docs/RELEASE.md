@@ -8,20 +8,25 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.4.0-beta.1** · built 2026-09-11 on Windows AMD64 · commit `a8d790d`
+**Version 0.5.0-beta.1** · built 2026-09-15 on Windows AMD64 · build commit `349b2ff972817798ef1175b73e5885fafe963ed6`
 
-| Artefact | Size | SHA-256 |
-|---|---|---|
-| `Encastra_0.4.0-beta.1_x64-setup.exe` | 3.2 MB | `35cf2974541f3cecb9afda77319e22d2198d42d6d185e1534c747b113864ff26` |
-| `encastra-desktop.exe` | 8.7 MB | `72e69fb6f0687a3b4b67629a6e748df4f267996d4ea008956dc124a35ee52d85` |
+Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0. Two builds of the build commit with this toolchain produce these exact bytes; `scripts/pe_diff.py` says how they differ if they do not.
+
+| Artefact | Size | Signature | SHA-256 |
+|---|---|---|---|
+| `Encastra_0.5.0-beta.1_x64-setup.exe` | 3.4 MB | **not signed** | `5678e5d06b659c178c8eaae0a874cbb539eb56e571b6400df4a12f68f6d66f91` |
+| `encastra-desktop.exe` | 9.2 MB | **not signed** | `be1945f9f8dc3dcf60e89f524f0d1f291d91585c8ba847a5e3736f1394de67a1` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.4.0-beta.1_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Encastra_0.5.0-beta.1_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Encastra_0.5.0-beta.1_x64-setup.exe
 ```
 
-These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking.
+These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking — with the caveat that a hash published beside the download is only as trustworthy as the site serving both.
+
+This build was published unsigned deliberately (`--allow-unsigned`). See docs/SIGNING.md for what is needed to stop doing that.
 
 <!-- BUILD:END -->
 
@@ -36,7 +41,9 @@ the artefact that actually travels.
 
 ## Producing a build
 
-Everything runs from the repository root.
+Everything runs from the repository root, on a **clean, committed tree**. The binary records the
+commit it was built from (`build.rs` embeds it; Settings → About shows it as the build commit),
+and the manifest refuses to describe a build whose tree had uncommitted changes.
 
 ```bash
 # 1. The gate. A release is not made from a tree that does not pass.
@@ -44,18 +51,61 @@ npm ci
 npm run lint
 npm run typecheck
 npm test
+python scripts/version.py --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+python -m unittest discover -s scripts/tests
 
-# 2. The build. Compiles the frontend, then the Rust binary in release, then packages it.
+# 2. The build, from the commit that will be the BUILD COMMIT. Compiles the frontend, then the
+#    Rust binary in release, then packages it.
 npm run tauri:build
 
-# 3. Record what came out.
-python scripts/release_manifest.py
+# 3. Record what came out: hashes, signature state, and the build commit read out of the binary.
+#    Writes the block above and the RELEASE constant in apps/web/src/config/site.ts.
+python scripts/release_manifest.py --allow-unsigned     # a pre-release; refused for a production version
+
+# 4. Commit those two files, and nothing else. This is the PUBLICATION COMMIT.
+git commit -m "release: <version>" docs/RELEASE.md apps/web/src/config/site.ts
+
+# 5. Prove the publication describes the build: hashes, the binary's own stamp, the website's
+#    copy, and that only those two files changed since the build commit.
+python scripts/release_manifest.py --verify
+
+# 6. Tag the publication commit. The release workflow checks out the build commit it names,
+#    builds it again on a clean machine, and fails unless the bytes are the published bytes.
+git tag v<version>
 ```
 
 `npm run tauri:build` invokes `vite build` first, through Tauri's `beforeBuildCommand`, so there
 is no separate frontend step to forget.
+
+### Build commit and publication commit
+
+A manifest cannot live in the commit it describes: the hashes of a build are known only after
+the build, and the commit that records them comes after the commit that was built. Every release
+therefore has two commits, one apart:
+
+| | What it is | Where it is named |
+|---|---|---|
+| **Build commit** | The tree that produced the bytes | Inside `encastra-desktop.exe` (`encastra-build-commit=<hash>;`), Settings → About, the block above, `site.ts` |
+| **Publication commit** | Build commit + `docs/RELEASE.md` + `site.ts` | The `v<version>` tag |
+
+`release_manifest.py --verify` is the check that the two are one publication apart and nothing
+else; it runs in CI on every release. Before this was written down the block above named the
+commit *before* the publication, read from `git rev-parse HEAD` at manifest time — one behind by
+construction, and nothing noticed.
+
+### Reproducible
+
+Two builds of the build commit with the pinned toolchain (`rust-toolchain.toml`, Node 22 or later,
+`package-lock.json`) produce byte-identical `encastra-desktop.exe` and byte-identical installers.
+The MSVC linker is passed `/Brepro` from `build.rs`, which replaces the image timestamps and the
+PDB GUID — the only bytes that used to differ — with hashes of the content, and the NSIS
+installer is told not to record the executable's modification time
+(`apps/desktop/src-tauri/nsis/hooks.nsh`, `SetDateSave off`), which was the one thing that made
+two installers of identical executables differ. `scripts/pe_diff.py A.exe B.exe` names every
+differing byte by PE structure if two builds ever disagree; an independent rebuild is compared by
+hash, and by that tool when the hash differs.
 
 ### What comes out
 
@@ -131,7 +181,7 @@ build output.
 Silent install, for a machine being set up by a script:
 
 ```powershell
-.\Encastra_0.1.0-beta.1_x64-setup.exe /S
+.\Encastra_<version>_x64-setup.exe /S
 ```
 
 Uninstalling removes the application. It does not touch `.encastra` files, which live wherever
@@ -159,7 +209,7 @@ in Settings rather than implying an update mechanism it does not have.
 
 ## Version numbering
 
-`0.1.0-beta.1`. One version, set in `Cargo.toml`'s `[workspace.package]` and in
+One version — the one in the BUILD block above — set in `Cargo.toml`'s `[workspace.package]` and in
 `tauri.conf.json`, and shown in Settings by reading it from the build rather than from anything
 typed into the interface.
 

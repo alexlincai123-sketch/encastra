@@ -3,14 +3,16 @@ import type { ReactNode } from 'react';
 
 import { ButtonRow, CTA, NotBuilt, PageHeader } from '@/components/ui/Ui';
 import { STATUS } from '@/config/site';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'marketplace.hero.eyebrow'),
     description: t(locale, 'marketplace.meta.description'),
-  };
+    path: '/marketplace',
+  });
 }
 
 export default async function MarketplacePage(): Promise<ReactNode> {

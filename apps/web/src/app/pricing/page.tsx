@@ -3,16 +3,18 @@ import type { ReactNode } from 'react';
 
 import { Card, CTA, NotBuilt, PageHeader, SectionHeading, StatusBadge } from '@/components/ui/Ui';
 import { STATUS } from '@/config/site';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'pricing.hero.eyebrow'),
     description: t(locale, 'pricing.meta.description'),
-  };
+    path: '/pricing',
+  });
 }
 
 export default async function PricingPage(): Promise<ReactNode> {

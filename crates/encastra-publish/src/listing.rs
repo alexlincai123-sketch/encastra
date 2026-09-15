@@ -194,6 +194,33 @@ impl Release {
     }
 }
 
+/// The longest listing id this build will accept.
+///
+/// Reverse-DNS names are short in practice. The ceiling is here because the id becomes a folder
+/// name when a publication is imported, and a name nobody would ever type on purpose is a name
+/// somebody generated to see what would break.
+pub const MAX_LISTING_ID_CHARS: usize = 200;
+
+/// Whether `text` is a listing id at all: `dev.alice.thumbnails`, and nothing else.
+///
+/// The shape is `[a-z][a-z0-9-]*` followed by one or more `.`-separated segments of
+/// `[a-z0-9-]+`. Lowercase only, because two ids differing in case would be two listings
+/// everywhere except on a filesystem that folds case, where one would quietly land on top of
+/// the other.
+///
+/// This exists rather than being left to [`Publisher::owns`] because `owns` answers a question
+/// about namespaces and is content with anything after the dot. `dev.alice.../../../x` sits
+/// inside `dev.alice`'s namespace by that reading, and a listing id becomes a path segment the
+/// moment a publication is written to disk. Empty segments are refused here, which is what makes
+/// `..` unrepresentable.
+pub fn is_listing_id(text: &str) -> bool {
+    // The product has one identifier grammar — a component id and a listing id are the same
+    // shape — and it lives in the protocol crate. A second grammar here would drift from it, and
+    // two sessions once wrote two. This adds only the ceiling.
+    text.chars().count() <= MAX_LISTING_ID_CHARS
+        && encastra_protocol::manifest::validate_identifier(text).is_ok()
+}
+
 /// Whether `candidate` is a newer version than `current`, both semver.
 ///
 /// Used to decide whether to tell somebody an update exists. Never used to install one: an
@@ -282,6 +309,33 @@ mod tests {
         assert!(!Moderation::PendingReview.publicly_visible());
         assert!(!Moderation::Suspended.publicly_visible());
         assert!(!Moderation::Rejected.publicly_visible());
+    }
+
+    #[test]
+    fn a_listing_id_is_reverse_dns_and_cannot_be_a_path() {
+        assert!(is_listing_id("dev.alice.thumbnails"));
+        assert!(is_listing_id("dev.alice.photo-tools.v2"));
+        assert!(is_listing_id("a.b"));
+
+        // The ones that matter: every shape that would mean something to a filesystem.
+        assert!(!is_listing_id("dev.alice.../../../x"));
+        assert!(!is_listing_id("dev.alice..thumbnails"));
+        assert!(!is_listing_id("dev.alice./x"));
+        assert!(!is_listing_id(r"dev.alice.\x"));
+        assert!(!is_listing_id("dev.alice.thumbnails."));
+        assert!(!is_listing_id(".dev.alice"));
+
+        // And the ordinary refusals.
+        assert!(!is_listing_id(""));
+        assert!(!is_listing_id("dev"), "a namespace is not a name in one");
+        assert!(!is_listing_id("1dev.alice"), "it starts with a letter");
+        assert!(!is_listing_id("Dev.Alice"), "lowercase only");
+        assert!(!is_listing_id("dev.alice thumbnails"));
+        assert!(!is_listing_id("dev.alice.thumbnails\u{202e}"));
+        assert!(!is_listing_id(&format!(
+            "dev.{}",
+            "a".repeat(MAX_LISTING_ID_CHARS)
+        )));
     }
 
     #[test]

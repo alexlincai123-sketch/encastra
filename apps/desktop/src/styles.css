@@ -111,9 +111,27 @@ button {
   background: var(--ground-3);
 }
 
+/*
+ * Two lines are reserved for every label, in every language.
+ *
+ * "Components" fits on one line; "Komponenten" and "Bibliothèque" do not, and the row that wraps
+ * grows while its neighbours stay short — so the rail's icons stopped being evenly spaced as
+ * soon as the interface was read in German or French, and moved as the language changed. The
+ * height is reserved rather than measured: the same two lines whether a label uses them or not,
+ * so no row can push another one about. `anywhere` is what keeps a single long word (German has
+ * several) inside the rail instead of spilling out of it.
+ */
 .sidebar__label {
+  display: block;
+  /* The rail's width, so a long word wraps inside the rail instead of sizing the item to
+     itself — the row is centred, and a label wider than the rail would push the icon off it. */
+  width: 100%;
+  min-height: calc(2 * 1.2em);
   font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
   letter-spacing: var(--tracking-label);
+  overflow-wrap: anywhere;
 }
 
 .sidebar__running {
@@ -405,6 +423,14 @@ button {
   stroke-width: 2;
 }
 
+/* The connection the keyboard is holding. Stronger than selection, because it is the only mark
+   on screen saying which of several wires a Delete is about to remove — and it is drawn in the
+   focus colour rather than the edge colour for the same reason every other focus ring is. */
+.react-flow__edge-path.is-focused {
+  stroke: var(--focus);
+  stroke-width: 3;
+}
+
 /* Conversion badge on an edge: small, quiet, and readable at a glance. */
 .wire__badge {
   position: absolute;
@@ -551,6 +577,30 @@ button {
   }
 }
 
+/* The same state again, in a shape rather than a colour. Sits before the name so the eye meets
+   it first when scanning a column of nodes for the one that failed. */
+.node__glyph {
+  flex: none;
+  width: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1;
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+.node[data-state="ok"] .node__glyph {
+  color: var(--ok);
+}
+
+.node[data-state="failed"] .node__glyph {
+  color: var(--danger);
+}
+
+.node[data-state="running"] .node__glyph {
+  color: var(--accent);
+}
+
 .node__ports {
   padding: var(--space-2) 0;
 }
@@ -588,6 +638,20 @@ button {
 .port--out .port__tab {
   right: -5px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* A connection being made from the keyboard. The tab keeps its type colour — which is the whole
+   point of it — and gains a ring, so what is highlighted reads as "this port, right now" rather
+   than as a port that has changed type. The target pulses because it is the one that moves. */
+.port__tab.is-connect-source,
+.port__tab.is-connect-target {
+  box-shadow:
+    0 0 0 2px var(--ground-2),
+    0 0 0 4px var(--focus);
+}
+
+.port__tab.is-connect-target {
+  animation: pulse 1.2s var(--ease-in-out) infinite;
 }
 
 .port__required {
@@ -1597,4 +1661,374 @@ select.input {
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-top: var(--border);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * The unsaved-work question
+ *
+ * Narrower than the publication panel and with no scrolling body, because it is one sentence
+ * and three answers: anything that needs a scrollbar is too much to read at the moment
+ * somebody is trying to leave. Sits above every other panel — it can be raised while Publish
+ * is open, and it is the one that must be answered first.
+ * ------------------------------------------------------------------------------------ */
+
+.unsaved {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 55%);
+}
+
+.unsaved__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(460px, 100%);
+  padding: var(--space-4);
+  background: var(--ground-1);
+  border: var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.unsaved__panel h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.unsaved__panel p {
+  margin: 0;
+  max-width: 54ch;
+  color: var(--ink-muted);
+}
+
+.unsaved__error {
+  color: var(--danger);
+}
+
+.unsaved__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * The library: what somebody has
+ *
+ * A list of rows rather than a grid of cards. Each row is read, not scanned — what this is,
+ * where it came from, whether it is still there, and what it would ask for if it ran — and a
+ * card layout would put the important half of that behind a hover.
+ *
+ * Everything here wraps. A German label is routinely half again as long as its English one
+ * ("Von der Liste nehmen", "Entfernen und Kopie löschen"), and a fixed width would cut it in
+ * half or push the row sideways. Nothing in this block sets one.
+ * ------------------------------------------------------------------------------------ */
+
+.library__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-6) var(--space-4);
+}
+
+.library__toolbar .input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.library__sort {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+/* A note about something that already happened — an index that could not be read. It is news
+   once, so it carries its own way of being put away. */
+.library__note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 var(--space-6) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--warn-dim);
+  border-radius: var(--radius-md);
+}
+
+.library__note p {
+  margin: 0;
+  max-width: 76ch;
+}
+
+.library__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0 var(--space-6) var(--space-6);
+  list-style: none;
+}
+
+.library__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--ground-2);
+  border: var(--border);
+  border-inline-start: 3px solid var(--line-strong);
+  border-radius: var(--radius-md);
+}
+
+/* The two states worth seeing from across the room. Colour is never the only carrier — each of
+   these also draws a badge with the word on it. */
+.library__row--missing {
+  border-inline-start-color: var(--danger);
+}
+
+.library__row--changed {
+  border-inline-start-color: var(--warn);
+}
+
+.library__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.library__name {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  overflow-wrap: anywhere;
+}
+
+.library__origin--imported {
+  background: var(--focus-dim);
+}
+
+.library__status--missing {
+  background: var(--danger-dim);
+}
+
+.library__status--changed {
+  background: var(--warn-dim);
+}
+
+.library__description,
+.library__explain,
+.library__none {
+  margin: 0;
+  max-width: 76ch;
+  color: var(--ink-muted);
+}
+
+.library__explain {
+  font-size: var(--text-sm);
+}
+
+.library__none {
+  padding: 0 var(--space-6) var(--space-6);
+}
+
+/* Facts as a description list: the label and its value belong together, and wrapping one must
+   not leave the other stranded on the line above. */
+.library__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.library__fact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.library__fact dt {
+  color: var(--ink-faint);
+}
+
+.library__fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.library__reach {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.library__reach-label {
+  color: var(--ink-muted);
+}
+
+.library__reach-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library__reach-note {
+  flex-basis: 100%;
+  color: var(--ink-faint);
+}
+
+.library__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+/* The second row of buttons that replaces the first. A confirmation is part of the row it is
+   about, not a window in front of everything: what is being removed stays on screen. */
+.library__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--ground-3);
+  border-radius: var(--radius-sm);
+}
+
+.library__confirm-question {
+  margin: 0;
+  max-width: 76ch;
+  font-size: var(--text-sm);
+}
+
+.btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger-dim);
+}
+
+.library__empty {
+  max-width: 76ch;
+  margin: 0 var(--space-6) var(--space-6);
+  padding: var(--space-5);
+  background: var(--ground-2);
+  border: var(--border);
+  border-radius: var(--radius-md);
+}
+
+.library__empty h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+}
+
+.library__empty p {
+  margin: 0 0 var(--space-3);
+  color: var(--ink-muted);
+}
+
+.library__ways {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding-inline-start: var(--space-4);
+  color: var(--ink-muted);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * Taking a publication in
+ *
+ * The dialog reuses `.publish__*` wholesale: it is the same shape of thing said from the other
+ * end, and two dialogs that look different would suggest the two checks are different. Only
+ * what this panel has and Publish does not is written here.
+ * ------------------------------------------------------------------------------------ */
+
+.import__panel {
+  width: min(820px, 100%);
+}
+
+.import__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.import__summary {
+  margin: 0 0 var(--space-3);
+  max-width: 76ch;
+  color: var(--ink-muted);
+}
+
+.import__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.import__fact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.import__fact dt {
+  color: var(--ink-faint);
+}
+
+.import__fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Said beside the name it is about, in the colour of a warning rather than of a footnote. A
+   publisher id is a claim somebody typed, and nobody checked it. */
+.import__unverified {
+  margin: 0;
+  max-width: 76ch;
+  padding: var(--space-2) var(--space-3);
+  background: var(--warn-dim);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.import__refusal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* The sentence that has to be on screen when the button is pressed, so it sits in the footer
+   beside it rather than at the top of a panel somebody has scrolled past. */
+.import__promise {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.publish__actions {
+  flex-wrap: wrap;
+  align-items: center;
 }

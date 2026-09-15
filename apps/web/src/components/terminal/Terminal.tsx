@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { Locale } from '@/lib/i18n/locale';
+import { t } from '@/lib/i18n/translate';
 import type { Speed, TerminalLine } from '@/lib/terminal-script';
 import { SPEEDS, TERMINAL_SESSION } from '@/lib/terminal-script';
 
@@ -22,6 +24,14 @@ import styles from './Terminal.module.css';
  * time). Each line then holds for its own `pause` before the next one starts. `prefers-reduced-
  * motion` skips all of that — the finished transcript is shown at once, and the graph settles on
  * its final state — because the information is the point and the animation is packaging.
+ *
+ * Language: the chrome — the caption, the controls, the note under them — is this site's own
+ * voice and follows the visitor's locale, which arrives as a prop from `Scene09Terminal.tsx`
+ * (itself given it by `app/page.tsx`; a plain cookie read, see `lib/i18n/locale.ts`). The
+ * transcript is **not** translated and must not be: `lib/terminal-script.ts` reproduces what the
+ * real CLI prints, and a command or an output line rewritten in Spanish would be a line the
+ * product never emits — a caption that says "recorded, not live" cannot sit above invented
+ * output. The window title is the same fact: `encastra` is the binary's name in any language.
  */
 
 const CHAR_MS = 24;
@@ -51,7 +61,7 @@ const FULL_TRANSCRIPT = TERMINAL_SESSION.map((line) => line.text).join('\n');
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
-export function TerminalDemo(): ReactNode {
+export function TerminalDemo({ locale }: { locale: Locale }): ReactNode {
   const [reduced, setReduced] = useState(true);
   const [revealCount, setRevealCount] = useState(TOTAL_LINES);
   const [typedChars, setTypedChars] = useState(0);
@@ -166,7 +176,7 @@ export function TerminalDemo(): ReactNode {
             <span data-tone="ok" />
           </span>
           <span className={styles.title}>encastra — Image Processor</span>
-          <span className={styles.caption}>Recorded demonstration, not a live terminal</span>
+          <span className={styles.caption}>{t(locale, 'terminal.caption')}</span>
         </div>
 
         <div className={styles.body} ref={bodyRef} aria-hidden="true">
@@ -183,18 +193,18 @@ export function TerminalDemo(): ReactNode {
         </div>
 
         <div className="visually-hidden">
-          <p>Recorded terminal transcript, shown here in full for assistive technology:</p>
+          <p>{t(locale, 'terminal.transcriptIntro')}</p>
           <pre>{FULL_TRANSCRIPT}</pre>
         </div>
 
         {!reduced ? (
           <fieldset className={styles.controls}>
-            <legend className="visually-hidden">Playback controls</legend>
+            <legend className="visually-hidden">{t(locale, 'terminal.controlsLegend')}</legend>
             <button
               type="button"
               className={styles.controlButton}
               onClick={() => setPlaying((value) => !value)}
-              aria-label={playing ? 'Pause' : 'Play'}
+              aria-label={playing ? t(locale, 'terminal.pause') : t(locale, 'terminal.play')}
             >
               {playing ? <PauseIcon /> : <PlayIcon />}
             </button>
@@ -202,7 +212,7 @@ export function TerminalDemo(): ReactNode {
               type="button"
               className={styles.controlButton}
               onClick={restart}
-              aria-label="Restart"
+              aria-label={t(locale, 'terminal.restart')}
             >
               <RestartIcon />
             </button>
@@ -210,15 +220,13 @@ export function TerminalDemo(): ReactNode {
               type="button"
               className={styles.speedButton}
               onClick={cycleSpeed}
-              aria-label={`Playback speed, currently ${speed}×. Press to change.`}
+              aria-label={t(locale, 'terminal.speed', { speed })}
             >
               {speed}×
             </button>
           </fieldset>
         ) : (
-          <p className={styles.reducedNote}>
-            Reduced motion is on, so this shows the finished transcript rather than typing it out.
-          </p>
+          <p className={styles.reducedNote}>{t(locale, 'terminal.reducedNote')}</p>
         )}
       </div>
     </div>

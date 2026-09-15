@@ -535,14 +535,26 @@ fn topological_order(graph: &Graph) -> Result<Vec<NodeId>, Vec<NodeId>> {
         .map(|(node, _)| *node)
         .collect();
 
+    // The edges leaving each node, indexed once. `Graph::outgoing` is a scan of every edge, and
+    // asking it once per dequeued node made this O(V·E): at the graph ceilings that is four
+    // hundred million comparisons per validation, and validation runs before every run. The
+    // runner had this fix already; the validator, which runs first and more often, did not.
+    let mut outgoing: BTreeMap<&NodeId, Vec<&NodeId>> = BTreeMap::new();
+    for edge in &graph.edges {
+        outgoing
+            .entry(&edge.from.node)
+            .or_default()
+            .push(&edge.to.node);
+    }
+
     let mut order = Vec::with_capacity(graph.nodes.len());
     while let Some(node) = ready.pop_front() {
         order.push(node.clone());
-        for edge in graph.outgoing(node) {
-            if let Some(degree) = in_degree.get_mut(&edge.to.node) {
+        for target in outgoing.get(node).map(Vec::as_slice).unwrap_or(&[]) {
+            if let Some(degree) = in_degree.get_mut(target) {
                 *degree -= 1;
                 if *degree == 0 {
-                    ready.push_back(&edge.to.node);
+                    ready.push_back(target);
                 }
             }
         }
@@ -551,15 +563,24 @@ fn topological_order(graph: &Graph) -> Result<Vec<NodeId>, Vec<NodeId>> {
     if order.len() == graph.nodes.len() {
         Ok(order)
     } else {
-        let remaining: BTreeSet<&NodeId> =
-            graph.nodes.keys().filter(|n| !order.contains(n)).collect();
-        Err(find_cycle(graph, &remaining))
+        // A set, not `order.contains`: that was a linear search per node, quadratic over a
+        // graph that is mostly cycle — which is the graph a hostile file would send.
+        let ordered: BTreeSet<&NodeId> = order.iter().collect();
+        let remaining: BTreeSet<&NodeId> = graph
+            .nodes
+            .keys()
+            .filter(|n| !ordered.contains(n))
+            .collect();
+        Err(find_cycle(&outgoing, &remaining))
     }
 }
 
 /// Walks forward from a node that must be in a cycle until it revisits one, then returns the
 /// loop itself — not the tail that led into it, which is not part of the problem.
-fn find_cycle(graph: &Graph, candidates: &BTreeSet<&NodeId>) -> Vec<NodeId> {
+fn find_cycle(
+    outgoing: &BTreeMap<&NodeId, Vec<&NodeId>>,
+    candidates: &BTreeSet<&NodeId>,
+) -> Vec<NodeId> {
     let Some(start) = candidates.iter().next() else {
         return Vec::new();
     };
@@ -577,16 +598,107 @@ fn find_cycle(graph: &Graph, candidates: &BTreeSet<&NodeId>) -> Vec<NodeId> {
         seen.insert(current.clone());
         path.push(current.clone());
 
-        let next = graph
-            .outgoing(&current)
-            .map(|e| &e.to.node)
-            .find(|n| candidates.contains(n))
-            .cloned();
+        let next = outgoing
+            .get(&current)
+            .and_then(|targets| targets.iter().find(|n| candidates.contains(*n)))
+            .map(|n| (*n).clone());
         match next {
             Some(n) => current = n,
             // Cannot happen for a node genuinely inside a cycle, but returning what we have
             // beats an unwrap that turns a reporting bug into a crash.
             None => return path,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::{Edge, Node, PortRef, Position};
+
+    fn node() -> Node {
+        Node {
+            component: crate::ComponentRef::parse("t.x@1.0.0").unwrap(),
+            label: None,
+            config: BTreeMap::new(),
+            position: Position { x: 0.0, y: 0.0 },
+            disabled: false,
+        }
+    }
+
+    fn edge(from: usize, to: usize) -> Edge {
+        Edge {
+            from: PortRef {
+                node: NodeId(format!("n{from}")),
+                port: "o".into(),
+            },
+            to: PortRef {
+                node: NodeId(format!("n{to}")),
+                port: "i".into(),
+            },
+        }
+    }
+
+    /// A graph at the ceilings: 10 000 nodes, 40 000 edges, every node reachable.
+    fn graph_at_the_ceilings(with_cycle: bool) -> Graph {
+        let n = crate::graph::MAX_NODES;
+        let mut graph = Graph::default();
+        for i in 0..n {
+            graph.nodes.insert(NodeId(format!("n{i}")), node());
+        }
+        // Four edges per node: a chain plus three skips, all forward, so the graph is acyclic
+        // and dense enough that a per-node edge scan would be the cost that dominates.
+        for i in 0..n {
+            for skip in [1usize, 7, 31, 127] {
+                let to = i + skip;
+                if to < n && graph.edges.len() < crate::graph::MAX_EDGES {
+                    graph.edges.push(edge(i, to));
+                }
+            }
+        }
+        if with_cycle {
+            // One back-edge from the end to the start: the whole graph is now one cycle, which
+            // is the shape that made `order.contains` quadratic.
+            graph.edges.pop();
+            graph.edges.push(edge(n - 1, 0));
+        }
+        graph
+            .within_limits()
+            .expect("the fixture must be within the ceilings");
+        graph
+    }
+
+    #[test]
+    fn ordering_a_graph_at_the_ceilings_is_linear_not_quadratic() {
+        // Before the outgoing index, this was a full scan of 40 000 edges for each of 10 000
+        // nodes — four hundred million comparisons — and validation runs before every run. The
+        // bound is loose on purpose: it distinguishes linear from quadratic, not fast from slow.
+        let graph = graph_at_the_ceilings(false);
+        let started = std::time::Instant::now();
+        let order = topological_order(&graph).expect("acyclic");
+        let elapsed = started.elapsed();
+        assert_eq!(order.len(), crate::graph::MAX_NODES);
+        assert!(
+            elapsed < std::time::Duration::from_secs(3),
+            "ordering took {elapsed:?}, which is a quadratic path"
+        );
+    }
+
+    #[test]
+    fn reporting_a_cycle_in_a_graph_at_the_ceilings_is_linear_not_quadratic() {
+        // The cycle-reporting path had its own quadratic: a linear search through `order` for
+        // every node not in it, on a graph where almost no node is in it.
+        let graph = graph_at_the_ceilings(true);
+        let started = std::time::Instant::now();
+        let cycle = topological_order(&graph).expect_err("a back-edge makes a cycle");
+        let elapsed = started.elapsed();
+        assert!(
+            cycle.len() >= 2,
+            "a cycle has at least two nodes: {cycle:?}"
+        );
+        assert!(
+            elapsed < std::time::Duration::from_secs(3),
+            "cycle reporting took {elapsed:?}, which is a quadratic path"
+        );
     }
 }

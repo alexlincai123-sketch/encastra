@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { useRestoreFocusOnUnmount } from '../a11y/focus';
 import { clampToViewport } from './menu';
 
 export type MenuItem = {
@@ -58,7 +59,10 @@ export function ContextMenu({
     );
   }, [request.x, request.y]);
 
-  // Focus moves into the menu, so the keyboard can drive it and so closing can hand focus back.
+  // Focus moves into the menu, so the keyboard can drive it — and goes back to whatever had it
+  // when the menu closes, which is the canvas or the step the menu was opened on. Without the
+  // second half, Escape left focus on the body and the next arrow key went nowhere.
+  useRestoreFocusOnUnmount();
   useEffect(() => {
     menu.current?.focus();
   }, []);
