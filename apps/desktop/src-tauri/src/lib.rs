@@ -1344,6 +1344,10 @@ fn close_window(app: tauri::AppHandle, state: tauri::State<'_, Runtime>) -> Resu
 fn about() -> serde_json::Value {
     serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
+        // Set by build.rs: the commit this binary came from, `-dirty` if the tree did not match
+        // it, `unknown` without git. The release manifest reads this same string back out of the
+        // built file, so the commit it publishes is the one that produced the bytes.
+        "buildCommit": env!("ENCASTRA_BUILD_COMMIT"),
         "runtime": encastra_core::RUNTIME_VERSION,
         "protocolSchema": encastra_protocol::SCHEMA_VERSION,
         "projectSchema": encastra_project::PROJECT_SCHEMA,
