@@ -142,9 +142,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Node 24, the version the developer machine builds with: the frontend bundle is embedded
+      # in the executable, so a different Node is one candidate for the bytes differing between
+      # the two machines (B7 in docs/RELEASE_CANDIDATE_READINESS.md). The gates job keeps 22.
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
 
@@ -299,6 +302,12 @@ jobs:
   install:
     name: Install on a clean Windows runner
     needs: build
+    # Runs on what the runner built even when that build did not reproduce the published
+    # hashes: the reproduction gate keeps failing the workflow (a release that does not
+    # reproduce is not a release), but the installation evidence is about the runner's own
+    # bytes and is worth having either way. Two candidates in a row produced no installation
+    # evidence at all because this job waited for a green build that could not be green.
+    if: always() && needs.build.result != 'skipped' && needs.build.result != 'cancelled'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -307,7 +316,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: encastra-installer
+          name: encastra-runner-build-${{ github.run_id }}
           path: artefact
 
       # A hosted runner is a fresh Windows image that has never seen Encastra: the nearest thing
