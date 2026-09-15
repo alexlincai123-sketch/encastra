@@ -918,6 +918,19 @@ const it: Messages = {
     noWindow: 'Non c’è nessuna finestra da chiudere.',
     windowWouldNotClose: 'La finestra non si è chiusa. Il tuo lavoro è ancora qui.',
     io: 'Qualcosa su questo computer ha rifiutato l’operazione ({reason}).',
+    status: {
+      triggerError: '{node} ha smesso di sorvegliare i cambiamenti ({reason}).',
+      eventsDropped: {
+        one: 'È stato scartato {count} evento: arrivava più in fretta di quanto si potesse gestire.',
+        other:
+          'Sono stati scartati {count} eventi: arrivavano più in fretta di quanto si potesse gestire.',
+      },
+      workflowStopped: 'Questo flusso si è fermato in modo imprevisto. Puoi riavviarlo.',
+      runningFor: {
+        one: 'In esecuzione da {seconds} secondo.',
+        other: 'In esecuzione da {seconds} secondi.',
+      },
+    },
     grant: {
       folderUnusable: '{node}: quella cartella non può essere usata ({reason}).',
       folderNotChosen:

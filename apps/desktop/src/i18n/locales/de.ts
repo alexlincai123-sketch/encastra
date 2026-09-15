@@ -932,6 +932,20 @@ const de: Messages = {
     noWindow: 'Es gibt kein Fenster zu schließen.',
     windowWouldNotClose: 'Das Fenster ließ sich nicht schließen. Ihre Arbeit ist noch da.',
     io: 'Etwas auf diesem Computer hat den Vorgang verweigert ({reason}).',
+    status: {
+      triggerError: '{node} beobachtet keine Änderungen mehr ({reason}).',
+      eventsDropped: {
+        one: '{count} Ereignis wurde verworfen — es kam schneller, als es bearbeitet werden konnte.',
+        other:
+          '{count} Ereignisse wurden verworfen — sie kamen schneller, als sie bearbeitet werden konnten.',
+      },
+      workflowStopped:
+        'Dieser Ablauf ist unerwartet beendet worden. Sie können ihn erneut starten.',
+      runningFor: {
+        one: 'Läuft seit {seconds} Sekunde.',
+        other: 'Läuft seit {seconds} Sekunden.',
+      },
+    },
     grant: {
       folderUnusable: '{node}: Dieser Ordner kann nicht verwendet werden ({reason}).',
       folderNotChosen:

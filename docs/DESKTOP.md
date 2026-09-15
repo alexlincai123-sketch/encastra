@@ -120,9 +120,10 @@ the tag and writes the sentence itself, so a refusal reaches a Spanish reader in
 than in whatever English the runtime happened to build. Four of the tags nest the refusal of the
 crate that raised it (`project`, `library`, `bundle`, `import`), keeping that crate's own
 vocabulary reachable instead of flattening it into prose; free text an operating system produced
-is a parameter the sentence quotes, never the sentence. The full inventory — every command, every
-tag, every key, and the three gates that stop the two sides drifting — is
-[`docs/desktop/ERRORS.md`](desktop/ERRORS.md).
+is a parameter the sentence quotes, never the sentence. `Status::message` — the one line the
+status bar shows while a workflow runs, and for that reason the one somebody actually watches — is
+tagged the same way. The full inventory — every command, every tag, every key, and the three gates
+that stop the two sides drifting — is [`docs/desktop/ERRORS.md`](desktop/ERRORS.md).
 
 **The library only deletes what it made.** `library_remove` forgets an entry by default. Deleting
 the copy on disk is a second argument, and the runtime refuses it for anything whose origin is

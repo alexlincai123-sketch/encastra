@@ -445,6 +445,23 @@ export type AppError =
   | { kind: 'window-would-not-close' }
   | { kind: 'io'; reason: string };
 
+/**
+ * What the status bar is being told while a workflow runs.
+ *
+ * Mirrors `StatusMessage` in `apps/desktop/src-tauri/src/error.rs`, tagged on `kind` and
+ * kebab-case like every refusal above. Not an error — a dropped event is not a failed command —
+ * but the same problem: these used to arrive as English sentences the runtime had built, which
+ * made the one line somebody watches while a workflow runs the one line nobody translated.
+ */
+export type StatusMessage =
+  // The whole `NodeError` travels, not just its sentence: it carries a stable `code` that a later
+  // build can translate without changing this payload again.
+  | { kind: 'trigger-error'; node: string; error: NodeError }
+  | { kind: 'events-dropped'; count: number }
+  | { kind: 'nothing-ran'; problems: number }
+  | { kind: 'workflow-stopped' }
+  | { kind: 'running-for'; seconds: number };
+
 /** Where an entry came from, which is the only thing that decides what may be done to it. */
 export type LibraryOrigin = 'created' | 'imported' | 'prepared';
 

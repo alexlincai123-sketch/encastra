@@ -25,7 +25,7 @@
  * decision the runtime already made.
  */
 
-import { translate } from './i18n';
+import { type Locale, selectPlural, translate, useI18n } from './i18n';
 import {
   IMPORT_ERROR_KINDS,
   importErrorKey,
@@ -39,6 +39,7 @@ import type {
   ImportError,
   LibraryError,
   ProjectError,
+  StatusMessage,
 } from './types';
 
 /** How a translated string is produced. Injectable so a test can ask for a named locale. */
@@ -113,6 +114,24 @@ export const GRANT_REFUSAL_KEYS: Record<GrantRefusal['kind'], string> = {
   'folder-unusable': 'errors.grant.folderUnusable',
   'folder-not-chosen': 'errors.grant.folderNotChosen',
   'not-declared': 'errors.grant.notDeclared',
+};
+
+/**
+ * The status bar's own vocabulary, which is not about errors at all.
+ *
+ * A dropped event and a workflow that stopped are not failed commands, but they reached the
+ * status bar the same way the refusals did: as English sentences the runtime had built. Three of
+ * these name a plural tree rather than a leaf, because the count is part of the sentence and
+ * "1 events were dropped" is a thing no interface should say in any language — the leaf is
+ * chosen through `Intl.PluralRules` by `statusMessageKey`, never by an `n === 1` check.
+ * `nothing-ran` reuses the key the store already had for exactly this sentence.
+ */
+export const STATUS_MESSAGE_KEYS: Record<StatusMessage['kind'], string> = {
+  'trigger-error': 'errors.status.triggerError',
+  'events-dropped': 'errors.status.eventsDropped',
+  'nothing-ran': 'messages.nothingRanProblems',
+  'workflow-stopped': 'errors.status.workflowStopped',
+  'running-for': 'errors.status.runningFor',
 };
 
 /**
@@ -209,6 +228,60 @@ function describeBundle(error: BundleError, t: Translate): string {
 export function describeGrantRefusal(refusal: GrantRefusal, t: Translate): string {
   const key = GRANT_REFUSAL_KEYS[refusal.kind] ?? UNKNOWN_ERROR_KEY;
   return t(key, { ...(refusal as Record<string, string | number>) });
+}
+
+/**
+ * The exact leaf key a status message resolves to, plural category included.
+ *
+ * Separate from `describeStatusMessage` so a test can assert the key exists in every locale file
+ * rather than going through `translate()`, which falls back to English and would report a missing
+ * Spanish sentence as a pass.
+ */
+export function statusMessageKey(message: StatusMessage, locale: Locale): string {
+  const base = STATUS_MESSAGE_KEYS[message.kind];
+  if (!base) return UNKNOWN_ERROR_KEY;
+  switch (message.kind) {
+    case 'events-dropped':
+      return `${base}.${selectPlural(locale, message.count)}`;
+    case 'nothing-ran':
+      return `${base}.${selectPlural(locale, message.problems)}`;
+    case 'running-for':
+      return `${base}.${selectPlural(locale, message.seconds)}`;
+    default:
+      return base;
+  }
+}
+
+/**
+ * The sentence for what the status bar is being told, in the reader's language.
+ *
+ * The locale is a separate argument rather than read from the store, because three of these are
+ * plural trees and the category depends on the language — French counts zero and one together,
+ * which `Intl.PluralRules` knows and a hand-written check does not.
+ */
+export function describeStatusMessage(
+  message: StatusMessage,
+  t: Translate = translate,
+  locale: Locale = useI18n.getState().locale,
+): string {
+  const key = statusMessageKey(message, locale);
+  if (key === UNKNOWN_ERROR_KEY) return t(key, { kind: message.kind });
+
+  switch (message.kind) {
+    case 'trigger-error':
+      // The `code` is the part a later build can translate; until then the reason is quoted
+      // verbatim inside a sentence the reader can read, which is what the rest of this file does
+      // with free text from an operating system.
+      return t(key, { node: message.node, reason: message.error.message });
+    case 'events-dropped':
+      return t(key, { count: message.count });
+    case 'nothing-ran':
+      return t(key, { count: message.problems });
+    case 'running-for':
+      return t(key, { seconds: message.seconds });
+    default:
+      return t(key);
+  }
 }
 
 function describeImport(error: ImportError, t: Translate): string {

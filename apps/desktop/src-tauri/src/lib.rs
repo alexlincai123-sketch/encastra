@@ -35,7 +35,7 @@ use tauri::{Emitter, Manager};
 
 pub mod error;
 
-use error::{AppError, GrantRefusal};
+use error::{AppError, GrantRefusal, StatusMessage};
 
 /// Loaded once at start-up. Building the registry per call would let two calls disagree about
 /// what is installed.
@@ -548,8 +548,11 @@ struct Status {
     runs: u64,
     pending: usize,
     dropped: usize,
+    /// What to say about it, as a tag the editor translates rather than a sentence it prints.
+    /// This used to be a `String` built here, which made the one line somebody watches while a
+    /// workflow runs the one line that was always in English.
     #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
+    message: Option<StatusMessage>,
 }
 
 struct Progress {
@@ -817,10 +820,13 @@ fn start_workflow(
                         let message = tick
                             .trigger_errors
                             .first()
-                            .map(|(node, error)| format!("{node}: {error}"))
+                            .map(|(node, error)| StatusMessage::TriggerError {
+                                node: node.to_string(),
+                                error: error.clone(),
+                            })
                             .or_else(|| {
-                                (tick.dropped > 0).then(|| {
-                                    format!("{} event(s) dropped — too many at once.", tick.dropped)
+                                (tick.dropped > 0).then_some(StatusMessage::EventsDropped {
+                                    count: tick.dropped,
                                 })
                             });
 
@@ -862,10 +868,9 @@ fn start_workflow(
                                 runs: 0,
                                 pending: 0,
                                 dropped: 0,
-                                message: Some(format!(
-                                    "Nothing ran: {} problem(s) to fix first.",
-                                    validation.errors().count()
-                                )),
+                                message: Some(StatusMessage::NothingRan {
+                                    problems: validation.errors().count(),
+                                }),
                             },
                         );
                     }
@@ -886,9 +891,7 @@ fn start_workflow(
                     dropped: session.backlog().1,
                     // A panic is not an ordinary component failure, and saying "finished" would
                     // be a lie. The panic itself has already been printed by the default hook.
-                    message: work.is_err().then(|| {
-                        "This workflow stopped unexpectedly. You can start it again.".to_owned()
-                    }),
+                    message: work.is_err().then_some(StatusMessage::WorkflowStopped),
                 },
             );
 
@@ -930,10 +933,10 @@ fn workflow_status(state: tauri::State<'_, Runtime>) -> Status {
             runs: 0,
             pending: 0,
             dropped: 0,
-            message: Some(format!(
-                "Running for {} seconds.",
-                (encastra_core::journal::now_ms().saturating_sub(running.started_at_ms)) / 1000
-            )),
+            message: Some(StatusMessage::RunningFor {
+                seconds: (encastra_core::journal::now_ms().saturating_sub(running.started_at_ms))
+                    / 1000,
+            }),
         })
     });
 

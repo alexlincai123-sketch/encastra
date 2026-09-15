@@ -23,11 +23,14 @@ import {
   APP_ERROR_KEYS,
   BUNDLE_ERROR_KEYS,
   describeAppError,
+  describeStatusMessage,
   GRANT_REFUSAL_KEYS,
   importErrorIn,
   isAppError,
   LIBRARY_ERROR_KEYS,
   PROJECT_ERROR_KEYS,
+  STATUS_MESSAGE_KEYS,
+  statusMessageKey,
   UNKNOWN_ERROR_KEY,
 } from '../src/errors';
 import { LOCALES, type Locale, lookup, type Messages, translate, useI18n } from '../src/i18n';
@@ -38,7 +41,7 @@ import fr from '../src/i18n/locales/fr';
 import italian from '../src/i18n/locales/it';
 import pt from '../src/i18n/locales/pt';
 import { IMPORT_ERROR_KEYS } from '../src/library';
-import type { AppError } from '../src/types';
+import type { AppError, StatusMessage } from '../src/types';
 
 const KINDS: {
   app: string[];
@@ -47,6 +50,7 @@ const KINDS: {
   library: string[];
   bundle: string[];
   import: string[];
+  status: string[];
 } = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/error-kinds.json', import.meta.url)), 'utf8'),
 );
@@ -124,6 +128,38 @@ const SAMPLES: AppError[] = [
  */
 const IDENTICAL_BY_DESIGN: ReadonlySet<string> = new Set<string>();
 
+/**
+ * One example of every `StatusMessage`, in the order the runtime declares them.
+ *
+ * The counts are deliberately not 1: three of these resolve to a plural tree, and a sample of one
+ * would only ever exercise a single leaf. The other leaf is reached through `singular` below.
+ */
+const STATUS_SAMPLES: StatusMessage[] = [
+  {
+    kind: 'trigger-error',
+    node: 'watch',
+    error: { code: 'missing-config', message: 'no folder is set', retryable: false },
+  },
+  { kind: 'events-dropped', count: 3 },
+  { kind: 'nothing-ran', problems: 2 },
+  { kind: 'workflow-stopped' },
+  { kind: 'running-for', seconds: 12 },
+];
+
+/** The same status message with every count set to one, to reach the singular leaf. */
+function singular(message: StatusMessage): StatusMessage {
+  switch (message.kind) {
+    case 'events-dropped':
+      return { ...message, count: 1 };
+    case 'nothing-ran':
+      return { ...message, problems: 1 };
+    case 'running-for':
+      return { ...message, seconds: 1 };
+    default:
+      return message;
+  }
+}
+
 describe('the error contract', () => {
   it('maps every kind the runtime can send', () => {
     expect(Object.keys(APP_ERROR_KEYS).sort()).toEqual([...KINDS.app].sort());
@@ -133,10 +169,14 @@ describe('the error contract', () => {
     expect(Object.keys(BUNDLE_ERROR_KEYS).sort()).toEqual([...KINDS.bundle].sort());
     // The oldest of the vocabularies, mapped in `library.ts` since before this file existed.
     expect(Object.keys(IMPORT_ERROR_KEYS).sort()).toEqual([...KINDS.import].sort());
+    // Not an error vocabulary, but pinned the same way: the status bar is the one line somebody
+    // watches while a workflow runs, and it used to be the one line nobody translated.
+    expect(Object.keys(STATUS_MESSAGE_KEYS).sort()).toEqual([...KINDS.status].sort());
   });
 
   it('has a sample for every kind, so the checks below cover all of them', () => {
     expect(SAMPLES.map((sample) => sample.kind)).toEqual(KINDS.app);
+    expect(STATUS_SAMPLES.map((sample) => sample.kind)).toEqual(KINDS.status);
   });
 });
 
@@ -154,6 +194,18 @@ describe('every key exists in every language', () => {
     // Read out of the locale file rather than through `translate()`, which falls back to English
     // and would report a missing Spanish sentence as a passing test.
     const missing = everyKey.filter((key) => lookup(MESSAGES[locale], key) === undefined);
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s has a sentence for every status message, in both plural forms', (locale) => {
+    // Resolved through `statusMessageKey`, because three of these name a plural tree rather than a
+    // leaf and the category depends on the language: a lookup of the branch would find nothing,
+    // and a lookup of the English leaf would miss a language that categorises differently.
+    const keys = STATUS_SAMPLES.flatMap((sample) => [
+      statusMessageKey(sample, locale),
+      statusMessageKey(singular(sample), locale),
+    ]);
+    const missing = keys.filter((key) => lookup(MESSAGES[locale], key) === undefined);
     expect(missing).toEqual([]);
   });
 });
@@ -185,6 +237,83 @@ describe('no accidental English', () => {
       expect(describeAppError(refused, t)).not.toEqual(describeAppError(refused, english));
     },
   );
+
+  it.each(LOCALES.filter((locale) => locale !== 'en'))(
+    '%s describes every status message in its own words',
+    (locale) => {
+      const t = inLocale(locale);
+      const copied = STATUS_SAMPLES.filter((sample) => {
+        const theirs = describeStatusMessage(sample, t, locale);
+        const ours = describeStatusMessage(sample, english, 'en');
+        return theirs === ours && !IDENTICAL_BY_DESIGN.has(theirs);
+      }).map((sample) => sample.kind);
+      expect(copied).toEqual([]);
+    },
+  );
+});
+
+/** A `{name}` the runtime never sent. `interpolate` leaves it visible; this is where it is caught. */
+const PLACEHOLDER = /\{[a-z]+\}/i;
+
+/** The key itself, which is `translate`'s last resort and means nobody wrote the sentence. */
+const BARE_KEY = /^(errors|messages)[.]/;
+
+describe('describeStatusMessage', () => {
+  const t = inLocale('en');
+
+  it('says something readable for every kind, with no placeholder left in it', () => {
+    for (const sample of [...STATUS_SAMPLES, ...STATUS_SAMPLES.map(singular)]) {
+      const described = describeStatusMessage(sample, t, 'en');
+      expect(described, sample.kind).toBeTruthy();
+      expect(described, sample.kind).not.toMatch(PLACEHOLDER);
+      expect(described, sample.kind).not.toMatch(BARE_KEY);
+    }
+  });
+
+  it('agrees with the count rather than gluing an "s" on', () => {
+    expect(describeStatusMessage({ kind: 'events-dropped', count: 1 }, t, 'en')).toContain(
+      'event was dropped',
+    );
+    expect(describeStatusMessage({ kind: 'events-dropped', count: 4 }, t, 'en')).toContain(
+      'events were dropped',
+    );
+    // CLDR counts zero and one together in French, which `Intl.PluralRules` knows and a
+    // hand-written `n === 1` check does not.
+    expect(statusMessageKey({ kind: 'events-dropped', count: 0 }, 'fr')).toMatch(/[.]one$/);
+    expect(statusMessageKey({ kind: 'events-dropped', count: 0 }, 'en')).toMatch(/[.]other$/);
+  });
+
+  it('reuses the sentence the store already had for a graph that could not run', () => {
+    expect(describeStatusMessage({ kind: 'nothing-ran', problems: 2 }, t, 'en')).toBe(
+      t('messages.nothingRanProblems.other', { count: 2 }),
+    );
+  });
+
+  it('quotes a stopped watcher reason inside a sentence the reader can read', () => {
+    const described = describeStatusMessage(
+      {
+        kind: 'trigger-error',
+        node: 'watch',
+        error: { code: 'missing-config', message: 'no folder is set', retryable: false },
+      },
+      t,
+      'en',
+    );
+    expect(described).toContain('watch');
+    expect(described).toContain('no folder is set');
+    // The code travels so a later build can translate the reason itself; it is not shown as a
+    // tag today, because a person reading the status bar has no use for one.
+    expect(described).not.toContain('missing-config');
+  });
+
+  it('gives an unknown status tag a readable sentence, and marks it as one', () => {
+    const described = describeStatusMessage(
+      { kind: 'from-the-future' } as unknown as StatusMessage,
+      t,
+      'en',
+    );
+    expect(described).toBe(t(UNKNOWN_ERROR_KEY, { kind: 'from-the-future' }));
+  });
 });
 
 describe('describeAppError', () => {

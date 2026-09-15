@@ -923,6 +923,19 @@ const fr: Messages = {
     noWindow: 'Il n’y a aucune fenêtre à fermer.',
     windowWouldNotClose: 'La fenêtre n’a pas voulu se fermer. Votre travail est toujours là.',
     io: 'Quelque chose sur cet ordinateur a refusé l’opération ({reason}).',
+    status: {
+      triggerError: '{node} a cessé de surveiller les changements ({reason}).',
+      eventsDropped: {
+        one: '{count} événement a été abandonné : il arrivait plus vite qu’il ne pouvait être traité.',
+        other:
+          '{count} événements ont été abandonnés : ils arrivaient plus vite qu’ils ne pouvaient être traités.',
+      },
+      workflowStopped: 'Ce flux s’est arrêté de manière inattendue. Vous pouvez le relancer.',
+      runningFor: {
+        one: 'En cours depuis {seconds} seconde.',
+        other: 'En cours depuis {seconds} secondes.',
+      },
+    },
     grant: {
       folderUnusable: '{node} : ce dossier ne peut pas être utilisé ({reason}).',
       folderNotChosen:
