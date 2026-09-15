@@ -194,6 +194,41 @@ asserts it is refused rather than parsed with the field dropped.
 `descendants_terminates_even_if_the_graph_has_a_cycle` covers a traversal that validation should
 never hand a cycle but which must not hang if something does.
 
+### Publications arriving from elsewhere (`crates/encastra-publish/tests/import_publication.rs`)
+
+A publication folder is the one thing made on one machine and read on another, so it is where
+hostile input arrives. Every refusal test there runs both `inspect` and `import`, asserts they
+refuse for the same reason, and asserts the library is untouched afterwards — a check that
+refuses after writing half a folder is not a check. The folders it builds: not there, a file, no
+document, no project, two projects, an extra file, an extra subfolder, a link where a file
+should be (skipped with a printed reason where the platform refuses to create one; a junction is
+used for the folder case), a document over its ceiling, malformed, or with a field this build
+does not know; a component kind nothing here can install; a listing id that is a path; a name
+in somebody else's namespace; a version that is not one; a title that displays as something
+else; a title over its ceiling; a checksum that does not match; a size that does not match; a
+document whose runtime differs from the project's; a runtime this build is not; an unreadable
+runtime range; a project schema from the future (built by hand, because the writer refuses to
+produce one); a secret in a setting, refused on the receiving side too; permissions understated
+and overstated; the same version twice. And a property: two hundred single-byte mutations of
+the document, from a fixed seed, none of which may panic, none of which may move the checksum,
+size, capabilities or runtime and still be accepted, and more than three quarters of which
+must be refused.
+
+`bundle.rs`'s own tests hold the sending side to the same rules: a listing id that is a path
+is refused by `prepare` (this closed a path traversal in the desktop's `prepare_publication`),
+and text carrying bidirectional overrides, zero-width characters or control characters is
+refused rather than stripped — with line feed, carriage return and tab allowed, and an escape
+sequence in the same field still refused.
+
+### What a run holds (`crates/encastra-builtins/tests/end_to_end.rs`)
+
+`a_value_is_released_once_its_last_consumer_has_finished` pins the property that a run's memory
+is bounded by the graph's width, not its length: after the demo pipeline runs, the values that
+were consumed along the way are gone from the outcome and only the terminal outputs remain. The
+measurement behind it — a twenty-thousand-step chain went from 3.9 GB to 67 MB — is in the
+commit that added it, not in the test, because a test that allocates four gigabytes to prove
+it no longer does would be the problem it describes.
+
 ---
 
 ## 6. Tests that touch the real filesystem

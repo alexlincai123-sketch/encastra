@@ -277,8 +277,12 @@ Stated plainly, because a security document that only lists controls is marketin
 2. **Nothing is signed and nothing is verified.**
    [ADR-0008](adr/0008-signing-and-revocation.md) specifies Ed25519 signing, a counter-signing
    registry, verification at install and at every load, and a signed revocation list. None of it
-   is implemented. `lock.json` stores a manifest digest and no code checks it on open. There is
-   no registry to install from.
+   is implemented. `lock.json` stores a manifest digest; opening a project does not check it,
+   and importing a publication does — the review refuses a component whose manifest no longer
+   matches the pinned digest ([ADR-0012](adr/0012-a-publication-is-checked-again-by-whoever-receives-it.md)).
+   There is no registry to install from. A publication travels as a folder a person carries,
+   its checksum proves the file was not altered on the way, and nothing proves who prepared it:
+   the interface says "not verified" next to every publisher name, because it is not.
 
 3. **No timeout, fuel ceiling or memory ceiling on a node.** Cancellation is a cooperative flag
    checked between nodes and by components that choose to check it. A component that loops
