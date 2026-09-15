@@ -1,0 +1,175 @@
+{
+  "generated": "2026-09-15T13:44:58+00:00",
+  "version": "0.5.0-beta.1",
+  "commit": "d527d46a188bb9cad9412678e22b08ebe1147d58",
+  "mode": "beta",
+  "verdict": "BLOCKED",
+  "reason": "version.unique: 0.5.0-beta.1 was published from build commit 349b2ff97281 and this tree is a different program under the same number",
+  "artefacts": [
+    {
+      "name": "Encastra_0.5.0-beta.1_x64-setup.exe",
+      "size": 3531868,
+      "sha256": "06ad30d3d9a66db5647bf76e20d51338abf56fcb0c67c9e990651ca5cfa290ea",
+      "product_versions": [
+        "0.5.0-beta.1"
+      ],
+      "build_stamp": null,
+      "signature": {
+        "status": "unsigned",
+        "signer": null,
+        "timestamped": false,
+        "raw": "NotSigned"
+      }
+    },
+    {
+      "name": "encastra-desktop.exe",
+      "size": 9620480,
+      "sha256": "751232f804f41da89255b55f4ec5bd10ba719f4b0d8d9cc2d4b3ef820b1d2e2f",
+      "product_versions": [
+        "0.5.0-beta.1"
+      ],
+      "build_stamp": "d527d46a188bb9cad9412678e22b08ebe1147d58",
+      "signature": {
+        "status": "unsigned",
+        "signer": null,
+        "timestamped": false,
+        "raw": "NotSigned"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "git.state",
+      "status": "PASS",
+      "evidence": "HEAD d527d46a188b on rc/commercial-closure; tree clean"
+    },
+    {
+      "id": "mode",
+      "status": "PASS",
+      "evidence": "beta (version 0.5.0-beta.1)"
+    },
+    {
+      "id": "version.consistent",
+      "status": "PASS",
+      "evidence": "0.5.0-beta.1 declared identically everywhere"
+    },
+    {
+      "id": "version.unique",
+      "status": "FAIL",
+      "evidence": "0.5.0-beta.1 was published from build commit 349b2ff97281 and this tree is a different program under the same number",
+      "action": "bump the version (python scripts/version.py --set <next>); a published version never gets a second binary"
+    },
+    {
+      "id": "gate.scripts",
+      "status": "PASS",
+      "evidence": "exit 0; 51 tests"
+    },
+    {
+      "id": "gate.fmt",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.clippy",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.cargo_test",
+      "status": "PASS",
+      "evidence": "exit 0; 317 Rust tests"
+    },
+    {
+      "id": "gate.lint",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.typecheck",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.vitest",
+      "status": "PASS",
+      "evidence": "exit 0; 502 tests"
+    },
+    {
+      "id": "gate.web_build",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "deps.cargo_deny",
+      "status": "PASS",
+      "evidence": "advisories ok, bans ok, licenses ok, sources ok (exit 0; the run's evidence line carried cargo-tree noise, fixed in the same commit)"
+    },
+    {
+      "id": "deps.npm_audit",
+      "status": "PASS",
+      "evidence": "found 0 vulnerabilities"
+    },
+    {
+      "id": "deps.third_party_notices",
+      "status": "PASS",
+      "evidence": "docs\\THIRD-PARTY.md matches the tree.",
+      "action": "python scripts/third_party.py"
+    },
+    {
+      "id": "deps.lockfiles",
+      "status": "PASS",
+      "evidence": "Cargo.lock and package-lock.json committed"
+    },
+    {
+      "id": "artefacts.identity",
+      "status": "PASS",
+      "evidence": "0.5.0-beta.1 @ d527d46a188b: Encastra_0.5.0-beta.1_x64-setup.exe 3531868 B 06ad30d3d9a6, encastra-desktop.exe 9620480 B 751232f804f4"
+    },
+    {
+      "id": "manifest.verify",
+      "status": "FAIL",
+      "evidence": "since build commit 349b2ff972817798ef1175b73e5885fafe963ed6 the tree changed more than a publication may: .github/workflows/ci.yml, .github/workflows/release.yml, .gitignore, .gitleaks.toml, CLAUDE.md, NOTICE, apps/web/src/app/docs/page.tsx, apps/web/src/config/legal.ts, apps/web/src/lib/i18n/dictionaries/en.ts, apps/web/src/lib/i18n/dictionaries/es.ts, crates/encastra-project/src/lib.rs, docs/LICENSING.md, docs/SIGNING.md, docs/THIRD-PARTY.md, docs/audits/bench-cfc9497.md, docs/legal/EULA_DRAFT.md, docs/legal/LICENSE_DECISION.md, docs/legal/PRIVACY_POLICY_DRAFT.md, docs/legal/README.md, docs/legal/TERMS_DRAFT.md, docs/legal/TRADEMARK_CHECKLIST.md, docs/release/CLEAN_WINDOWS_VM.md, docs/release/SIGNING_PIPELINE.md, docs/security/AI-AGENT-SURFACE.md, docs/security/CI_SECURITY.md, docs/security/PENTEST_HANDOFF.md, docs/security/RELEASE_SECURITY.md, fuzz/corpus/project_from_bytes/truncated.bin, fuzz/corpus/project_from_bytes/valid.encastra, package.json, scripts/bench_graph.py, scripts/release_check.py, scripts/release_identity.py, scripts/release_manifest.py, scripts/tests/test_bench_graph.py, scripts/tests/test_release_check.py, scripts/tests/test_release_identity.py, scripts/tests/test_release_manifest.py, scripts/third_party.py, scripts/verify/reproduce.py. The published hashes describe a tree that is not this one. | Encastra_0.5.0-beta.1_x64-setup.exe hashes to 06ad30d3d9a66db5647bf76e20d51338abf56fcb0c67c9e990651ca5cfa290ea, the manifest says 5678e5d06b659c178c8eaae0a874cbb539eb56e571b6400df4a12f68f6d66f91. | encastra-desktop.exe hashes to 751232f804f41da89255b55f4ec5bd10ba719f4b0d8d9cc2d4b3ef820b1d2e2f, the manifest says be1945f9f8dc3dcf60e89f524f0d1f291d91585c8ba847a5e3736f1394de67a1. | encastra-desktop.exe states build commit 'd527d46a188bb9cad9412678e22b08ebe1147d58'; the manifest names 349b2ff972817798ef1175b73e5885fafe963ed6.",
+      "action": "python scripts/release_manifest.py --allow-unsigned (beta) or --require-signature (release), then commit docs/RELEASE.md and site.ts as the publication commit"
+    },
+    {
+      "id": "signing",
+      "status": "PASS",
+      "evidence": "unsigned (Encastra_0.5.0-beta.1_x64-setup.exe, encastra-desktop.exe); accepted for a beta build and stated in the manifest"
+    },
+    {
+      "id": "reproducibility",
+      "status": "PASS",
+      "evidence": "byte-identical in C:\\Users\\alexl\\encastra-reproduce\\a: Encastra_0.5.0-beta.1_x64-setup.exe, encastra-desktop.exe"
+    },
+    {
+      "id": "ci.evidence",
+      "status": "NOT_VERIFIED",
+      "evidence": "remote https://github.com/alexlincai123-sketch/encastra.git; no workflow run exists for d527d46a188b",
+      "action": "push this commit and let CI run"
+    },
+    {
+      "id": "clean_vm",
+      "status": "EXTERNAL_REQUIRED",
+      "evidence": "no clean-machine installation log given",
+      "action": "docs/release/CLEAN_WINDOWS_VM.md; then --evidence-vm <log>"
+    },
+    {
+      "id": "pentest",
+      "status": "EXTERNAL_REQUIRED",
+      "evidence": "no external test has been performed (not required for a beta; recorded); docs/security/PENTEST_HANDOFF.md is the hand-off",
+      "action": "engage a provider (a person, money)"
+    },
+    {
+      "id": "legal",
+      "status": "EXTERNAL_REQUIRED",
+      "evidence": "drafts present: EULA_DRAFT.md, LICENSE_DECISION.md, PRIVACY_POLICY_DRAFT.md, README.md, TERMS_DRAFT.md, TRADEMARK_CHECKLIST.md; the tree is UNLICENSED; the name is not cleared (not required for a beta; recorded)",
+      "action": "a lawyer signs off the licence, the terms, the privacy statement and the mark (docs/legal/)"
+    }
+  ],
+  "statuses": [
+    "EXTERNAL_REQUIRED",
+    "FAIL",
+    "NOT_VERIFIED",
+    "PASS"
+  ]
+}
