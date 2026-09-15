@@ -131,8 +131,20 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
     Same pinned rustc 1.98.1, same `Cargo.lock` (`--locked`), same commit stamp inside both.
     rc.3 built the frontend on the runner with the same Node as this machine (24) and the
     difference did not move (code 199 608, data 3 154 612 bytes; the runner's executable again
-    identical across its two runs, `b50cbb4f…`). **So the cause is the MSVC toolset and CRT
-    the runner image carries** (this machine: 14.44.35207), not Node.
+    identical across its two runs, `b50cbb4f…`). **The cause is the MSVC toolset, read from
+    the executables themselves:** the Rich header (the `@comp.id` records before `PE\0\0`)
+    of the runner's executable names compiler and linker builds **35721 / 36256**; this
+    machine's names **35207 / 35228** (toolset 14.44.35207). Same rustc, same lock, different
+    C/C++ toolchain behind it — different CRT objects and a different linker, hence code and
+    data. Not Node, not the frontend.
+  - **The runner's installer difference is inside the compressed payload, not appended:** the
+    two rc.3 runner installers first differ at the NSIS first-header's `total_size` field
+    (3 550 681 vs 3 551 305 bytes) with an identical `header_size` (74 008), so the script and
+    the stub are the same and the LZMA block wraps different bytes — with an identical
+    executable inside. The prime suspect is the NSIS hook that turns off saved file dates
+    (`apps/desktop/src-tauri/nsis/hooks.nsh`, `SetDateSave off`) not being applied by the
+    `makensis` Tauri downloads on the runner, so the packaged files carry their build-time
+    modification times. Not yet confirmed; the check is the runner's `makensis` log.
   - **The runner's installer is not deterministic even with itself:** the two runner installers
     of rc.2 wrap the identical executable and differ in 3 540 070 bytes, all in the NSIS
     overlay (the compressed payload after the stub; every PE section identical). On this
@@ -243,7 +255,7 @@ that neither fix has been exercised through the GUI on this build (B5).
 | B4 | No external security assessment | owner (+ provider) | every security claim is the project's own | contract a test against `v0.5.0-rc.1` with the hand-off | the tag (done) | the report and the fixes it produces |
 | B5 | **Chooser journeys with a purpose never driven** | owner, or this project on a free machine | the permission-gating flows of this candidate have no GUI evidence on any build | on a machine where nobody is working: install the candidate, run `scripts/verify/install_check.ps1`, then `scripts/verify/gui_chooser.ps1` extended to publish-into, import-from, grant-to-component and the file chooser — or do the four flows by hand and attach the observations to `docs/audits/` | the candidate (done) | PASS lines for the four flows on `137c93a` |
 | B6 | Branch protection unavailable | owner | a private repository on a free plan cannot protect `main` | GitHub Pro, or make the repository public (which is B2's decision) | B2 | the protection rule visible on `main` |
-| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | the diff is code and data, not metadata, and Node is ruled out (§6): it is the MSVC toolset. Two ways, pick one: (a) pin the toolset in CI to the developer's 14.44.35207 (`ilammy/msvc-dev-cmd` with `toolset`, if the runner image carries it) and rebuild; or (b) make the runner's build the published artefact — the runner reproduces itself run to run — and have the developer machine reproduce *it* with the same toolset. Separately, make the NSIS step deterministic on the runner: two runner installers of one identical executable still differ in the overlay (rc.2 and rc.3 both); compare the overlays and find which packaging input varies | none | `release.yml`'s "the build reproduces the published hashes" step green on a tag, and two runner installers of one commit identical |
+| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | the diff is the MSVC toolset, read from both executables' Rich headers (§6: runner 35721/36256, this machine 35207/35228). Two ways, pick one: (a) pin the toolset in CI to the developer's 14.44.35207 (`ilammy/msvc-dev-cmd` with `toolset`, if the runner image carries it) and rebuild; or (b) make the runner's build the published artefact — the runner reproduces itself run to run — and have the developer machine reproduce *it* with the same toolset. Separately, make the NSIS step deterministic on the runner: the two runner installers of one identical executable differ inside the LZMA payload (`total_size` differs, `header_size` does not); confirm whether `hooks.nsh` (`SetDateSave off`) is applied by the runner's `makensis` and, if not, why the hook path does not resolve there | none | `release.yml`'s "the build reproduces the published hashes" step green on a tag, and two runner installers of one commit identical |
 
 ## 14. Integration record, final numbers, self-critique
 
