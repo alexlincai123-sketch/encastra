@@ -34,9 +34,10 @@ today.*
 11. **Intellectual property.** The software, its name and its documentation are `[COMPANY]`'s.
     The `.encastra` file format specification is published under `[open licence]` and may be
     implemented by anyone.
-12. **Export.** The software contains no cryptography of its own; network connections use the
-    operating platform's TLS through open-source libraries listed in `docs/THIRD-PARTY.md`.
-    `[Lawyer to confirm classification for the seller's jurisdiction.]`
+12. **Export.** The software bundles open-source cryptographic libraries (`rustls`, `ring`;
+    listed with versions in `docs/THIRD-PARTY.md`) for the TLS connections its network component
+    makes; it does not rely on the operating platform's TLS. `[Lawyer to confirm the export
+    classification this implies for the seller's jurisdiction.]`
 13. **Governing law, disputes.** `[…]`
 14. **Changes to these terms.** New terms apply to versions released after them; the version
     you have keeps the terms it shipped with.

@@ -38,10 +38,14 @@ Nobody may state that this name is legally clear.
 3. Claim the npm scope and GitHub org.
 4. Only then: put the name on a website, an installer, or a deck.
 
-Until step 1 comes back clean, treat the name as **reversible**. It appears in this repository
-in exactly three shapes — the `@encastra/*` npm scope, the `encastra-*` crate names, and the
-`.encastra` project extension — so a rename is one scripted commit, not a migration. That is
-deliberate.
+Until step 1 comes back clean, treat the name as **reversible**. In the source it appears as the
+`@encastra/*` npm scope, the `encastra-*` crate names and the `.encastra` project extension; in
+what ships it also appears as the product name and window title (`tauri.conf.json`), the
+bundle identifier `dev.encastra.app` (which names the library folder under `%APPDATA%`), the
+installer's file name and its uninstall entry, and the per-user install folder
+`%LOCALAPPDATA%\Encastra`. All of it derives from `tauri.conf.json` and the crate names, so a
+rename is one scripted commit plus a version bump — the `.encastra` extension and the app-data
+folder are the two shapes an installed copy would notice. That is deliberate.
 
 ---
 

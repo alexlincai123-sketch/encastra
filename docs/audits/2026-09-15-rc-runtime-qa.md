@@ -1,8 +1,9 @@
 # Runtime QA of the release-candidate binary — 2026-09-15
 
-**Build:** `encastra-desktop.exe` built from `feat/rc` @ `e74e9ec` (stamp read from the binary:
-`e74e9eccd9fba520f6ff663e55d580343db53a29`, clean), version `0.5.0-beta.1` (the candidate is
-tagged after this run; the version string is bumped in the publication step).
+**Build:** `encastra-desktop.exe` built from build commit `137c93a` (stamp read from the binary:
+`137c93a9e51a3acaac7077d0e89733150ddba608`, clean), version `0.5.0-rc.1` — the bytes the manifest
+at tag `v0.5.0-rc.1` describes. The same 23 checks had passed earlier on `e74e9ec` (before the
+adversarial review's fixes); the table below is the run on the tagged bytes.
 
 **Method:** the same as `2026-09-15-runtime-qa.md` — the binary launched with
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, every command invoked
@@ -33,14 +34,26 @@ exercised as far as its refusal, which after this cycle is a **tag**, not a sent
 | `run_graph` with an input file nobody chose | `{"kind":"input-not-chosen","node":"r","port":"file"}` — **the path does not appear** in the refusal |
 | `run_graph` with a folder grant nobody chose | `{"kind":"grants-refused","refusals":[{"kind":"folder-not-chosen","node":"save-1"}]}` |
 | `validate_graph` | answers, 1 issue |
-| `close_window` while `report_busy(true)` | `{"kind":"import-in-flight"}` |
-| the window is still up after the refused close | true |
+| `report_busy` | **no longer exists** (`Command report_busy not found`): the editor cannot pin the window closed; `import_publication` marks itself in flight |
+| `close_window` with nothing in flight | closes the window (the last step) |
 | `library_remove` with `deleteCopy` on a created project | `{"kind":"not-ours-to-delete"}`, file still there |
 | `library_remove` without `deleteCopy` | entry forgotten, file stays |
 | library index under app data | `library.json` only, no `.tmp` |
 
 Results file: `qa-rc-results.json` in the session scratchpad (not committed; the table above is
 the record).
+
+## The main thread is not blocked by a long command (3/3)
+
+The adversarial review pointed out that a non-`async` Tauri command runs on the main thread —
+the window's message loop — so a long run or a large import would stop the window and every
+guard with it. Twelve commands now carry `#[tauri::command(async)]`. Measured on this binary
+(`qa-freeze.mjs`, both calls issued from inside the page so no CDP round-trip is in the number):
+a `save_project` of a 10 000-node graph followed by `open_project` took **438 ms**; an `about`
+issued 30 ms after it answered in **40 ms**, while the heavy command was still running. Before
+the attribute the second call could not have answered until the first returned. Not measured on
+the previous binary (its bytes were replaced by this build); the claim about the old behaviour
+rests on Tauri's documented threading model, the claim about the new one on this measurement.
 
 ## What this run says and does not say
 

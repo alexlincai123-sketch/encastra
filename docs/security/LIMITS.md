@@ -85,7 +85,13 @@ temporary directory rather than a half-written publication. Those bytes are the 
 the rename, so `measure_imports` counts them like any other; and `sweep_staging` removes leftovers
 older than an hour, at library load and at the start of every import. The hour is not tidiness: a
 second copy of the application may be importing right now, and deleting a live staging directory
-to reclaim room is not a trade worth making.
+to reclaim room is not a trade worth making. Two limits of that rule, stated rather than hidden:
+the age is read from the directory's modification time, so a clock that jumps forward by more
+than an hour during another instance's import could sweep it (the import fails cleanly and can be
+repeated; nothing lands half-written, because landing is a rename); and the byte ceiling is
+enforced under one process's index lock, so two *instances* of the application importing at the
+same moment can each be told there is room for one. Both are accepted for a single-user desktop
+application and named here so that a multi-instance library is designed, not discovered.
 
 **The check and the copy are one act.** `LibraryHandle::import_reserving` holds the index lock
 from measuring what is there until the new entry is written. Two imports running at once would

@@ -113,6 +113,13 @@ outright is worth the bluntness. A single file somebody named in a native choose
 a permission gets, and refusing it for where it lives would be refusing a choice that was made
 rather than one that was smuggled.
 
+Two choosers stay in the editor, on purpose: opening and saving a `.encastra` file goes through
+the dialog plugin from the page (`dialog:allow-open`, `dialog:allow-save` in
+`capabilities/default.json`). A project path is not a permission — the runtime accepts any path
+that ends in `.encastra` and resolves to a file, and the file is parsed with the same ceilings
+whoever named it — so nothing about consent rides on where that string came from. The two
+things that *are* permissions, a folder and an input file, are the two whose choosers moved.
+
 A few of these are worth spelling out.
 
 **`report_dirty` exists because a window is closed by the operating system.** A title-bar X,

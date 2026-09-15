@@ -249,6 +249,12 @@ component — first-party included, since that is all there is — goes through 
   and then deleting from one that was never allowed is a deletion the user did not agree to,
   and that is the more dangerous half.
 
+- **never replaces a file in a granted folder.** A grant lets a run *add* files to the folder;
+  a name that already exists there is refused, by name, with the way out in the hint. The
+  project chooses the output name and the person chose a real folder — before this (0.5.0-rc.1)
+  `fs::copy` truncated whatever bore the name, which was the realistic data-loss path for a
+  tester running a graph somebody else wrote against a granted Documents folder.
+
 - **writes an entry to the run journal for every capability call, allowed or denied**, which is
   what the debugger shows under "permissions used". Refusals are constructed and recorded in the
   same function, so there is no path on which a denial happens without being written down. The
