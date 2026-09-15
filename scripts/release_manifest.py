@@ -72,6 +72,18 @@ STAMP = re.compile(rb"encastra-build-commit=([0-9a-f]{40}(?:-dirty)?|unknown);")
 # Anything else means the published hashes describe a tree that is not the one tagged.
 PUBLICATION_FILES = frozenset({"docs/RELEASE.md", "apps/web/src/config/site.ts"})
 
+
+def is_publication_change(path: str) -> bool:
+    """Whether a file changed after the build commit leaves the published hashes true.
+
+    The publication files themselves, and the written record of the release: Markdown under
+    `docs/` — the readiness report, the audits, the session notes that name the tag they could
+    not name before it existed. None of it is compiled into anything. Everything else — source,
+    scripts, workflows, configuration, lockfiles, the website's code — is a tree the hashes do
+    not describe, and needs a new version and a new build.
+    """
+    return path in PUBLICATION_FILES or (path.startswith("docs/") and path.endswith(".md"))
+
 # What Windows says about a file's signature, mapped to what it means for a release.
 SIGNED = "signed"
 UNSIGNED = "unsigned"
@@ -480,7 +492,7 @@ def verify() -> list[str]:
         )
     elif head and head != commit:
         changed = set((git("diff", "--name-only", commit, "HEAD") or "").split())
-        extra = sorted(changed - PUBLICATION_FILES)
+        extra = sorted(path for path in changed if not is_publication_change(path))
         if extra:
             problems.append(
                 f"since build commit {commit} the tree changed more than a publication may: "

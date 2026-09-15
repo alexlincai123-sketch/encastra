@@ -254,6 +254,23 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(result.returncode, 5, result.stderr)
         self.assertIn("src.rs", result.stderr)
 
+    def test_verify_accepts_the_written_record_after_the_publication(self) -> None:
+        # The readiness report and the audits name the tag; they can only be written after it
+        # exists. Markdown under docs/ is not compiled into anything, so the hashes stay true.
+        self.repo.build(self.head)
+        self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
+        (self.repo.root / "docs/audits").mkdir()
+        (self.repo.root / "docs/audits/record.md").write_text("# what was observed\n", "utf-8")
+        self.repo.commit("the record of the release")
+        result = self.repo.manifest("--verify")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # A file that is not Markdown under docs/ is not a record; a script beside the docs is code.
+        (self.repo.root / "docs/audits/helper.py").write_text("print(1)\n", "utf-8")
+        self.repo.commit("code hiding among the records")
+        result = self.repo.manifest("--verify")
+        self.assertEqual(result.returncode, 5, result.stderr)
+        self.assertIn("docs/audits/helper.py", result.stderr)
+
     def test_verify_notices_a_tampered_hash(self) -> None:
         self.repo.build(self.head)
         self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)

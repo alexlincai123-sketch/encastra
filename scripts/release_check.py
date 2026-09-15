@@ -193,7 +193,7 @@ def publication_of(version: str) -> tuple[dict | None, bool]:
     if ancestor.returncode != 0:
         return claim, False
     changed = set((git("diff", "--name-only", claim["commit"], "HEAD") or "").split())
-    return claim, not (changed - release_manifest.PUBLICATION_FILES)
+    return claim, all(release_manifest.is_publication_change(path) for path in changed)
 
 
 def check_version_unique(version: str) -> Check:
