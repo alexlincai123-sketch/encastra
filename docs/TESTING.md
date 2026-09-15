@@ -135,6 +135,29 @@ the fixture to move. [ADR-0003](adr/0003-one-runtime-shared-type-table.md) recor
   coercion that merely duplicates plain widening, at most one coercion per ordered pair, and a
   note on every explicit coercion so the Convert node has something to show.
 
+### The error-vocabulary gate
+
+The same arrangement, for the refusals a command can return. The runtime owns the vocabulary
+(`AppError`, `GrantRefusal`, and the four nested crate errors), and the editor has to have a
+sentence for every word in it in all six languages — otherwise a refusal reaches a Spanish reader
+in English, or as a raw tag.
+
+- `error::tests::the_committed_list_of_kinds_matches_this_build` writes every tag to
+  `apps/desktop/test/fixtures/error-kinds.json` and fails when the committed file no longer
+  matches the enums. Regenerate with `UPDATE_ERROR_KINDS=1 cargo test -p encastra-desktop`.
+- `AppError::kind()` is an exhaustive `match`, so a variant added without a tag does not compile,
+  and `error::tests::the_samples_cover_every_kind_exactly_once` fails when its sample is missing.
+- `apps/desktop/test/errors.test.ts` replays the fixture: every tag needs a key, every key needs a
+  sentence in each of the six locale files (read directly, because `translate()` falls back to
+  English and would report a missing Spanish sentence as a pass), and every non-English sentence
+  has to differ from the English one — a key copied across with the English text still in it is
+  not a translation. It also asserts no described refusal leaves a `{placeholder}` unfilled.
+- The `Record<Kind, string>` maps in `apps/desktop/src/errors.ts` are total over their unions, so
+  TypeScript refuses a missing tag as well.
+
+The direction of the fix is the same as above: write the missing sentence rather than shrink the
+vocabulary to make the test pass. The inventory is [`desktop/ERRORS.md`](desktop/ERRORS.md).
+
 ---
 
 ## 5. Hostile-input tests

@@ -18,6 +18,7 @@ import {
 } from '@xyflow/react';
 import { create } from 'zustand';
 import type { Demo } from './demos';
+import { describeAppError, importErrorIn } from './errors';
 import { subscribe, type WorkflowStatus } from './events';
 import {
   cut,
@@ -34,7 +35,7 @@ import {
 // `canvas/Canvas.tsx` does inside `isConnectionLegal` — see `i18n/index.ts`'s own note on why.
 import { selectPlural, translate, useI18n } from './i18n';
 import { ipc } from './ipc';
-import { decideRemoval, isImportError } from './library';
+import { decideRemoval } from './library';
 import { usePreferences } from './preferences';
 import type {
   About,
@@ -1286,22 +1287,24 @@ function summarise(journal: RunJournal): string {
 /**
  * A rejection from a command that refuses in a shape, kept in that shape.
  *
- * `inspect_publication` and `import_publication` reject with a serialised `ImportError`, and
- * everything else rejects with an `Error` or a string. Telling them apart here is the
- * difference between the interface showing a sentence somebody can act on and showing them the
- * JSON the runtime happened to send.
+ * `inspect_publication` and `import_publication` reject with an `ImportError` nested inside the
+ * application's own refusal — `{kind: 'import', error: {...}}` — and everything else rejects with
+ * an `AppError`, an `Error` or a string. The Import panel is built around the inner shape, so it
+ * is unwrapped rather than flattened: that is the difference between the interface showing a
+ * sentence somebody can act on and showing them the JSON the runtime happened to send.
  */
 function asImportFailure(error: unknown): ImportError | string {
-  return isImportError(error) ? error : describe(error);
+  return importErrorIn(error) ?? describe(error);
 }
 
 function describe(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
-  // A structured refusal has a `kind`, and the import flow is the only thing that can say
-  // anything useful about one — `asImportFailure` keeps it in its shape for exactly that reason.
-  // Flattening it here would turn a refusal somebody can act on into "the runtime said nothing".
-  if (isImportError(error)) return translate('messages.runtimeSilent');
+  // A structured refusal from the runtime: a tag, and the values a sentence needs. Every tag has
+  // a sentence in all six languages, which is the point of the whole contract — this line used to
+  // render whatever English the runtime had built, to whoever happened to be reading.
+  const described = describeAppError(error);
+  if (described !== null) return described;
   // Anything else carrying a `message` is a rejection that crossed the bridge as a plain object
   // rather than as an `Error` — which is what a rejected Tauri command looks like on this side,
   // and which used to be reported as silence even though the runtime had said precisely what

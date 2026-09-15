@@ -933,6 +933,104 @@ const en: Messages = {
     removedAndDeleted: '{name} is off the list, and the copy Encastra made is deleted.',
   },
 
+  // Every way the runtime can say no, in the reader's language.
+  //
+  // `AppError` in `apps/desktop/src-tauri/src/error.rs` sends a tag and the values a sentence
+  // needs; `errors.ts` turns the tag into a key here. Before that existed, a refused command
+  // arrived as an English sentence the runtime had built, and that sentence was shown to whoever
+  // happened to be reading â which is a refusal somebody cannot act on.
+  errors: {
+    unknown:
+      'Encastra refused this for a reason this version has no words for ({kind}). Nothing was changed.',
+    runtimeBusy: 'The runtime is busy with something else. Try that again in a moment.',
+    libraryBusy: 'Your library is busy. Try that again in a moment.',
+    chooserDidNotReturn: 'The folder chooser closed without answering. Nothing was chosen.',
+    notAFolderOnThisMachine: 'What the chooser gave back is not a folder on this machine.',
+    folderUnusable: 'That folder cannot be used ({reason}).',
+    notAProject: 'That is not an Encastra project. A project’s name ends in .encastra.',
+    versionNotInProject:
+      'That version is not in this project. Its history may have changed since you last looked at it.',
+    versionsNotInProject:
+      'One of those two versions is not in this project, so there is nothing to compare.',
+    grantsRefused: 'Nothing ran. {count} of the permissions you allowed could not be given:',
+    workingFolder:
+      'Encastra could not prepare a working folder for this run ({reason}). Nothing ran.',
+    inputUnreadable: '{path} could not be opened ({reason}). Nothing ran.',
+    workflowAlreadyRunning: 'A workflow is already running. Stop it before starting another.',
+    workflowInvalid: 'This workflow cannot run yet: {problems} thing(s) to fix first.',
+    workflowNotStarted: 'The workflow could not be started ({reason}). Nothing ran.',
+    destinationMissing: 'That folder is not there. Choose one that exists.',
+    destinationIsALink:
+      'That folder is a link to somewhere else, so what was written would land somewhere other than where you chose. Pick the folder itself.',
+    destinationIsAFile: 'That is a file, not a folder. A publication needs a folder of its own.',
+    destinationNotChosen:
+      'Choose the folder to publish into with the Choose button first, so that where Encastra writes is where you pointed.',
+    publicationPathEscapes:
+      'That publication cannot be written where it was asked to go. Nothing was written.',
+    publicationAlreadyThere:
+      '{folder} already holds a publication. Delete it, or choose another folder.',
+    notOursToDelete:
+      'That file is yours, and it stays where it is. Encastra only deletes copies it made itself, which means things you imported.',
+    copyNotDeleted: 'It is off your list, but the copy could not be deleted ({reason}).',
+    noWindow: 'There is no window to close.',
+    windowWouldNotClose: 'The window would not close. Your work is still here.',
+    io: 'Something on this computer refused the operation ({reason}).',
+    grant: {
+      folderUnusable: '{node}: that folder cannot be used ({reason}).',
+      folderNotChosen:
+        '{node}: choose that folder with the Choose button before allowing it, so that what is allowed is what you pointed at.',
+      notDeclared: '{node}: this step never asks for {capability}, so there is nothing to allow.',
+    },
+    project: {
+      generic: 'That project file could not be read.',
+      unsupportedSchema:
+        'This build reads project files of version {ours}, and that one says it is version {theirs}. It was made by a newer Encastra.',
+      missingEntry: 'The project file holds no {entry}, so it is not a whole project.',
+      invalid: '{entry} inside that project is not valid: {reason}.',
+      archive: 'The project file could not be read as an archive ({reason}). It may be damaged.',
+      tooLarge:
+        '{entry} inside that project unpacks to more than this build will read ({limit} bytes).',
+      tooLargeInTotal:
+        'That project unpacks to more than this build will read ({limit} bytes in all).',
+      tooManySnapshots:
+        'That project keeps {count} versions, and this build holds at most {limit}.',
+      fileTooLarge: 'That project file is {size} bytes, and this build reads at most {limit}.',
+      ambiguousArchive:
+        'The project archive lists {declared} entries under only {distinct} names, so it names something twice. Encastra will not guess which one was meant.',
+      io: 'The project file could not be read or written ({reason}).',
+    },
+    library: {
+      generic: 'Your library could not be read.',
+      corrupt:
+        'Your library index could not be read ({reason}). It has been left exactly as it is: it is your record of your own work, and Encastra does not start it over.',
+      writtenByAnotherVersion:
+        'Your library index was written by another version of Encastra (it says version {theirs}, and this build reads {ours}). It has been left as it is.',
+      tooManyEntries:
+        'Your library index lists {count} things, and this build holds at most {max}. It has been left as it is.',
+      notOurs:
+        'That is not something Encastra put there, so it is not something Encastra will remove.',
+      io: 'Your library could not be read or written ({reason}).',
+    },
+    bundle: {
+      generic: 'That publication could not be prepared.',
+      reviewRefused:
+        'The check found {blocking} thing(s) that would have to change before this could be published.',
+      notAVersion: '“{version}” is not a version. Publications are numbered like 1.2.0.',
+      notYourNamespace:
+        '“{listing}” is not inside {publisher}’s namespace. A publication is filed under the name of whoever publishes it.',
+      missing: 'A publication needs a {field}.',
+      tooLong: 'The {field} is longer than this build will publish (at most {max} characters).',
+      controlCharacters:
+        'The {field} holds characters that can hide what it really says. Encastra refuses it rather than quietly rewriting what you wrote.',
+      tooLarge: 'That project is about {size}, and this build publishes at most {max}.',
+      notInstallable: 'This build cannot install a {publicationKind}, so it will not offer one.',
+      notAnIdentifier: '“{value}” is not a usable name: {why}.',
+    },
+    import: {
+      generic: 'That publication was not taken in, and nothing on this machine was changed.',
+    },
+  },
+
   // The three sample workflows `demos.ts` ships (the graph shape itself stays English-only
   // component config, same as any project — only the name, summary and folder prompts a person
   // actually reads are here). `Home.tsx` and `onboarding/Welcome.tsx` both read these by key.

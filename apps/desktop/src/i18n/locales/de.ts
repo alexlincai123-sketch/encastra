@@ -887,6 +887,113 @@ const de: Messages = {
       '{name} steht nicht mehr auf der Liste, und die von Encastra angelegte Kopie ist gelöscht.',
   },
 
+  errors: {
+    unknown:
+      'Encastra hat dies aus einem Grund abgelehnt, für den diese Version keine Worte hat ({kind}). Es wurde nichts geändert.',
+    runtimeBusy:
+      'Die Laufzeit ist gerade mit etwas anderem beschäftigt. Versuchen Sie es gleich noch einmal.',
+    libraryBusy: 'Ihre Bibliothek ist beschäftigt. Versuchen Sie es gleich noch einmal.',
+    chooserDidNotReturn:
+      'Die Ordnerauswahl wurde ohne Antwort geschlossen. Es wurde nichts ausgewählt.',
+    notAFolderOnThisMachine:
+      'Was die Auswahl zurückgegeben hat, ist kein Ordner auf diesem Rechner.',
+    folderUnusable: 'Dieser Ordner kann nicht verwendet werden ({reason}).',
+    notAProject: 'Das ist kein Encastra-Projekt. Der Name eines Projekts endet auf .encastra.',
+    versionNotInProject:
+      'Diese Version gehört nicht zu diesem Projekt. Sein Verlauf hat sich seit Ihrem letzten Blick vielleicht geändert.',
+    versionsNotInProject:
+      'Eine dieser beiden Versionen gehört nicht zu diesem Projekt, also gibt es nichts zu vergleichen.',
+    grantsRefused:
+      'Es wurde nichts ausgeführt. {count} der erteilten Berechtigungen konnten nicht vergeben werden:',
+    workingFolder:
+      'Encastra konnte für diesen Lauf keinen Arbeitsordner vorbereiten ({reason}). Es wurde nichts ausgeführt.',
+    inputUnreadable: '{path} konnte nicht geöffnet werden ({reason}). Es wurde nichts ausgeführt.',
+    workflowAlreadyRunning:
+      'Es läuft bereits ein Ablauf. Stoppen Sie ihn, bevor Sie einen weiteren starten.',
+    workflowInvalid:
+      'Dieser Ablauf kann noch nicht laufen: {problems} Sache(n) sind vorher zu beheben.',
+    workflowNotStarted:
+      'Der Ablauf konnte nicht gestartet werden ({reason}). Es wurde nichts ausgeführt.',
+    destinationMissing: 'Diesen Ordner gibt es nicht. Wählen Sie einen vorhandenen.',
+    destinationIsALink:
+      'Dieser Ordner ist eine Verknüpfung woandershin, das Geschriebene läge also nicht dort, wo Sie es gewählt haben. Wählen Sie den Ordner selbst.',
+    destinationIsAFile:
+      'Das ist eine Datei, kein Ordner. Eine Veröffentlichung braucht einen eigenen Ordner.',
+    destinationNotChosen:
+      'Wählen Sie den Zielordner zuerst über die Schaltfläche Wählen, damit Encastra dorthin schreibt, wohin Sie gezeigt haben.',
+    publicationPathEscapes:
+      'Diese Veröffentlichung kann nicht dorthin geschrieben werden, wohin sie gehen sollte. Es wurde nichts geschrieben.',
+    publicationAlreadyThere:
+      '{folder} enthält bereits eine Veröffentlichung. Löschen Sie sie, oder wählen Sie einen anderen Ordner.',
+    notOursToDelete:
+      'Diese Datei gehört Ihnen und bleibt, wo sie ist. Encastra löscht nur eigene Kopien, also Dinge, die Sie importiert haben.',
+    copyNotDeleted:
+      'Es steht nicht mehr auf Ihrer Liste, aber die Kopie konnte nicht gelöscht werden ({reason}).',
+    noWindow: 'Es gibt kein Fenster zu schließen.',
+    windowWouldNotClose: 'Das Fenster ließ sich nicht schließen. Ihre Arbeit ist noch da.',
+    io: 'Etwas auf diesem Computer hat den Vorgang verweigert ({reason}).',
+    grant: {
+      folderUnusable: '{node}: Dieser Ordner kann nicht verwendet werden ({reason}).',
+      folderNotChosen:
+        '{node}: Wählen Sie diesen Ordner über die Schaltfläche Wählen, bevor Sie ihn erlauben, damit das Erlaubte das ist, worauf Sie gezeigt haben.',
+      notDeclared:
+        '{node}: Dieser Schritt fragt nie nach {capability}, es gibt also nichts zu erlauben.',
+    },
+    project: {
+      generic: 'Diese Projektdatei konnte nicht gelesen werden.',
+      unsupportedSchema:
+        'Diese Version liest Projektdateien der Version {ours}, und diese gibt Version {theirs} an. Sie stammt von einem neueren Encastra.',
+      missingEntry:
+        'Die Projektdatei enthält kein {entry}, sie ist also kein vollständiges Projekt.',
+      invalid: '{entry} in diesem Projekt ist ungültig: {reason}.',
+      archive:
+        'Die Projektdatei ließ sich nicht als Archiv lesen ({reason}). Möglicherweise ist sie beschädigt.',
+      tooLarge:
+        '{entry} in diesem Projekt entpackt sich zu mehr, als diese Version liest ({limit} Bytes).',
+      tooLargeInTotal:
+        'Dieses Projekt entpackt sich zu mehr, als diese Version liest ({limit} Bytes insgesamt).',
+      tooManySnapshots:
+        'Dieses Projekt bewahrt {count} Versionen auf, diese Version höchstens {limit}.',
+      fileTooLarge:
+        'Diese Projektdatei hat {size} Bytes, und diese Version liest höchstens {limit}.',
+      ambiguousArchive:
+        'Das Projektarchiv führt {declared} Einträge unter nur {distinct} Namen, benennt also etwas doppelt. Encastra rät nicht, welcher gemeint war.',
+      io: 'Die Projektdatei konnte nicht gelesen oder geschrieben werden ({reason}).',
+    },
+    library: {
+      generic: 'Ihre Bibliothek konnte nicht gelesen werden.',
+      corrupt:
+        'Der Index Ihrer Bibliothek konnte nicht gelesen werden ({reason}). Er wurde unverändert gelassen: Er ist Ihre Aufzeichnung Ihrer eigenen Arbeit, und Encastra fängt sie nicht neu an.',
+      writtenByAnotherVersion:
+        'Der Index Ihrer Bibliothek wurde von einer anderen Encastra-Version geschrieben (er gibt Version {theirs} an, diese Version liest {ours}). Er wurde unverändert gelassen.',
+      tooManyEntries:
+        'Der Index Ihrer Bibliothek führt {count} Dinge, und diese Version fasst höchstens {max}. Er wurde unverändert gelassen.',
+      notOurs: 'Das hat Encastra nicht dorthin gelegt, also entfernt Encastra es auch nicht.',
+      io: 'Ihre Bibliothek konnte nicht gelesen oder geschrieben werden ({reason}).',
+    },
+    bundle: {
+      generic: 'Diese Veröffentlichung konnte nicht vorbereitet werden.',
+      reviewRefused:
+        'Die Prüfung fand {blocking} Sache(n), die sich ändern müssten, bevor dies veröffentlicht werden kann.',
+      notAVersion: '„{version}“ ist keine Version. Veröffentlichungen werden wie 1.2.0 nummeriert.',
+      notYourNamespace:
+        '„{listing}“ liegt nicht im Namensraum von {publisher}. Eine Veröffentlichung wird unter dem Namen dessen abgelegt, der sie veröffentlicht.',
+      missing: 'Einer Veröffentlichung fehlt: {field}.',
+      tooLong:
+        'Das Feld {field} ist länger, als diese Version veröffentlicht (höchstens {max} Zeichen).',
+      controlCharacters:
+        'Das Feld {field} enthält Zeichen, die verbergen können, was dort wirklich steht. Encastra lehnt es ab, statt stillschweigend umzuschreiben, was Sie geschrieben haben.',
+      tooLarge: 'Dieses Projekt hat etwa {size}, und diese Version veröffentlicht höchstens {max}.',
+      notInstallable:
+        'Diese Version kann {publicationKind} nicht installieren und bietet es daher auch nicht an.',
+      notAnIdentifier: '„{value}“ ist kein brauchbarer Name: {why}.',
+    },
+    import: {
+      generic:
+        'Diese Veröffentlichung wurde nicht übernommen, und auf diesem Rechner wurde nichts geändert.',
+    },
+  },
+
   demos: {
     imageProcessor: {
       name: 'Bildprozessor',
