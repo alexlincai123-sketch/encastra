@@ -228,6 +228,21 @@ jobs:
       # means, and it is checked here rather than assumed. A signed build differs from the
       # published unsigned hashes by its signature, so for it the manifest is regenerated from
       # the signed artefacts and uploaded, and `--require-signature` is the gate.
+      # What this runner built, kept whether or not it reproduces the published bytes: when it
+      # does not, the only way to learn *why* is to put the two files side by side under
+      # scripts/pe_diff.py, and a failed step that uploaded nothing leaves only a hash to look at.
+      # The first release run of a candidate found exactly that — the hosted runner's bytes
+      # differed from the developer machine's, and nothing was there to diff.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: encastra-runner-build-${{ github.run_id }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/encastra-desktop.exe
+          if-no-files-found: error
+          retention-days: 30
+
       - name: The build reproduces the published hashes
         if: env.HAS_CERTIFICATE != 'true'
         shell: bash
