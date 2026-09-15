@@ -62,10 +62,10 @@ fn rerun_on_git_change(root: &Path) {
     };
     let git_dir = PathBuf::from(git_dir);
     let mut watch = vec![git_dir.join("HEAD"), git_dir.join("packed-refs")];
-    if let Some(reference) = git(root, &["symbolic-ref", "-q", "HEAD"]) {
-        if let Some(path) = git(root, &["rev-parse", "--git-path", &reference]) {
-            watch.push(PathBuf::from(path));
-        }
+    let reference = git(root, &["symbolic-ref", "-q", "HEAD"])
+        .and_then(|reference| git(root, &["rev-parse", "--git-path", &reference]));
+    if let Some(path) = reference {
+        watch.push(PathBuf::from(path));
     }
     for path in watch {
         println!("cargo:rerun-if-changed={}", path.display());
