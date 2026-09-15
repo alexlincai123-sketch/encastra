@@ -66,6 +66,10 @@ pub enum AppError {
     ChooserDidNotReturn,
     #[error("That is not a folder on this machine.")]
     NotAFolderOnThisMachine,
+    #[error("That is not a file on this machine.")]
+    NotAFileOnThisMachine,
+    #[error("That file cannot be used: {reason}.")]
+    FileUnusable { reason: String },
     #[error("That folder cannot be used: {reason}.")]
     FolderUnusable { reason: String },
 
@@ -87,6 +91,16 @@ pub enum AppError {
     WorkingFolder { reason: String },
     #[error("Could not open {path}: {reason}")]
     InputUnreadable { path: String, reason: String },
+    #[error("The file for {node}.{port} cannot be used: {reason}. Nothing ran.")]
+    InputUnusable {
+        node: String,
+        port: String,
+        reason: String,
+    },
+    #[error(
+        "Choose the file for {node}.{port} with the Choose button before running. Nothing ran."
+    )]
+    InputNotChosen { node: String, port: String },
     #[error("A workflow is already running. Stop it before starting another.")]
     WorkflowAlreadyRunning,
     #[error("This workflow cannot run yet: {problems} problem(s) to fix.")]
@@ -190,6 +204,8 @@ impl AppError {
             AppError::ImportInFlight => "import-in-flight",
             AppError::ChooserDidNotReturn => "chooser-did-not-return",
             AppError::NotAFolderOnThisMachine => "not-a-folder-on-this-machine",
+            AppError::NotAFileOnThisMachine => "not-a-file-on-this-machine",
+            AppError::FileUnusable { .. } => "file-unusable",
             AppError::FolderUnusable { .. } => "folder-unusable",
             AppError::NotAProject => "not-a-project",
             AppError::Project { .. } => "project",
@@ -198,6 +214,8 @@ impl AppError {
             AppError::GrantsRefused { .. } => "grants-refused",
             AppError::WorkingFolder { .. } => "working-folder",
             AppError::InputUnreadable { .. } => "input-unreadable",
+            AppError::InputUnusable { .. } => "input-unusable",
+            AppError::InputNotChosen { .. } => "input-not-chosen",
             AppError::WorkflowAlreadyRunning => "workflow-already-running",
             AppError::WorkflowInvalid { .. } => "workflow-invalid",
             AppError::WorkflowNotStarted { .. } => "workflow-not-started",
@@ -241,6 +259,8 @@ pub const KINDS: &[&str] = &[
     "import-in-flight",
     "chooser-did-not-return",
     "not-a-folder-on-this-machine",
+    "not-a-file-on-this-machine",
+    "file-unusable",
     "folder-unusable",
     "not-a-project",
     "project",
@@ -249,6 +269,8 @@ pub const KINDS: &[&str] = &[
     "grants-refused",
     "working-folder",
     "input-unreadable",
+    "input-unusable",
+    "input-not-chosen",
     "workflow-already-running",
     "workflow-invalid",
     "workflow-not-started",
@@ -288,6 +310,10 @@ mod tests {
             AppError::ImportInFlight,
             AppError::ChooserDidNotReturn,
             AppError::NotAFolderOnThisMachine,
+            AppError::NotAFileOnThisMachine,
+            AppError::FileUnusable {
+                reason: "that is not a file".into(),
+            },
             AppError::FolderUnusable {
                 reason: "that is not a folder".into(),
             },
@@ -308,6 +334,15 @@ mod tests {
             AppError::InputUnreadable {
                 path: "a.png".into(),
                 reason: "entity not found".into(),
+            },
+            AppError::InputUnusable {
+                node: "read".into(),
+                port: "file".into(),
+                reason: "that is not a file".into(),
+            },
+            AppError::InputNotChosen {
+                node: "read".into(),
+                port: "file".into(),
             },
             AppError::WorkflowAlreadyRunning,
             AppError::WorkflowInvalid { problems: 2 },
@@ -581,6 +616,7 @@ mod tests {
             "review-refused",
             "capabilities-disagree",
             "already-imported",
+            "library-full",
             "io",
         ]
     }
@@ -746,6 +782,11 @@ mod tests {
             ImportError::AlreadyImported {
                 listing: "a".into(),
                 version: "1.0.0".into(),
+            },
+            ImportError::LibraryFull {
+                max: 3,
+                used: 2,
+                needed: 2,
             },
             ImportError::Io {
                 reason: "no".into(),

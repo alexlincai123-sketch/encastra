@@ -887,6 +887,8 @@ const pt: Messages = {
     importInFlight: 'Está a ser escrita uma importação. A janela fecha-se quando tiver terminado.',
     chooserDidNotReturn: 'O seletor de pastas fechou sem responder. Não foi escolhido nada.',
     notAFolderOnThisMachine: 'O que o seletor devolveu não é uma pasta deste computador.',
+    notAFileOnThisMachine: 'Isso não é um ficheiro nesta máquina.',
+    fileUnusable: 'Esse ficheiro não pode ser usado: {reason}.',
     folderUnusable: 'Essa pasta não pode ser usada ({reason}).',
     notAProject: 'Isso não é um projeto do Encastra. O nome de um projeto termina em .encastra.',
     versionNotInProject:
@@ -898,6 +900,9 @@ const pt: Messages = {
     workingFolder:
       'O Encastra não conseguiu preparar uma pasta de trabalho para esta execução ({reason}). Não foi executado nada.',
     inputUnreadable: 'Não foi possível abrir {path} ({reason}). Não foi executado nada.',
+    inputUnusable: 'O ficheiro de {node}.{port} não pode ser usado: {reason}. Nada foi executado.',
+    inputNotChosen:
+      'Escolhe o ficheiro de {node}.{port} com o botão Escolher antes de executar. Nada foi executado.',
     workflowAlreadyRunning: 'Já há um fluxo a correr. Pára-o antes de começar outro.',
     workflowInvalid: 'Este fluxo ainda não pode correr: há {problems} coisa(s) a corrigir antes.',
     workflowNotStarted: 'Não foi possível iniciar o fluxo ({reason}). Não foi executado nada.',

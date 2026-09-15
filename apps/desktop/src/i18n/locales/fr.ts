@@ -893,9 +893,12 @@ const fr: Messages = {
       'Encastra a refusé pour une raison que cette version ne sait pas nommer ({kind}). Rien n’a été modifié.',
     runtimeBusy: 'Le moteur est occupé ailleurs. Réessayez dans un instant.',
     libraryBusy: 'Votre bibliothèque est occupée. Réessayez dans un instant.',
-    importInFlight: 'Une importation est en cours d’écriture. La fenêtre se fermera une fois terminée.',
+    importInFlight:
+      'Une importation est en cours d’écriture. La fenêtre se fermera une fois terminée.',
     chooserDidNotReturn: 'Le sélecteur de dossier s’est fermé sans répondre. Rien n’a été choisi.',
     notAFolderOnThisMachine: 'Ce que le sélecteur a renvoyé n’est pas un dossier de cette machine.',
+    notAFileOnThisMachine: 'Ce n’est pas un fichier sur cette machine.',
+    fileUnusable: 'Ce fichier ne peut pas être utilisé : {reason}.',
     folderUnusable: 'Ce dossier ne peut pas être utilisé ({reason}).',
     notAProject: 'Ce n’est pas un projet Encastra. Le nom d’un projet se termine par .encastra.',
     versionNotInProject:
@@ -907,6 +910,10 @@ const fr: Messages = {
     workingFolder:
       'Encastra n’a pas pu préparer un dossier de travail pour cette exécution ({reason}). Rien n’a été exécuté.',
     inputUnreadable: '{path} n’a pas pu être ouvert ({reason}). Rien n’a été exécuté.',
+    inputUnusable:
+      'Le fichier de {node}.{port} ne peut pas être utilisé : {reason}. Rien n’a été exécuté.',
+    inputNotChosen:
+      'Choisissez le fichier de {node}.{port} avec le bouton Choisir avant d’exécuter. Rien n’a été exécuté.',
     workflowAlreadyRunning: 'Un flux est déjà en cours. Arrêtez-le avant d’en lancer un autre.',
     workflowInvalid:
       'Ce flux ne peut pas encore s’exécuter : {problems} chose(s) à corriger d’abord.',

@@ -174,6 +174,41 @@ export interface GrantSpec {
   hosts?: string[];
 }
 
+/**
+ * What a folder is being chosen *for*.
+ *
+ * Consent is per question. The runtime records the folder somebody picked together with the
+ * purpose the chooser was opened to serve, and each command checks the pair for its own
+ * purpose — so a folder picked to import a publication from is not also a folder a component
+ * may write into, which is what it used to be.
+ *
+ * These four strings are the wire form of `FolderPurpose` in `apps/desktop/src-tauri/src/lib.rs`;
+ * `test/consent.test.ts` asserts the two lists are the same list. A string that is not one of
+ * them fails to deserialise on the Rust side, so there is nothing to gain by inventing one.
+ */
+export type FolderPurpose =
+  /** Where `prepare_publication` may write a publication. */
+  | 'publish-into'
+  /** Where `inspect_publication` and `import_publication` may read one from. */
+  | 'import-from'
+  /** A folder a step in the workflow may be given, via a grant on a run. */
+  | 'grant-to-component'
+  /** The Settings preference for where this person keeps their projects. */
+  | 'projects-location';
+
+/**
+ * What a *file* is being chosen for.
+ *
+ * One member, because a file reaches the runtime in exactly one way: as the value of a graph
+ * input that nothing upstream produces. `choose_file` records what the native chooser returned,
+ * and `run_graph` / `start_workflow` seed an input from a path in that record and from nothing
+ * else — so a path stored in a project, or named by a renderer that has been through a debugger,
+ * is displayed and not read.
+ *
+ * The wire form of `FilePurpose` in `apps/desktop/src-tauri/src/lib.rs`.
+ */
+export type FilePurpose = 'run-input';
+
 export interface Snapshot {
   id: string;
   parent?: string;
@@ -423,6 +458,8 @@ export type AppError =
   | { kind: 'import-in-flight' }
   | { kind: 'chooser-did-not-return' }
   | { kind: 'not-a-folder-on-this-machine' }
+  | { kind: 'not-a-file-on-this-machine' }
+  | { kind: 'file-unusable'; reason: string }
   | { kind: 'folder-unusable'; reason: string }
   | { kind: 'not-a-project' }
   | { kind: 'project'; error: ProjectError }
@@ -431,6 +468,8 @@ export type AppError =
   | { kind: 'grants-refused'; refusals: GrantRefusal[] }
   | { kind: 'working-folder'; reason: string }
   | { kind: 'input-unreadable'; path: string; reason: string }
+  | { kind: 'input-unusable'; node: string; port: string; reason: string }
+  | { kind: 'input-not-chosen'; node: string; port: string }
   | { kind: 'workflow-already-running' }
   | { kind: 'workflow-invalid'; problems: number }
   | { kind: 'workflow-not-started'; reason: string }

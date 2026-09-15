@@ -898,11 +898,14 @@ const de: Messages = {
     runtimeBusy:
       'Die Laufzeit ist gerade mit etwas anderem beschäftigt. Versuchen Sie es gleich noch einmal.',
     libraryBusy: 'Ihre Bibliothek ist beschäftigt. Versuchen Sie es gleich noch einmal.',
-    importInFlight: 'Ein Import wird gerade geschrieben. Das Fenster schließt sich, sobald er fertig ist.',
+    importInFlight:
+      'Ein Import wird gerade geschrieben. Das Fenster schließt sich, sobald er fertig ist.',
     chooserDidNotReturn:
       'Die Ordnerauswahl wurde ohne Antwort geschlossen. Es wurde nichts ausgewählt.',
     notAFolderOnThisMachine:
       'Was die Auswahl zurückgegeben hat, ist kein Ordner auf diesem Rechner.',
+    notAFileOnThisMachine: 'Das ist keine Datei auf diesem Rechner.',
+    fileUnusable: 'Diese Datei kann nicht verwendet werden: {reason}.',
     folderUnusable: 'Dieser Ordner kann nicht verwendet werden ({reason}).',
     notAProject: 'Das ist kein Encastra-Projekt. Der Name eines Projekts endet auf .encastra.',
     versionNotInProject:
@@ -914,6 +917,10 @@ const de: Messages = {
     workingFolder:
       'Encastra konnte für diesen Lauf keinen Arbeitsordner vorbereiten ({reason}). Es wurde nichts ausgeführt.',
     inputUnreadable: '{path} konnte nicht geöffnet werden ({reason}). Es wurde nichts ausgeführt.',
+    inputUnusable:
+      'Die Datei für {node}.{port} kann nicht verwendet werden: {reason}. Nichts wurde ausgeführt.',
+    inputNotChosen:
+      'Wählen Sie die Datei für {node}.{port} mit der Schaltfläche Auswählen, bevor Sie ausführen. Nichts wurde ausgeführt.',
     workflowAlreadyRunning:
       'Es läuft bereits ein Ablauf. Stoppen Sie ihn, bevor Sie einen weiteren starten.',
     workflowInvalid:

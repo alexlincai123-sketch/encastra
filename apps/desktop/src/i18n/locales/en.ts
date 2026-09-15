@@ -951,6 +951,8 @@ const en: Messages = {
     importInFlight: 'An import is being written. The window will close once it has finished.',
     chooserDidNotReturn: 'The folder chooser closed without answering. Nothing was chosen.',
     notAFolderOnThisMachine: 'What the chooser gave back is not a folder on this machine.',
+    notAFileOnThisMachine: 'That is not a file on this machine.',
+    fileUnusable: 'That file cannot be used: {reason}.',
     folderUnusable: 'That folder cannot be used ({reason}).',
     notAProject: 'That is not an Encastra project. A project’s name ends in .encastra.',
     versionNotInProject:
@@ -961,6 +963,9 @@ const en: Messages = {
     workingFolder:
       'Encastra could not prepare a working folder for this run ({reason}). Nothing ran.',
     inputUnreadable: '{path} could not be opened ({reason}). Nothing ran.',
+    inputUnusable: 'The file for {node}.{port} cannot be used: {reason}. Nothing ran.',
+    inputNotChosen:
+      'Choose the file for {node}.{port} with the Choose button before running. Nothing ran.',
     workflowAlreadyRunning: 'A workflow is already running. Stop it before starting another.',
     workflowInvalid: 'This workflow cannot run yet: {problems} thing(s) to fix first.',
     workflowNotStarted: 'The workflow could not be started ({reason}). Nothing ran.',

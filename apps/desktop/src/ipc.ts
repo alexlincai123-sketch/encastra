@@ -19,6 +19,8 @@ import type {
   About,
   ComponentManifest,
   EncastraGraph,
+  FilePurpose,
+  FolderPurpose,
   GrantSpec,
   InputSpec,
   Inspected,
@@ -40,8 +42,25 @@ export interface Ipc {
   listComponents(): Promise<ComponentManifest[]>;
   validateGraph(graph: EncastraGraph, inputs: InputSpec[]): Promise<Validation>;
   runGraph(graph: EncastraGraph, inputs: InputSpec[], grants: GrantSpec[]): Promise<RunResult>;
+  /**
+   * Opens the native file chooser for the one question a file answers: the value of a graph
+   * input.
+   *
+   * It takes no purpose because there is exactly one, and adding an argument nobody can vary
+   * would be ceremony. A second reason to pick a file adds the argument then, the way
+   * `pickFolder` has one. What matters is on the other side: the runtime records the file it
+   * handed back, and `run_graph`/`start_workflow` seed an input from nothing else.
+   */
   pickFile(): Promise<string | null>;
-  pickFolder(): Promise<string | null>;
+  /**
+   * Opens the native folder chooser to answer one particular question.
+   *
+   * `purpose` is required rather than optional, so a flow that forgets to say what it is
+   * choosing a folder for does not compile. The runtime records the folder against that
+   * purpose and nothing else: a folder picked to import a publication from is not a folder a
+   * component may be given, and the command that asks the wrong question refuses.
+   */
+  pickFolder(purpose: FolderPurpose): Promise<string | null>;
   pickProjectToOpen(): Promise<string | null>;
   pickProjectToSave(suggested: string): Promise<string | null>;
   saveProject(
@@ -152,9 +171,21 @@ class TauriIpc implements Ipc {
     return this.invoke<RunResult>('run_graph', { graph, inputs, grants });
   }
 
+  /**
+   * Choosing a file goes through the runtime, for the same reason choosing a folder does.
+   *
+   * This used to open the dialog plugin here and hand the path back as a string, and that
+   * string went straight into `inputs[].path` on the next run — where the runtime canonicalised
+   * it and imported the file into the scratch folder for the step wired to that port. The whole
+   * of the authority for reading somebody's file was a string produced on this side, which is
+   * indistinguishable from one a `.encastra` file supplied.
+   *
+   * `choose_file` opens the chooser on the privileged side and records what the operating system
+   * returned. A path this side merely *says* somebody picked no longer seeds anything.
+   */
   async pickFile(): Promise<string | null> {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const chosen = await open({ multiple: false, directory: false });
+    const purpose: FilePurpose = 'run-input';
+    const chosen = await this.invoke<string | null>('choose_file', { purpose });
     return typeof chosen === 'string' ? chosen : null;
   }
 
@@ -170,9 +201,13 @@ class TauriIpc implements Ipc {
    * `choose_folder` opens the chooser on the privileged side, so the runtime learns the path from
    * the operating system rather than from here, and refuses a folder grant it has no record of.
    * The editor cannot add to that record, which is the point.
+   *
+   * The record is of the folder *and* what it was chosen for. Passing the purpose is not a
+   * formality: a folder recorded under one purpose answers no other, so a flow that names the
+   * wrong one gets a chooser that satisfies nothing it then asks for.
    */
-  async pickFolder(): Promise<string | null> {
-    const chosen = await this.invoke<string | null>('choose_folder');
+  async pickFolder(purpose: FolderPurpose): Promise<string | null> {
+    const chosen = await this.invoke<string | null>('choose_folder', { purpose });
     return typeof chosen === 'string' ? chosen : null;
   }
 

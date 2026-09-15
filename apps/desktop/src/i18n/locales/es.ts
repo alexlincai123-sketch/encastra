@@ -890,6 +890,8 @@ const es: Messages = {
     importInFlight: 'Se está escribiendo una importación. La ventana se cerrará cuando termine.',
     chooserDidNotReturn: 'El selector de carpetas se cerró sin responder. No se eligió nada.',
     notAFolderOnThisMachine: 'Lo que devolvió el selector no es una carpeta de este equipo.',
+    notAFileOnThisMachine: 'Eso no es un archivo en este equipo.',
+    fileUnusable: 'Ese archivo no se puede usar: {reason}.',
     folderUnusable: 'Esa carpeta no se puede usar ({reason}).',
     notAProject:
       'Eso no es un proyecto de Encastra. El nombre de un proyecto termina en .encastra.',
@@ -901,6 +903,9 @@ const es: Messages = {
     workingFolder:
       'Encastra no pudo preparar una carpeta de trabajo para esta ejecución ({reason}). No se ejecutó nada.',
     inputUnreadable: 'No se pudo abrir {path} ({reason}). No se ejecutó nada.',
+    inputUnusable: 'El archivo de {node}.{port} no se puede usar: {reason}. No se ejecutó nada.',
+    inputNotChosen:
+      'Elige el archivo de {node}.{port} con el botón Elegir antes de ejecutar. No se ejecutó nada.',
     workflowAlreadyRunning: 'Ya hay un flujo en marcha. Deténlo antes de empezar otro.',
     workflowInvalid:
       'Este flujo todavía no puede ejecutarse: hay {problems} cosa(s) que corregir antes.',

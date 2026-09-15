@@ -37,26 +37,207 @@ pub mod error;
 
 use error::{AppError, GrantRefusal};
 
+/// What a folder was chosen *for*.
+///
+/// Consent is per question, not per folder. There are exactly four places in this application
+/// where somebody picks a folder, and each of them asks something different:
+///
+/// * [`FolderPurpose::PublishInto`] — "write a publication here" (`prepare_publication`);
+/// * [`FolderPurpose::ImportFrom`] — "read a publication out of here"
+///   (`inspect_publication`, `import_publication`);
+/// * [`FolderPurpose::GrantToComponent`] — "let this step in the workflow reach this folder"
+///   (`run_graph`, `start_workflow`);
+/// * [`FolderPurpose::ProjectsLocation`] — "this is where I keep my projects", a preference the
+///   editor stores and nothing on this side acts on.
+///
+/// The enum is closed on purpose: a purpose the editor invents does not deserialise, so the
+/// command fails before a chooser is ever opened. Adding a variant means adding the flow that
+/// needs it, which is the point — the list is the audit.
+///
+/// `ProjectsLocation` records a choice that gates nothing today. That is deliberate rather than
+/// dead: it is the flow that made the old single set wrong, because browsing for a projects
+/// folder in Settings used to silently make that folder grantable, publishable-into and
+/// importable-from. Recording it under its own name means it answers only its own question, and
+/// a future command that acts on that preference has a record to check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum FolderPurpose {
+    PublishInto,
+    ImportFrom,
+    GrantToComponent,
+    ProjectsLocation,
+}
+
+/// What a *file* was chosen for.
+///
+/// One question today, and the same shape as [`FolderPurpose`] so that a second one arrives as a
+/// variant rather than as a second mechanism. A file reaches the runtime in exactly one way: as
+/// the value for a graph input that nothing upstream produces, imported into the run's scratch
+/// folder where the step wired to that port can read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum FilePurpose {
+    RunInput,
+}
+
+/// Either kind of question, so one refusal can name whichever was asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Purpose {
+    Folder(FolderPurpose),
+    File(FilePurpose),
+}
+
+impl From<FolderPurpose> for Purpose {
+    fn from(purpose: FolderPurpose) -> Self {
+        Self::Folder(purpose)
+    }
+}
+
+impl From<FilePurpose> for Purpose {
+    fn from(purpose: FilePurpose) -> Self {
+        Self::File(purpose)
+    }
+}
+
+/// Why a folder or a file did not pass the consent check.
+///
+/// A value rather than a sentence, so the tests below assert on the refusal itself and not on
+/// English that somebody may improve. The two reasons are genuinely different and must not be
+/// collapsed: *unusable* is about the path (a drive root, a system tree, the startup folder,
+/// something that is not a folder — or, for a file, something that is not a file) and holds no
+/// matter who asked; *not chosen* is about the record, and is the whole of what this module adds.
+///
+/// At the command boundary it becomes the `AppError` variant for the question that was asked
+/// (`destination-not-chosen`, `input-not-chosen`, a `GrantRefusal` naming the node), so the
+/// interface writes the sentence in the reader's language; the import path keeps
+/// `ImportError::FolderNotChosen`, which the interface already matches on by `kind`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConsentError {
+    /// The path cannot be the scope of anything, whoever chose it.
+    NotUsable { reason: String },
+    /// Nobody chose this path, this session, for *this* question.
+    NotChosen { purpose: Purpose },
+}
+
+/// The one check. Every consuming command goes through this and none of them re-implements it.
+///
+/// Two steps, in this order and never the other way round:
+///
+/// 1. the folder is resolved by [`resolve_grant_directory`] — which canonicalises it, so `..`,
+///    a trailing separator, a verbatim `\\?\` spelling, a different case on a case-insensitive
+///    volume and a junction or symlink all collapse to the one real path — and refused outright
+///    if it is a root, a system tree or a startup folder;
+/// 2. the resolved path is looked up **paired with the purpose**. A folder chosen to import
+///    from is not a folder chosen to publish into, and the editor naming a different purpose
+///    than the one the chooser was opened with finds nothing.
+///
+/// Resolving first is what makes substitution useless: what is compared is never the string
+/// that arrived. Chosen `C:\a` and then asked about `C:\a\..\b`, the comparison is against
+/// `C:\b`, which nobody chose for anything.
+fn folder_chosen_for(
+    chosen: &BTreeSet<(FolderPurpose, PathBuf)>,
+    purpose: FolderPurpose,
+    folder: &Path,
+) -> Result<PathBuf, ConsentError> {
+    let resolved =
+        resolve_grant_directory(folder).map_err(|reason| ConsentError::NotUsable { reason })?;
+    if !chosen.contains(&(purpose, resolved.clone())) {
+        return Err(ConsentError::NotChosen {
+            purpose: purpose.into(),
+        });
+    }
+    Ok(resolved)
+}
+
+/// A path that is to be read as a file, resolved the way a folder is.
+///
+/// `canonicalize` is the whole of it, and it is doing more than making the string tidy: it
+/// follows every link in the path, collapses `..` and `.`, normalises the separators and — on a
+/// case-insensitive volume — returns the casing the filesystem actually holds. So a symlink whose
+/// name sits beside the chosen file and whose content is somewhere else resolves to *somewhere
+/// else*, and fails the comparison below for the honest reason.
+///
+/// Then it has to be a file. A directory passed where a file is expected would be read by
+/// `import_file` as something it is not, and a person who chose a file never chose a folder.
+///
+/// There is no deny-list here, unlike [`resolve_grant_directory`]. A folder grant is wide — it
+/// covers everything in the folder now and everything that arrives in it later — so refusing the
+/// system tree outright is worth the bluntness. A single file somebody picked by name in a native
+/// chooser is as narrow as a permission gets, and refusing one because of where it lives would be
+/// refusing a choice that was made rather than one that was smuggled.
+fn resolve_input_file(path: &Path) -> Result<PathBuf, ConsentError> {
+    let resolved = std::fs::canonicalize(path).map_err(|e| ConsentError::NotUsable {
+        reason: format!("that file could not be opened ({})", e.kind()),
+    })?;
+    if !resolved.is_file() {
+        return Err(ConsentError::NotUsable {
+            reason: "that is not a file".to_owned(),
+        });
+    }
+    Ok(resolved)
+}
+
+/// The same check as [`folder_chosen_for`], for the files a run is seeded with.
+///
+/// This is the half of the boundary that was missing. `inputs[].path` arrived from the WebView as
+/// a string and was imported on that authority alone, so a renderer that had been through a
+/// debugger — or simply a project that put a path where the editor would read one — could have a
+/// step handed any file this account can read. The folder chooser moved to this side in an
+/// earlier change; the file chooser had not, and the record it should have been checked against
+/// did not exist.
+fn input_file_chosen(
+    chosen: &BTreeSet<(FilePurpose, PathBuf)>,
+    path: &Path,
+) -> Result<PathBuf, ConsentError> {
+    let resolved = resolve_input_file(path)?;
+    if !chosen.contains(&(FilePurpose::RunInput, resolved.clone())) {
+        return Err(ConsentError::NotChosen {
+            purpose: FilePurpose::RunInput.into(),
+        });
+    }
+    Ok(resolved)
+}
+
 /// Loaded once at start-up. Building the registry per call would let two calls disagree about
 /// what is installed.
 struct Runtime {
     registry: InMemoryRegistry,
     components: CoreComponentSet,
     triggers: TriggerSet,
-    /// Folders the person actually chose in a native chooser, this session.
+    /// Folders the person actually chose in a native chooser, this session, **and what for**.
     ///
     /// The one piece of state that makes a folder grant mean anything. A grant arrives from the
     /// webview carrying a path, and until this existed the runtime had no way to tell a path a
     /// person picked from a path a project file supplied — and a project file is written by
     /// whoever sent it. The prompt would say the truth about a folder nobody chose.
     ///
+    /// The purpose is half of the record because consent is not a property of a folder, it is a
+    /// property of a folder *and* a question. This used to be a bare set of paths, so a folder
+    /// picked to import a publication *from* also answered "may a component write here" and
+    /// "may a publication be written into this" — three different sentences, one of which the
+    /// person read. Recording the pair means an answer can only be used for the question it was
+    /// an answer to.
+    ///
     /// Populated only by [`choose_folder`], which opens the chooser here rather than in the
-    /// editor, so the path is known to the privileged side before it is ever a grant.
+    /// editor, so the path is known to the privileged side before it is ever a grant. There is
+    /// no command that takes a path and adds it: the editor can ask for the chooser and can ask
+    /// for a purpose, and neither of those is a path.
     ///
     /// Canonical paths, so what is compared later is what was compared here. Per session, not
     /// persisted: a remembered choice that survived a restart would be a grant nobody made
-    /// today, sitting in a file the editor could read.
-    chosen_folders: Mutex<BTreeSet<PathBuf>>,
+    /// today, sitting in a file the editor could read. Nothing here is ever written to disk —
+    /// `a_fresh_runtime_remembers_nothing` is the test that says so.
+    chosen_folders: Mutex<BTreeSet<(FolderPurpose, PathBuf)>>,
+    /// Files the person actually chose in a native chooser, this session, and what for.
+    ///
+    /// The same record as [`Runtime::chosen_folders`] and for the same reason, one boundary
+    /// later: a file supplied for a graph input used to be whatever string the WebView named,
+    /// canonicalised and imported into the run's scratch folder where the step wired to that
+    /// port reads it. That is a read of any file this account can read, on the renderer's word
+    /// alone — the shape the folder side had before `choose_folder` existed.
+    ///
+    /// Populated only by [`choose_file`]. Canonical paths, per session, never written to disk.
+    chosen_files: Mutex<BTreeSet<(FilePurpose, PathBuf)>>,
     /// The workflow currently running, if any. One at a time: two workflows writing into the
     /// same folders at once is a surprise nobody asked for, and the editor shows one graph.
     running: Mutex<Option<Running>>,
@@ -166,12 +347,22 @@ enum RunResult {
 /// person picking something absurd is told immediately instead of finding out when a run is
 /// refused.
 ///
+/// `purpose` says which question the chooser is being opened to answer, and the record is of the
+/// pair. It arrives from the editor like everything else, and the editor is free to lie about
+/// it — but lying costs it something rather than gaining it something: a folder recorded under
+/// the wrong purpose satisfies the wrong check, so the flow the person is actually in refuses.
+/// The editor cannot name a purpose the person's own chooser did not serve *and* get the folder
+/// past the command that matters, because a purpose it invents fails to deserialise and a
+/// purpose it swaps records the folder somewhere the swapped-to flow is the only thing that
+/// reads. What it still cannot do at all is put a path into the record without a chooser.
+///
 /// Async so it runs off the main thread; the chooser is modal and blocking it would hang the
 /// window it is modal to.
 #[tauri::command]
 async fn choose_folder(
     app: tauri::AppHandle,
     state: tauri::State<'_, Runtime>,
+    purpose: FolderPurpose,
 ) -> Result<Option<String>, AppError> {
     use tauri_plugin_dialog::DialogExt;
 
@@ -196,13 +387,77 @@ async fn choose_folder(
         .chosen_folders
         .lock()
         .map_err(|_| AppError::RuntimeBusy)?
-        .insert(resolved.clone());
+        .insert((purpose, resolved.clone()));
 
     // The resolved path is what is returned — without its verbatim `\\?\` prefix — so the string
     // the editor shows and later sends back as a grant resolves to exactly what this side
     // recorded. Returning what the chooser gave and recording something else would put the
     // comparison back where it started.
     Ok(Some(for_display(&resolved)))
+}
+
+/// Opens the native file chooser, and remembers what came back.
+///
+/// [`choose_folder`] moved the folder chooser to this side so that a folder grant could mean
+/// something. This does the same for the file a run is seeded with, and closes the half of the
+/// boundary that was left open: `inputs[].path` used to be a string the editor named, imported
+/// into the run's scratch folder on that authority alone. A renderer that had been through a
+/// debugger could hand a step any file this account can read, and so could a stale one asked to
+/// run a graph somebody else wrote.
+///
+/// What the editor gets back is the path, for the field it shows. What the runtime keeps is the
+/// same path canonicalised, paired with the purpose — and that record is the only thing
+/// [`seed_for`] will act on. There is no command that takes a path and adds it.
+///
+/// Async for the same reason: the chooser is modal, and blocking the main thread would hang the
+/// window it is modal to.
+#[tauri::command]
+async fn choose_file(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Runtime>,
+    purpose: FilePurpose,
+) -> Result<Option<String>, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let handle = app.clone();
+    let picked =
+        tauri::async_runtime::spawn_blocking(move || handle.dialog().file().blocking_pick_file())
+            .await
+            .map_err(|_| AppError::ChooserDidNotReturn)?;
+
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+
+    let path = picked
+        .into_path()
+        .map_err(|_| AppError::NotAFileOnThisMachine)?;
+
+    let resolved = resolve_input_file(&path).map_err(|why| match why {
+        ConsentError::NotUsable { reason } => AppError::FileUnusable { reason },
+        ConsentError::NotChosen { .. } => AppError::NotAFileOnThisMachine,
+    })?;
+
+    state
+        .chosen_files
+        .lock()
+        .map_err(|_| AppError::RuntimeBusy)?
+        .insert((purpose, resolved.clone()));
+
+    // Shown without the verbatim prefix, and resolved on the way back in — the same round trip
+    // `choose_folder` documents, for the same reason.
+    Ok(Some(for_display(&resolved)))
+}
+
+/// The files chosen this session, each tagged with what it was chosen for.
+fn chosen_files(
+    state: &tauri::State<'_, Runtime>,
+) -> Result<BTreeSet<(FilePurpose, PathBuf)>, AppError> {
+    state
+        .chosen_files
+        .lock()
+        .map(|set| set.clone())
+        .map_err(|_| AppError::RuntimeBusy)
 }
 
 #[tauri::command]
@@ -258,7 +513,7 @@ fn run_graph(
         }
     })?;
 
-    let seed = seed_for(&mut broker, &inputs)?;
+    let seed = seed_for(&mut broker, &inputs, &chosen_files(&state)?)?;
 
     let result = match run_seeded(
         &graph,
@@ -638,9 +893,11 @@ fn announce(app: &tauri::AppHandle, status: Status) {
 /// * a folder is resolved and sanity-checked before it becomes a scope, so "the user picked a
 ///   folder" cannot arrive as "the user picked the C drive".
 ///
-/// * a folder is refused unless the person chose it in the native chooser this session, which
-///   is what [`choose_folder`] records — a path the editor merely *says* somebody picked is a
-///   path a project file could have supplied.
+/// * a folder is refused unless the person chose it in the native chooser this session **to
+///   give to a component**, which is what [`choose_folder`] records under
+///   [`FolderPurpose::GrantToComponent`] — a path the editor merely *says* somebody picked is a
+///   path a project file could have supplied, and a path picked to answer a different question
+///   is an answer to a different question.
 ///
 /// A refused grant is dropped rather than failing the run, and the reason is returned alongside
 /// so the caller can say something useful. The component then asks the broker for the capability,
@@ -650,7 +907,7 @@ fn grant_set(
     graph: &Graph,
     registry: &InMemoryRegistry,
     grants: &[GrantSpec],
-    chosen_folders: &BTreeSet<PathBuf>,
+    chosen_folders: &BTreeSet<(FolderPurpose, PathBuf)>,
 ) -> (GrantSet, Vec<GrantRefusal>) {
     let mut set = GrantSet::new();
     let mut refused: Vec<GrantRefusal> = Vec::new();
@@ -676,23 +933,29 @@ fn grant_set(
 
         let scope = match (&grant.folder, &grant.hosts) {
             (Some(folder), _) => {
-                let resolved = match resolve_grant_directory(Path::new(folder)) {
-                    Ok(resolved) => resolved,
-                    Err(reason) => {
+                match folder_chosen_for(
+                    chosen_folders,
+                    FolderPurpose::GrantToComponent,
+                    Path::new(folder),
+                ) {
+                    Ok(resolved) => GrantScope::Directory(resolved),
+                    // The node is named because a run can carry several grants and the person
+                    // has to know which row of the dialog this is about. The folder is not, for
+                    // the reason every refusal in this file leaves it out.
+                    Err(ConsentError::NotUsable { reason }) => {
                         refused.push(GrantRefusal::FolderUnusable {
                             node: grant.node.clone(),
                             reason,
                         });
                         continue;
                     }
-                };
-                if !chosen_folders.contains(&resolved) {
-                    refused.push(GrantRefusal::FolderNotChosen {
-                        node: grant.node.clone(),
-                    });
-                    continue;
+                    Err(ConsentError::NotChosen { .. }) => {
+                        refused.push(GrantRefusal::FolderNotChosen {
+                            node: grant.node.clone(),
+                        });
+                        continue;
+                    }
                 }
-                GrantScope::Directory(resolved)
             }
             (None, Some(hosts)) => GrantScope::HttpHosts(hosts.clone()),
             (None, None) => GrantScope::Allowed,
@@ -709,8 +972,14 @@ fn grant_set(
     (set, refused)
 }
 
-/// The folders chosen this session, as the grant builder needs them.
-fn chosen_folders(state: &tauri::State<'_, Runtime>) -> Result<BTreeSet<PathBuf>, AppError> {
+/// The folders chosen this session, each tagged with what it was chosen for.
+///
+/// Purpose-tagged rather than a bare set of paths: every caller of this is about to ask a
+/// specific question, and handing them the paths alone would let a folder answer a question
+/// nobody put to the person. [`folder_chosen_for`] is what turns this into an answer.
+fn chosen_folders(
+    state: &tauri::State<'_, Runtime>,
+) -> Result<BTreeSet<(FolderPurpose, PathBuf)>, AppError> {
     state
         .chosen_folders
         .lock()
@@ -718,17 +987,35 @@ fn chosen_folders(state: &tauri::State<'_, Runtime>) -> Result<BTreeSet<PathBuf>
         .map_err(|_| AppError::RuntimeBusy)
 }
 
+/// Turns the values the application supplies into handles the graph can consume.
+///
+/// Every path here is checked against the record of files the person chose in the native chooser
+/// this session, for exactly the reason a folder grant is: a path in an `InputSpec` arrives from
+/// the WebView, and a string from the WebView is not evidence that anybody picked anything. A
+/// file that was never chosen is refused and the run does not start — the refusal comes before
+/// the import, so nothing is read and nothing is copied into the scratch folder.
+///
+/// The refusal names the rule and not the path. A message quoting the path would be a way to ask
+/// this command whether a file exists, one guess at a time, and the answer would be in the logs.
 fn seed_for(
     broker: &mut Broker,
     inputs: &[InputSpec],
+    chosen: &BTreeSet<(FilePurpose, PathBuf)>,
 ) -> Result<BTreeMap<PortRef, Value>, AppError> {
     let mut seed = BTreeMap::new();
     for input in inputs {
-        let path = PathBuf::from(&input.path);
-        let absolute = std::fs::canonicalize(&path).map_err(|e| AppError::InputUnreadable {
-            path: path.display().to_string(),
-            reason: e.kind().to_string(),
-        })?;
+        let absolute =
+            input_file_chosen(chosen, Path::new(&input.path)).map_err(|why| match why {
+                ConsentError::NotUsable { reason } => AppError::InputUnusable {
+                    node: input.node.clone(),
+                    port: input.port.clone(),
+                    reason,
+                },
+                ConsentError::NotChosen { .. } => AppError::InputNotChosen {
+                    node: input.node.clone(),
+                    port: input.port.clone(),
+                },
+            })?;
         let kind = kind_for(&absolute);
         let handle = broker.import_file(absolute, kind);
         seed.insert(input.port_ref(), Value::Handle(handle));
@@ -777,7 +1064,7 @@ fn start_workflow(
         }
     })?;
 
-    let seed = seed_for(&mut broker, &inputs)?;
+    let seed = seed_for(&mut broker, &inputs, &chosen_files(&state)?)?;
 
     let session = Session::start(
         graph.clone(),
@@ -1039,15 +1326,21 @@ fn prepare_publication(
         encastra_core::journal::now_ms(),
     )?;
 
-    // The destination is resolved and has to be a folder the person chose in the native chooser,
-    // for the same reason a folder grant does: `into` arrives as a string from the webview, and a
-    // string from the webview is not evidence that anybody picked anything. The Publish panel
-    // already opens the chooser, so this costs a legitimate flow nothing.
-    let destination = resolve_grant_directory(Path::new(&into))
-        .map_err(|reason| AppError::FolderUnusable { reason })?;
-    if !chosen_folders(&state)?.contains(&destination) {
-        return Err(AppError::DestinationNotChosen);
-    }
+    // The destination is resolved and has to be a folder the person chose in the native chooser
+    // *to publish into*, for the same reason a folder grant does: `into` arrives as a string from
+    // the webview, and a string from the webview is not evidence that anybody picked anything.
+    // The Publish panel already opens the chooser with this purpose, so this costs a legitimate
+    // flow nothing — and a folder somebody picked to import a publication *from* does not become
+    // somewhere this command may write, which it used to.
+    let destination = folder_chosen_for(
+        &chosen_folders(&state)?,
+        FolderPurpose::PublishInto,
+        Path::new(&into),
+    )
+    .map_err(|why| match why {
+        ConsentError::NotUsable { reason } => AppError::FolderUnusable { reason },
+        ConsentError::NotChosen { .. } => AppError::DestinationNotChosen,
+    })?;
 
     // One folder per version, named after what is in it, so a second version does not land on
     // top of the first.
@@ -1320,22 +1613,27 @@ fn library_id(text: &str) -> String {
 /// crate's questions to answer, and it refuses each of them by name rather than by a message
 /// this file would have to keep in step.
 /// The source folder of a publication has to be one the person picked in the native chooser
-/// this session — the same rule a folder grant follows, for the same reason: `folder` arrives
-/// from the webview as a string, and a string is not a decision. The crate then refuses links,
-/// non-folders and everything else about the folder's contents on its own.
+/// this session **to import from** — the same rule a folder grant follows, for the same reason:
+/// `folder` arrives from the webview as a string, and a string is not a decision. A folder
+/// picked to publish into, or browsed for in Settings, is not an answer to "read a publication
+/// out of here" and no longer counts as one. The crate then refuses links, non-folders and
+/// everything else about the folder's contents on its own.
 fn chosen_publication_folder(
     state: &tauri::State<'_, Runtime>,
     folder: &str,
 ) -> Result<PathBuf, ImportError> {
-    let resolved =
-        resolve_grant_directory(Path::new(folder)).map_err(|_| ImportError::NotAFolder)?;
     let chosen = chosen_folders(state).map_err(|e| ImportError::Io {
         reason: e.to_string(),
     })?;
-    if !chosen.contains(&resolved) {
-        return Err(ImportError::FolderNotChosen);
-    }
-    Ok(resolved)
+    folder_chosen_for(&chosen, FolderPurpose::ImportFrom, Path::new(folder)).map_err(|why| {
+        match why {
+            // `NotAFolder` rather than the reason: this is the vocabulary the interface already
+            // matches on, and the reasons `resolve_grant_directory` gives — a root, a system
+            // tree — are all true of a path that is not a publication folder.
+            ConsentError::NotUsable { .. } => ImportError::NotAFolder,
+            ConsentError::NotChosen { .. } => ImportError::FolderNotChosen,
+        }
+    })
 }
 
 #[tauri::command]
@@ -1554,6 +1852,7 @@ pub fn run() {
                 triggers: installed.triggers,
                 running: Mutex::new(None),
                 chosen_folders: Mutex::new(BTreeSet::new()),
+                chosen_files: Mutex::new(BTreeSet::new()),
                 library: LibraryHandle::open(library_root),
                 // Nothing has been edited yet, nothing is being imported, and nobody has
                 // decided to close anything.
@@ -1565,6 +1864,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             choose_folder,
+            choose_file,
             list_components,
             type_graph,
             validate_graph,
@@ -1730,14 +2030,24 @@ mod tests {
         path
     }
 
+    /// The record [`choose_folder`] would have left after somebody picked `dir` for `purpose`.
+    ///
+    /// Built the same way the command builds it — resolved, then paired — so a test that passes
+    /// here is a test about the real record and not about a shape only the tests use.
+    fn chosen_for(purpose: FolderPurpose, dir: &Path) -> BTreeSet<(FolderPurpose, PathBuf)> {
+        BTreeSet::from([(
+            purpose,
+            resolve_grant_directory(dir).expect("the fixture folder must be usable"),
+        )])
+    }
+
     #[test]
     fn the_fixture_grants_when_the_folder_was_actually_chosen() {
         // The control. Every refusal below has to be about the thing it names, and that argument
         // only holds if the same shapes are admitted when the condition is met.
         let dir = temp_dir("chosen");
         let (graph, registry) = fixture();
-        let resolved = std::fs::canonicalize(&dir).unwrap();
-        let chosen = BTreeSet::from([resolved.clone()]);
+        let chosen = chosen_for(FolderPurpose::GrantToComponent, &dir);
 
         let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&dir)], &chosen);
 
@@ -1770,7 +2080,7 @@ mod tests {
         let chosen_dir = temp_dir("a");
         let other_dir = temp_dir("b");
         let (graph, registry) = fixture();
-        let chosen = BTreeSet::from([std::fs::canonicalize(&chosen_dir).unwrap()]);
+        let chosen = chosen_for(FolderPurpose::GrantToComponent, &chosen_dir);
 
         let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&other_dir)], &chosen);
 
@@ -1780,6 +2090,694 @@ mod tests {
         let _ = std::fs::remove_dir_all(&other_dir);
     }
 
+    // --- consent is per purpose ---------------------------------------------------------
+    //
+    // The record used to be a bare set of paths, so "I picked this folder to import a
+    // publication from" also answered "may this component write here" and "may a publication be
+    // written into this". Three sentences, one of which the person read. Everything below is
+    // about the pair, and each test names the substitution it refuses.
+
+    #[test]
+    fn a_folder_chosen_for_one_purpose_answers_only_that_purpose() {
+        // The matrix, written out rather than argued about: for every purpose, the folder
+        // recorded under it passes that one check and fails the other three.
+        let dir = temp_dir("purpose-matrix");
+        let all = [
+            FolderPurpose::PublishInto,
+            FolderPurpose::ImportFrom,
+            FolderPurpose::GrantToComponent,
+            FolderPurpose::ProjectsLocation,
+        ];
+
+        for recorded in all {
+            let chosen = chosen_for(recorded, &dir);
+            for asked in all {
+                let outcome = folder_chosen_for(&chosen, asked, &dir);
+                if asked == recorded {
+                    assert!(
+                        outcome.is_ok(),
+                        "{recorded:?} must answer its own question, and did not"
+                    );
+                } else {
+                    assert_eq!(
+                        outcome,
+                        Err(ConsentError::NotChosen {
+                            purpose: asked.into()
+                        }),
+                        "a folder chosen for {recorded:?} must not answer {asked:?}"
+                    );
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_chosen_to_import_from_is_not_a_folder_a_component_may_write_into() {
+        // The finding, in the shape it actually takes: Import opens the chooser, the person
+        // picks a folder to read a publication out of, and the graph on the canvas has a Save
+        // step configured — by a project file somebody sent — with that same folder in it.
+        // Under one shared set, clicking Allow granted it.
+        let dir = temp_dir("import-not-grant");
+        let (graph, registry) = fixture();
+        let chosen = chosen_for(FolderPurpose::ImportFrom, &dir);
+
+        let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&dir)], &chosen);
+
+        assert!(!set.has(&NodeId("save".into()), "fs.write"));
+        assert_eq!(refused.len(), 1);
+        assert!(
+            matches!(refused[0], GrantRefusal::FolderNotChosen { .. }),
+            "{:?}",
+            refused[0]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_chosen_to_publish_into_is_not_a_folder_to_import_from() {
+        // The other direction, and the one that reaches a different command: Publish records a
+        // destination, and `inspect_publication`/`import_publication` must not read from it on
+        // the strength of that. The typed refusal is what the interface matches on.
+        let dir = temp_dir("publish-not-import");
+        let chosen = chosen_for(FolderPurpose::PublishInto, &dir);
+
+        assert_eq!(
+            folder_chosen_for(&chosen, FolderPurpose::ImportFrom, &dir),
+            Err(ConsentError::NotChosen {
+                purpose: FolderPurpose::ImportFrom.into()
+            })
+        );
+        // And the shape the command turns that into — `folder-not-chosen` on the wire, which
+        // `library.ts` already has a sentence for in six languages.
+        assert_eq!(
+            match folder_chosen_for(&chosen, FolderPurpose::ImportFrom, &dir) {
+                Err(ConsentError::NotChosen { .. }) => ImportError::FolderNotChosen,
+                other => panic!("expected a refusal about the record, got {other:?}"),
+            },
+            ImportError::FolderNotChosen
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_purpose_the_editor_invents_for_itself_finds_nothing() {
+        // The forged-purpose case. The editor is the one that names the purpose, so it can
+        // name one the chooser was never opened with — and that is the whole of what it gains:
+        // a lookup that finds nothing. Naming a purpose is not the same as having an entry
+        // under it, and there is no command that puts one there.
+        let dir = temp_dir("forged-purpose");
+        // Nothing was ever chosen. Every purpose the editor could name fails alike.
+        let empty: BTreeSet<(FolderPurpose, PathBuf)> = BTreeSet::new();
+        for asked in [
+            FolderPurpose::PublishInto,
+            FolderPurpose::ImportFrom,
+            FolderPurpose::GrantToComponent,
+            FolderPurpose::ProjectsLocation,
+        ] {
+            assert_eq!(
+                folder_chosen_for(&empty, asked, &dir),
+                Err(ConsentError::NotChosen {
+                    purpose: asked.into()
+                })
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_purpose_this_build_does_not_have_is_not_a_purpose() {
+        // The wire names, pinned. The editor sends one of these four strings; anything else
+        // fails to deserialise before a chooser is opened, which is why the enum is closed.
+        // `apps/desktop/test/consent.test.ts` asserts the TypeScript union matches this list.
+        for (wire, purpose) in [
+            ("publish-into", FolderPurpose::PublishInto),
+            ("import-from", FolderPurpose::ImportFrom),
+            ("grant-to-component", FolderPurpose::GrantToComponent),
+            ("projects-location", FolderPurpose::ProjectsLocation),
+        ] {
+            let json = format!("\"{wire}\"");
+            assert_eq!(
+                serde_json::from_str::<FolderPurpose>(&json).expect("a purpose this build has"),
+                purpose
+            );
+            assert_eq!(serde_json::to_string(&purpose).unwrap(), json);
+        }
+        assert!(serde_json::from_str::<FolderPurpose>("\"anything\"").is_err());
+        assert!(serde_json::from_str::<FolderPurpose>("\"PublishInto\"").is_err());
+    }
+
+    // --- the path that arrives is never the path that is compared ----------------------------
+
+    #[test]
+    fn a_path_that_walks_out_of_the_chosen_folder_is_refused() {
+        // `..` is the cheapest substitution there is, and it costs nothing to try: the editor
+        // sends the folder it was told about with a tail on it. What is compared is the
+        // canonical path, so the comparison is against the folder it walks *to*.
+        let base = temp_dir("traversal");
+        let chosen_dir = base.join("chosen");
+        let elsewhere = base.join("elsewhere");
+        std::fs::create_dir_all(&chosen_dir).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let chosen = chosen_for(FolderPurpose::GrantToComponent, &chosen_dir);
+
+        let sideways = chosen_dir.join("..").join("elsewhere");
+        assert_eq!(
+            folder_chosen_for(&chosen, FolderPurpose::GrantToComponent, &sideways),
+            Err(ConsentError::NotChosen {
+                purpose: FolderPurpose::GrantToComponent.into()
+            })
+        );
+
+        // And the loop that comes back to where it started is the folder that was chosen, so
+        // the rule is about where a path resolves and not about how it is spelled.
+        let circular = chosen_dir.join("..").join("chosen");
+        assert!(folder_chosen_for(&chosen, FolderPurpose::GrantToComponent, &circular).is_ok());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_folder_spelled_differently_is_still_the_same_folder() {
+        // Trailing separator, `.` in the middle, and — on Windows — a different case and the
+        // verbatim `\\?\` form. Every one of these resolves to the folder that was chosen, so
+        // every one of them is admitted. Refusing them would be a chooser somebody used and a
+        // flow that still said no.
+        let dir = temp_dir("spellings");
+        let chosen = chosen_for(FolderPurpose::PublishInto, &dir);
+        let text = dir.to_string_lossy().into_owned();
+
+        let mut spellings = vec![
+            format!("{text}{}", std::path::MAIN_SEPARATOR),
+            format!("{text}{}.", std::path::MAIN_SEPARATOR),
+        ];
+        if cfg!(windows) {
+            // NTFS and ReFS are case-insensitive, so this *is* the same folder and the
+            // canonical form proves it. On a case-sensitive volume it would be a different
+            // folder, and refusing it would be correct — which is why this is behind the cfg.
+            spellings.push(text.to_uppercase());
+            spellings.push(
+                resolve_grant_directory(&dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+
+        for spelling in spellings {
+            assert!(
+                folder_chosen_for(&chosen, FolderPurpose::PublishInto, Path::new(&spelling))
+                    .is_ok(),
+                "{spelling} is the folder that was chosen, spelled differently"
+            );
+        }
+
+        // A sibling whose name merely starts the same way is not it. Prefix matching would
+        // have admitted this one.
+        let sibling = PathBuf::from(format!("{text}-2"));
+        std::fs::create_dir_all(&sibling).unwrap();
+        assert_eq!(
+            folder_chosen_for(&chosen, FolderPurpose::PublishInto, &sibling),
+            Err(ConsentError::NotChosen {
+                purpose: FolderPurpose::PublishInto.into()
+            })
+        );
+
+        let _ = std::fs::remove_dir_all(&sibling);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A directory junction, by whichever means this machine allows.
+    ///
+    /// `symlink_dir` needs `SeCreateSymbolicLinkPrivilege` or Developer Mode; `mklink /J`
+    /// makes a junction, which an ordinary account may create. Returns whether one exists at
+    /// `link` afterwards, so the caller can say plainly that it could not build the fixture
+    /// rather than passing on having tested nothing.
+    #[cfg(windows)]
+    fn make_directory_link(target: &Path, link: &Path) -> bool {
+        if std::os::windows::fs::symlink_dir(target, link).is_ok() {
+            return true;
+        }
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output();
+        std::fs::symlink_metadata(link).is_ok()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_is_whatever_it_points_at_and_nothing_else() {
+        // A junction reads as a directory and points anywhere at all. The two halves of the
+        // property: one pointing somewhere else is not the chosen folder however it is spelled,
+        // and one pointing at the chosen folder *is* the chosen folder, because what is
+        // compared is what the path resolves to.
+        let base = temp_dir("junction");
+        let chosen_dir = base.join("chosen");
+        let elsewhere = base.join("elsewhere");
+        std::fs::create_dir_all(&chosen_dir).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+
+        let decoy = base.join("decoy-link");
+        if !make_directory_link(&elsewhere, &decoy) {
+            // Neither a symlink nor a junction could be created here. The property still holds;
+            // this run cannot build the fixture that demonstrates it, and says so rather than
+            // reporting a pass it did not earn.
+            eprintln!("skipped: this machine would not create a directory link");
+            let _ = std::fs::remove_dir_all(&base);
+            return;
+        }
+
+        let chosen = chosen_for(FolderPurpose::GrantToComponent, &chosen_dir);
+        assert_eq!(
+            folder_chosen_for(&chosen, FolderPurpose::GrantToComponent, &decoy),
+            Err(ConsentError::NotChosen {
+                purpose: FolderPurpose::GrantToComponent.into()
+            }),
+            "a link to somewhere else is not the folder that was chosen"
+        );
+
+        // And through the grant builder, which is the path a run actually takes.
+        let (graph, registry) = fixture();
+        let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&decoy)], &chosen);
+        assert!(!set.has(&NodeId("save".into()), "fs.write"));
+        assert_eq!(refused.len(), 1);
+
+        let honest = base.join("honest-link");
+        if make_directory_link(&chosen_dir, &honest) {
+            assert!(
+                folder_chosen_for(&chosen, FolderPurpose::GrantToComponent, &honest).is_ok(),
+                "a link to the chosen folder resolves to the chosen folder"
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // --- the file a run is seeded with -------------------------------------------------------
+    //
+    // `inputs[].path` was the last path the WebView named freely: canonicalised and imported into
+    // the run's scratch folder, where the step wired to that port reads it. That is a read of any
+    // file this account can read, on the renderer's word alone. `choose_file` records what the
+    // chooser returned and `seed_for` acts on nothing else.
+
+    fn input(path: &Path) -> InputSpec {
+        InputSpec {
+            node: "save".into(),
+            port: "in".into(),
+            path: path.to_string_lossy().into_owned(),
+        }
+    }
+
+    fn chosen_file(path: &Path) -> BTreeSet<(FilePurpose, PathBuf)> {
+        BTreeSet::from([(
+            FilePurpose::RunInput,
+            resolve_input_file(path).expect("the fixture file must be usable"),
+        )])
+    }
+
+    /// A broker with no grants at all, which is all `seed_for` needs: importing an input is not
+    /// itself a granted capability, which is exactly why the gate has to be in front of it.
+    fn broker_in(scratch: &Path) -> Broker {
+        Broker::new(scratch.to_path_buf(), GrantSet::new()).expect("a working folder")
+    }
+
+    #[test]
+    fn a_file_that_was_chosen_is_seeded() {
+        // The control, for the same reason as the folder one: every refusal below has to be about
+        // the thing it names, and that only holds if the admitted case is genuinely admitted.
+        let base = temp_dir("seed-ok");
+        let file = base.join("holiday.png");
+        std::fs::write(&file, b"not really a png").unwrap();
+        let mut broker = broker_in(&base.join("run"));
+
+        let seed = seed_for(&mut broker, &[input(&file)], &chosen_file(&file))
+            .expect("a file the person chose is seeded");
+
+        assert_eq!(seed.len(), 1);
+        let handle = seed
+            .get(&PortRef {
+                node: NodeId("save".into()),
+                port: "in".into(),
+            })
+            .expect("the port it was supplied for");
+        assert!(matches!(handle, Value::Handle(_)));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_file_nobody_chose_is_never_read() {
+        // The finding. The editor names a path; before this, that was the whole of the
+        // authority needed to put the file in front of a component.
+        let base = temp_dir("seed-refused");
+        let secret = base.join("passwords.txt");
+        std::fs::write(&secret, b"not yours").unwrap();
+        let mut broker = broker_in(&base.join("run"));
+
+        let refused = seed_for(&mut broker, &[input(&secret)], &BTreeSet::new())
+            .expect_err("a file nobody chose must not be seeded");
+
+        // The rule, not the path: a message quoting the path would answer "does this file
+        // exist" one guess at a time, into the logs.
+        assert!(
+            matches!(refused, AppError::InputNotChosen { .. }),
+            "{refused}"
+        );
+        assert!(!refused.to_string().contains("passwords"), "{refused}");
+        assert!(
+            !serde_json::to_string(&refused)
+                .unwrap()
+                .contains("passwords"),
+            "the serialised refusal must not carry the path either"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn choosing_one_file_does_not_seed_a_different_one() {
+        let base = temp_dir("seed-other");
+        let chosen = base.join("mine.txt");
+        let other = base.join("theirs.txt");
+        std::fs::write(&chosen, b"mine").unwrap();
+        std::fs::write(&other, b"theirs").unwrap();
+        let mut broker = broker_in(&base.join("run"));
+
+        assert!(
+            seed_for(&mut broker, &[input(&other)], &chosen_file(&chosen)).is_err(),
+            "the record is of files, not of the act of having chosen at all"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_path_that_came_out_of_a_file_is_not_a_choice_somebody_made() {
+        // The pre-seeding case, which is what a stored path would be. A `.encastra` does not hold
+        // `inputs` today — `Project` has a manifest, a graph, a lockfile, variables and history,
+        // and the editor clears the supplied inputs when one is opened — but this must not rest
+        // on the editor doing that, because the command is reachable without it. A path that
+        // arrives already filled in is refused until somebody picks it in the chooser, and then
+        // the same path is fine. Displayed, not honoured.
+        let base = temp_dir("pre-seeded");
+        let file = base.join("from a project file.csv");
+        std::fs::write(&file, b"a,b\n1,2\n").unwrap();
+        let mut broker = broker_in(&base.join("run"));
+
+        assert!(
+            seed_for(&mut broker, &[input(&file)], &BTreeSet::new()).is_err(),
+            "a path a project supplied is a string, not a decision"
+        );
+        assert!(
+            seed_for(&mut broker, &[input(&file)], &chosen_file(&file)).is_ok(),
+            "and the very same path is fine once somebody has actually chosen it"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn one_unchosen_input_refuses_the_whole_run() {
+        // Partial seeding would be the worst outcome: a run that started, read one file it was
+        // allowed and one it was not, and reported neither clearly. The refusal is before the
+        // import, so nothing is copied into the scratch folder at all.
+        let base = temp_dir("seed-mixed");
+        let ok = base.join("ok.txt");
+        let not = base.join("not.txt");
+        std::fs::write(&ok, b"ok").unwrap();
+        std::fs::write(&not, b"no").unwrap();
+        let scratch = base.join("run");
+        let mut broker = broker_in(&scratch);
+
+        let mut inputs = vec![input(&ok), input(&not)];
+        inputs[1].port = "other".into();
+
+        assert!(seed_for(&mut broker, &inputs, &chosen_file(&ok)).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_file_spelled_differently_is_still_the_same_file() {
+        let base = temp_dir("file-spellings");
+        let file = base.join("photo.png");
+        std::fs::write(&file, b"x").unwrap();
+        let chosen = chosen_file(&file);
+        let text = file.to_string_lossy().into_owned();
+
+        let mut spellings = vec![
+            base.join("..")
+                .join(base.file_name().unwrap())
+                .join("photo.png")
+                .to_string_lossy()
+                .into_owned(),
+            base.join(".")
+                .join("photo.png")
+                .to_string_lossy()
+                .into_owned(),
+        ];
+        if cfg!(windows) {
+            spellings.push(text.to_uppercase());
+            spellings.push(
+                resolve_input_file(&file)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+
+        for spelling in spellings {
+            assert!(
+                input_file_chosen(&chosen, Path::new(&spelling)).is_ok(),
+                "{spelling} is the file that was chosen, spelled differently"
+            );
+        }
+
+        // And a `..` that walks somewhere else is somewhere else.
+        let sideways = base.join("..").join("nothing-here.png");
+        assert!(input_file_chosen(&chosen, &sideways).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_folder_is_not_a_file_however_it_is_offered() {
+        let dir = temp_dir("not-a-file");
+        let refused = resolve_input_file(&dir).expect_err("a folder is not an input file");
+        assert_eq!(
+            refused,
+            ConsentError::NotUsable {
+                reason: "that is not a file".to_owned()
+            }
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A symbolic link to a file, by whichever means this machine allows.
+    ///
+    /// Windows needs `SeCreateSymbolicLinkPrivilege` or Developer Mode; there is no `mklink`
+    /// equivalent for files that an ordinary account may use, so on Windows this can genuinely
+    /// fail and the caller says so rather than passing on having tested nothing.
+    fn make_file_link(target: &Path, link: &Path) -> bool {
+        #[cfg(windows)]
+        {
+            std::os::windows::fs::symlink_file(target, link).is_ok()
+        }
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link).is_ok()
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            let _ = (target, link);
+            false
+        }
+    }
+
+    #[test]
+    fn a_link_beside_the_chosen_file_is_not_the_chosen_file() {
+        // The substitution that matters most for a file: a name sitting where the chosen one is,
+        // whose content is somewhere else entirely. `canonicalize` follows it, so what is
+        // compared is what would actually be read.
+        let base = temp_dir("file-link");
+        let chosen = base.join("mine.txt");
+        let secret = base.join("theirs.txt");
+        std::fs::write(&chosen, b"mine").unwrap();
+        std::fs::write(&secret, b"not yours").unwrap();
+
+        let decoy = base.join("decoy.txt");
+        if !make_file_link(&secret, &decoy) {
+            eprintln!("skipped: this machine would not create a file symlink");
+            let _ = std::fs::remove_dir_all(&base);
+            return;
+        }
+
+        let record = chosen_file(&chosen);
+        assert_eq!(
+            input_file_chosen(&record, &decoy),
+            Err(ConsentError::NotChosen {
+                purpose: FilePurpose::RunInput.into()
+            }),
+            "a link to another file is not the file that was chosen"
+        );
+
+        // And through the seeding path, which is what a run actually takes.
+        let mut broker = broker_in(&base.join("run"));
+        assert!(seed_for(&mut broker, &[input(&decoy)], &record).is_err());
+
+        // A link pointing at the chosen file *is* the chosen file, because it resolves to it.
+        let honest = base.join("honest.txt");
+        if make_file_link(&chosen, &honest) {
+            assert!(input_file_chosen(&record, &honest).is_ok());
+        }
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn the_file_purpose_has_one_wire_name_and_no_others() {
+        assert_eq!(
+            serde_json::from_str::<FilePurpose>("\"run-input\"").unwrap(),
+            FilePurpose::RunInput
+        );
+        assert_eq!(
+            serde_json::to_string(&FilePurpose::RunInput).unwrap(),
+            "\"run-input\""
+        );
+        assert!(serde_json::from_str::<FilePurpose>("\"RunInput\"").is_err());
+        assert!(serde_json::from_str::<FilePurpose>("\"anything\"").is_err());
+        // A file purpose is not a folder purpose, in either direction.
+        assert!(serde_json::from_str::<FilePurpose>("\"import-from\"").is_err());
+        assert!(serde_json::from_str::<FolderPurpose>("\"run-input\"").is_err());
+    }
+
+    // --- nothing survives the process --------------------------------------------------------
+
+    /// A `Runtime` built the way `setup` builds one, minus the app handle.
+    fn fresh_runtime(library_root: PathBuf) -> Runtime {
+        let installed = encastra_builtins::install_all();
+        Runtime {
+            registry: installed.registry,
+            components: installed.components,
+            triggers: installed.triggers,
+            running: Mutex::new(None),
+            chosen_folders: Mutex::new(BTreeSet::new()),
+            chosen_files: Mutex::new(BTreeSet::new()),
+            library: LibraryHandle::open(library_root),
+            dirty: AtomicBool::new(false),
+            importing: AtomicBool::new(false),
+            closing: AtomicBool::new(false),
+        }
+    }
+
+    #[test]
+    fn a_fresh_runtime_has_chosen_nothing_and_a_restart_forgets_what_the_last_one_chose() {
+        // A remembered choice that survived a restart would be a grant nobody made today,
+        // sitting somewhere the editor can read. The record is a `Mutex` in memory and there is
+        // no code that writes it anywhere — this is the test that says so, and it would fail
+        // the moment somebody added persistence without also deciding it was a good idea.
+        let base = temp_dir("session");
+        let library_root = base.join("library");
+        let picked = base.join("picked");
+        std::fs::create_dir_all(&picked).unwrap();
+        let resolved = resolve_grant_directory(&picked).unwrap();
+
+        let file = base.join("picked.txt");
+        std::fs::write(&file, b"x").unwrap();
+        let resolved_file = resolve_input_file(&file).unwrap();
+
+        let first = fresh_runtime(library_root.clone());
+        assert!(
+            first.chosen_folders.lock().unwrap().is_empty(),
+            "a runtime that has just started has been asked nothing"
+        );
+        assert!(
+            first.chosen_files.lock().unwrap().is_empty(),
+            "and it has been handed no files either"
+        );
+        first
+            .chosen_folders
+            .lock()
+            .unwrap()
+            .insert((FolderPurpose::GrantToComponent, resolved.clone()));
+        first
+            .chosen_files
+            .lock()
+            .unwrap()
+            .insert((FilePurpose::RunInput, resolved_file.clone()));
+        assert_eq!(first.chosen_folders.lock().unwrap().len(), 1);
+        assert_eq!(first.chosen_files.lock().unwrap().len(), 1);
+        drop(first);
+
+        let second = fresh_runtime(library_root.clone());
+        assert!(
+            second.chosen_folders.lock().unwrap().is_empty(),
+            "the next run of the application starts from nothing"
+        );
+        assert!(
+            second.chosen_files.lock().unwrap().is_empty(),
+            "including the files — a file chosen yesterday is not a file chosen today"
+        );
+
+        // And the choice is not sitting in this application's own data either — the library
+        // index is the only file it writes, and a folder somebody picked has no business in it.
+        let needle = resolved.to_string_lossy().to_lowercase();
+        let mut looked_at = 0usize;
+        if let Ok(entries) = std::fs::read_dir(&library_root) {
+            for entry in entries.flatten() {
+                if let Ok(text) = std::fs::read_to_string(entry.path()) {
+                    looked_at += 1;
+                    assert!(
+                        !text.to_lowercase().contains(&needle),
+                        "{} names a folder that was only ever chosen in memory",
+                        entry.path().display()
+                    );
+                }
+            }
+        }
+        // Nothing was written at all, which is the stronger answer and the one expected here.
+        assert_eq!(looked_at, 0, "no file is written by choosing a folder");
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // --- calling the commands' checks with a path nobody chose -------------------------------
+
+    #[test]
+    fn a_never_chosen_path_is_refused_by_every_gate_there_is() {
+        // The IPC bypass, which needs no bug to attempt: the editor calls the command with a
+        // path string it made up. Each gate is asked in turn about a folder that exists, is
+        // perfectly ordinary, and was never in front of anybody in a chooser.
+        let dir = temp_dir("never-chosen");
+        let nothing: BTreeSet<(FolderPurpose, PathBuf)> = BTreeSet::new();
+
+        // Publish into — what `prepare_publication` consults before it writes anything.
+        assert_eq!(
+            folder_chosen_for(&nothing, FolderPurpose::PublishInto, &dir),
+            Err(ConsentError::NotChosen {
+                purpose: FolderPurpose::PublishInto.into()
+            })
+        );
+        // Import from — what `inspect_publication` and `import_publication` consult before they
+        // read anything, and the refusal the interface names.
+        assert_eq!(
+            folder_chosen_for(&nothing, FolderPurpose::ImportFrom, &dir),
+            Err(ConsentError::NotChosen {
+                purpose: FolderPurpose::ImportFrom.into()
+            })
+        );
+        // Grant — what `run_graph` and `start_workflow` consult before a component is given
+        // anything, through the builder rather than the helper, because that is the real path.
+        let (graph, registry) = fixture();
+        let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&dir)], &nothing);
+        assert!(!set.has(&NodeId("save".into()), "fs.write"));
+        assert_eq!(refused.len(), 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_drive_root_is_refused_even_if_it_somehow_got_into_the_record() {
         // Two independent checks, and the order matters: the scope is refused for being a root
@@ -1787,7 +2785,10 @@ mod tests {
         // turn into a grant for the whole drive.
         let root = PathBuf::from(if cfg!(windows) { "C:\\" } else { "/" });
         let (graph, registry) = fixture();
-        let chosen = BTreeSet::from([std::fs::canonicalize(&root).unwrap_or(root.clone())]);
+        let chosen = BTreeSet::from([(
+            FolderPurpose::GrantToComponent,
+            std::fs::canonicalize(&root).unwrap_or(root.clone()),
+        )]);
 
         let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&root)], &chosen);
 

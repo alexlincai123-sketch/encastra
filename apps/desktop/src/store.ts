@@ -857,7 +857,10 @@ export const useEditor = create<EditorState>((set, get) => ({
     setImportState(set, started);
 
     try {
-      const folder = await ipc.pickFolder();
+      // Chosen to import *from*, and recorded as nothing else: the runtime will not let this
+      // folder answer "may a component write here" or "may a publication be written into this"
+      // later in the session on the strength of somebody having picked it here.
+      const folder = await ipc.pickFolder('import-from');
       if (!folder) {
         // The chooser was closed with nothing. Not a refusal and not a failure: nobody said no
         // to this folder, because there was no folder.

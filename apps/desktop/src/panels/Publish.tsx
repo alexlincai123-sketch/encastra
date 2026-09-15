@@ -102,7 +102,10 @@ export function Publish() {
 
   const prepare = async () => {
     if (!projectPath) return;
-    const into = await ipc.pickFolder();
+    // Chosen to publish *into*. `prepare_publication` checks that exact pair before it writes
+    // anything, so a folder picked elsewhere in the session — to import from, or browsed for in
+    // Settings — is not somewhere this can land.
+    const into = await ipc.pickFolder('publish-into');
     if (!into) return;
     setBusy(true);
     setError(null);
