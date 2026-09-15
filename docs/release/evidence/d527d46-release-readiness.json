@@ -10,9 +10,7 @@
       "name": "Encastra_0.5.0-beta.1_x64-setup.exe",
       "size": 3531868,
       "sha256": "06ad30d3d9a66db5647bf76e20d51338abf56fcb0c67c9e990651ca5cfa290ea",
-      "product_versions": [
-        "0.5.0-beta.1"
-      ],
+      "product_versions": ["0.5.0-beta.1"],
       "build_stamp": null,
       "signature": {
         "status": "unsigned",
@@ -25,9 +23,7 @@
       "name": "encastra-desktop.exe",
       "size": 9620480,
       "sha256": "751232f804f41da89255b55f4ec5bd10ba719f4b0d8d9cc2d4b3ef820b1d2e2f",
-      "product_versions": [
-        "0.5.0-beta.1"
-      ],
+      "product_versions": ["0.5.0-beta.1"],
       "build_stamp": "d527d46a188bb9cad9412678e22b08ebe1147d58",
       "signature": {
         "status": "unsigned",
@@ -166,10 +162,5 @@
       "action": "a lawyer signs off the licence, the terms, the privacy statement and the mark (docs/legal/)"
     }
   ],
-  "statuses": [
-    "EXTERNAL_REQUIRED",
-    "FAIL",
-    "NOT_VERIFIED",
-    "PASS"
-  ]
+  "statuses": ["EXTERNAL_REQUIRED", "FAIL", "NOT_VERIFIED", "PASS"]
 }
