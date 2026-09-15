@@ -181,31 +181,6 @@ describe('taking it in', () => {
   });
 });
 
-describe('what the privileged side is told', () => {
-  it('learns an import has started and that it has finished, so a close can be refused', async () => {
-    const reported = vi.spyOn(ipc, 'reportBusy').mockResolvedValue(undefined);
-    vi.spyOn(ipc, 'pickFolder').mockResolvedValue('C:/publications/thumbnails');
-    vi.spyOn(ipc, 'inspectPublication').mockResolvedValue(INSPECTED);
-
-    await useEditor.getState().beginImport();
-
-    // Reported from every transition rather than only at the ends, so the answer cannot be stale
-    // if a phase is added later. What matters is that it starts true and finishes false, and that
-    // it is never false while something is still in flight.
-    const said = reported.mock.calls.map(([importing]) => importing);
-    expect(said.at(0)).toBe(true);
-    expect(said.at(-1)).toBe(false);
-    expect(said.slice(0, -1).every(Boolean)).toBe(true);
-  });
-
-  it('is not allowed to fail the import by not answering', async () => {
-    vi.spyOn(ipc, 'reportBusy').mockRejectedValue(new Error('no such command'));
-    vi.spyOn(ipc, 'pickFolder').mockResolvedValue('C:/publications/thumbnails');
-    vi.spyOn(ipc, 'inspectPublication').mockResolvedValue(INSPECTED);
-
-    // An older shell around a newer editor: the close guard degrades, and interrupting somebody's
-    // import to tell them so would help nobody.
-    expect(await useEditor.getState().beginImport()).toBe(true);
-    expect(useEditor.getState().importState.phase).toBe('success');
-  });
-});
+// The privileged side is not told that an import is in flight: `import_publication` marks
+// itself in flight for as long as it runs (see lib.rs, `InFlight`). A close guard that rested on
+// this side's word was a guard this side could leave set.

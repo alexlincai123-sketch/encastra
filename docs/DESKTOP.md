@@ -68,7 +68,7 @@ state. Building it per call would let two calls disagree about what is installed
 | `import_publication` | copies the bytes that were verified into the library and records them — it does **not** open or run the project |
 | `library_list` | every entry, each with whether the file it names is still there and still what it was |
 | `library_remove` | forgets an entry, and — only for a copy Encastra made itself — deletes it too |
-| `report_dirty` / `report_busy` / `close_window` | whether the canvas holds unsaved work, whether an import is being written, and the close that happens once somebody has said it may go |
+| `report_dirty` / `close_window` | whether the canvas holds unsaved work, and the close that happens once somebody has said it may go. Whether an import is being written is not reported: `import_publication` sets that flag itself for as long as it runs, so the close guard does not rest on the editor's word |
 | `about` | versions, taken from the build rather than typed anywhere |
 
 ### Which path gate each command goes through
@@ -186,10 +186,13 @@ move without keeping a second flag. Three rules follow from it and each has a te
   empty state) from the same selector. It used to be possible to open a second native chooser in
   the moment between the first one closing and the read finishing.
 * **The window will not close over it.** The editor refuses first, with a sentence, and
-  `close_window` refuses on the Rust side as well — `report_busy` is how it knows. It is a
-  separate flag from `report_dirty` deliberately: unsaved work is the person's to lose if they
-  say so, while a process that exits between an import's staging write and its rename leaves a
-  directory nothing accounts for. One boolean, one meaning.
+  `close_window` refuses on the Rust side as well — it knows because `import_publication` marks
+  itself in flight for exactly as long as it runs, and clears the mark on any exit, a panic
+  included. The editor is not asked, because a flag the editor could set is a flag a reloaded or
+  hostile page could leave set, and a window that cannot be closed on the page's word is a
+  hostage. It is a separate flag from `report_dirty` deliberately: unsaved work is the person's
+  to lose if they say so, while a process that exits between an import's staging write and its
+  rename leaves a directory nothing accounts for. One boolean, one meaning.
 
 **There is a ceiling on what the library holds, in bytes.** `MAX_LIBRARY_BYTES` (4 GiB) is
 checked before anything is copied, and refused as `ImportError::LibraryFull { max, used, needed }`

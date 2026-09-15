@@ -613,6 +613,19 @@ def main() -> int:
     # The refusal happens before the document is written. A manifest describing a release that
     # is not allowed to happen is a file somebody later mistakes for a release that did.
     unsigned = [path for path, (state, _) in states.items() if state != SIGNED]
+    # No flag reaches past this one. `--allow-unsigned` was already refused for a production
+    # version above; a bare invocation on unsigned production artefacts used to write the
+    # manifest and exit 0, which made the documented rule true only for people who passed a flag.
+    if unsigned and not is_prerelease(current):
+        print(
+            f"Refusing: {current} is not a pre-release and these artefacts are not signed. A "
+            "production release is signed or it does not happen; there is no flag for that.",
+            file=sys.stderr,
+        )
+        for path in unsigned:
+            state, detail = states[path]
+            print(f"  {path.relative_to(ROOT)}: {state} ({detail})", file=sys.stderr)
+        return EXIT_PRODUCTION_UNSIGNED
     if args.require_signature and unsigned:
         print("Refusing to publish: these artefacts are not signed.", file=sys.stderr)
         for path in unsigned:

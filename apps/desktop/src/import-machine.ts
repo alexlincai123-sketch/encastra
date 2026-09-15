@@ -195,10 +195,11 @@ export function importErrorNow(state: ImportState): ImportError | string | null 
 /**
  * Whether the window may not be closed yet.
  *
- * The runtime refuses such a close on its own — it is told by `report_busy`, because a close
- * arrives from the operating system and has to be answered before anything can be asked of the
- * webview. This is the same answer on this side, so that somebody sees a sentence rather than an
- * X that appears to do nothing.
+ * The runtime refuses such a close on its own — `import_publication` marks the copy it is
+ * writing as in flight for exactly as long as it runs, because a close arrives from the operating
+ * system and has to be answered before anything can be asked of the webview. This is the same
+ * answer on this side, so that somebody sees a sentence rather than an X that appears to do
+ * nothing.
  */
 export function importBlocksWindowClose(state: ImportState): boolean {
   return isImportBusy(state);

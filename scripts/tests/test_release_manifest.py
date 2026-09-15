@@ -271,6 +271,19 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(result.returncode, 5, result.stderr)
         self.assertIn("docs/audits/helper.py", result.stderr)
 
+    def test_an_unsigned_production_version_is_refused_without_any_flag(self) -> None:
+        # The rule is "signed or it does not happen", not "unless nobody passed a flag". The
+        # synthetic artefacts carry no signature, and on a non-pre-release version that is enough.
+        self.repo.set_version("1.0.0")
+        head = self.repo.commit("production")
+        self.repo.build(head)
+        nsis = self.repo.root / "target/release/bundle/nsis"
+        (nsis / "Encastra_0.5.0-beta.1_x64-setup.exe").rename(nsis / "Encastra_1.0.0_x64-setup.exe")
+        result = self.repo.manifest()
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("not a pre-release", result.stderr)
+        self.assertIn("nothing yet", self.repo.block(), "the document must not be written")
+
     def test_verify_notices_a_tampered_hash(self) -> None:
         self.repo.build(self.head)
         self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)

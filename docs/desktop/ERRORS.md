@@ -33,14 +33,18 @@ to compile a missing tag as well.
 
 ## The inventory
 
-21 commands. Six cannot fail. `→ import` and the other nested tags carry the whole refusal of the
+22 commands (`apps/desktop/test/ipc-surface.test.ts` pins the number). Six cannot fail. `→ import` and the other nested tags carry the whole refusal of the
 crate that raised it, so the sentence a reader gets is as specific as the refusal was.
 
 | Command | Error kinds it can return | i18n key |
 |---|---|---|
-| `choose_folder` | `chooser-did-not-return` | `errors.chooserDidNotReturn` |
+| `choose_folder` (takes a purpose; a purpose the enum does not spell is refused before the chooser opens, by deserialisation) | `chooser-did-not-return` | `errors.chooserDidNotReturn` |
 | | `not-a-folder-on-this-machine` | `errors.notAFolderOnThisMachine` |
 | | `folder-unusable` | `errors.folderUnusable` |
+| | `runtime-busy` | `errors.runtimeBusy` |
+| `choose_file` | `chooser-did-not-return` | `errors.chooserDidNotReturn` |
+| | `not-a-file-on-this-machine` | `errors.notAFileOnThisMachine` |
+| | `file-unusable` | `errors.fileUnusable` |
 | | `runtime-busy` | `errors.runtimeBusy` |
 | `list_components` | — | — |
 | `type_graph` | — | — |
@@ -49,6 +53,8 @@ crate that raised it, so the sentence a reader gets is as specific as the refusa
 | | `grants-refused` (list of `GrantRefusal`) | `errors.grantsRefused` + `errors.grant.*` |
 | | `working-folder` | `errors.workingFolder` |
 | | `input-unreadable` | `errors.inputUnreadable` |
+| | `input-not-chosen` (the file was never chosen this session; names node and port, never the path) | `errors.inputNotChosen` |
+| | `input-unusable` | `errors.inputUnusable` |
 | `save_project` | `not-a-project` | `errors.notAProject` |
 | | `project` (nested `ProjectError`) | `errors.project.*` |
 | `open_project` | `not-a-project`, `project` | as above |
@@ -56,7 +62,7 @@ crate that raised it, so the sentence a reader gets is as specific as the refusa
 | | `version-not-in-project` | `errors.versionNotInProject` |
 | `compare_versions` | `not-a-project`, `project` | as above |
 | | `versions-not-in-project` | `errors.versionsNotInProject` |
-| `start_workflow` | `runtime-busy`, `grants-refused`, `working-folder`, `input-unreadable` | as for `run_graph` |
+| `start_workflow` | `runtime-busy`, `grants-refused`, `working-folder`, `input-unreadable`, `input-not-chosen`, `input-unusable` | as for `run_graph` |
 | | `workflow-already-running` | `errors.workflowAlreadyRunning` |
 | | `workflow-invalid` | `errors.workflowInvalid` |
 | | `workflow-not-started` | `errors.workflowNotStarted` |
@@ -74,14 +80,15 @@ crate that raised it, so the sentence a reader gets is as specific as the refusa
 | | `publication-already-there` | `errors.publicationAlreadyThere` |
 | | `runtime-busy`, `io` | `errors.runtimeBusy`, `errors.io` |
 | `inspect_publication` | `import` (nested `ImportError`) | `import.errors.*` |
-| `import_publication` | `import` (nested `ImportError`) | `import.errors.*` |
+| `import_publication` | `import` (nested `ImportError`, including `library-full`) | `import.errors.*` |
 | | `library` (nested `LibraryError`), `library-busy` | `errors.library.*`, `errors.libraryBusy` |
 | `library_list` | `library`, `library-busy` | `errors.library.*`, `errors.libraryBusy` |
 | `library_remove` | `library`, `library-busy` | as above |
 | | `not-ours-to-delete` | `errors.notOursToDelete` |
 | | `copy-not-deleted` | `errors.copyNotDeleted` |
 | `report_dirty` | — | — |
-| `close_window` | `no-window` | `errors.noWindow` |
+| `close_window` | `import-in-flight` (an import is being written; the flag is set by `import_publication` itself, not by the editor) | `errors.importInFlight` |
+| | `no-window` | `errors.noWindow` |
 | | `window-would-not-close` | `errors.windowWouldNotClose` |
 | `about` | — | — |
 
@@ -116,7 +123,7 @@ reason itself without changing this payload again.
 
 | Enum | Tags | Where the sentences live |
 |---|---|---|
-| `AppError` | 29 | `errors.*` |
+| `AppError` | 34 | `errors.*` |
 | `GrantRefusal` | 3 | `errors.grant.*` |
 | `StatusMessage` | 5 | `errors.status.*`, `messages.nothingRanProblems` |
 | `ProjectError` | 10 | `errors.project.*` |

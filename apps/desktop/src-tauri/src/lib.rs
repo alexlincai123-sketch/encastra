@@ -251,7 +251,10 @@ struct Runtime {
     /// system — a title-bar X, Alt+F4, a session ending — and the close event has to be answered
     /// before anything can be asked of the webview. Knowing already is the only way to say no.
     dirty: AtomicBool,
-    /// Whether an import is in flight, pushed here by `report_busy`.
+    /// Whether an import is in flight — set by `import_publication` itself for the duration of
+    /// the copy, never by the editor. A flag the editor could set is a flag the editor could
+    /// leave set, and a window that cannot be closed on the word of a page that has since been
+    /// reloaded is a hostage, not a guard.
     ///
     /// A separate flag from `dirty` rather than a second meaning for it, and the choice is
     /// deliberate: the two answer different questions and produce different sentences. `dirty`
@@ -476,7 +479,13 @@ fn type_graph() -> serde_json::Value {
         .unwrap_or(serde_json::Value::Null)
 }
 
-#[tauri::command]
+// `(async)` on the commands below: a command without it runs on the main thread, and the main
+// thread is the window's message loop. A run that takes a minute, an import that copies 64 MB,
+// a project that opens a large history — each of those used to stop the window repainting and
+// stop every guard in this file (unsaved work, import in flight) from being reachable until it
+// finished. With the attribute Tauri runs the command on its blocking pool; the borrowed `State`
+// is still fine because the command itself stays synchronous.
+#[tauri::command(async)]
 fn validate_graph(
     state: tauri::State<'_, Runtime>,
     graph: Graph,
@@ -486,7 +495,7 @@ fn validate_graph(
     validate_with_supplied(&graph, &state.registry, &supplied)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn run_graph(
     state: tauri::State<'_, Runtime>,
     graph: Graph,
@@ -664,7 +673,7 @@ fn lock_for(graph: &Graph, registry: &InMemoryRegistry) -> Lockfile {
     Lockfile { components }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_project(
     state: tauri::State<'_, Runtime>,
     path: String,
@@ -692,7 +701,7 @@ fn save_project(
     Ok(describe(project, &path, &state.registry))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn open_project(state: tauri::State<'_, Runtime>, path: String) -> Result<OpenProject, AppError> {
     let target = project_path(&path)?;
     let project = Project::open(&target)?;
@@ -717,7 +726,7 @@ fn remember_project(state: &Runtime, project: &Project, target: &Path, now: u64)
     ));
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn restore_version(
     state: tauri::State<'_, Runtime>,
     path: String,
@@ -743,7 +752,7 @@ fn restore_version(
     Ok(describe(project, &path, &state.registry))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn compare_versions(path: String, from: String, to: String) -> Result<Vec<String>, AppError> {
     let project = Project::open(&project_path(&path)?)?;
     let changes = project
@@ -1268,7 +1277,7 @@ struct Prepared {
 /// The project is read from disk rather than from the editor's canvas on purpose: what gets
 /// published is the file, and the file is the only thing worth checking. An unsaved change is
 /// not in it.
-#[tauri::command]
+#[tauri::command(async)]
 fn review_publication(
     state: tauri::State<'_, Runtime>,
     path: String,
@@ -1292,7 +1301,7 @@ fn review_publication(
 /// Nothing is uploaded. There is no registry, so what this produces is a folder: the project
 /// file and the document that would travel with it, both of which stay on this machine until
 /// somewhere exists to send them.
-#[tauri::command]
+#[tauri::command(async)]
 fn prepare_publication(
     state: tauri::State<'_, Runtime>,
     path: String,
@@ -1639,7 +1648,7 @@ fn chosen_publication_folder(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn inspect_publication(
     state: tauri::State<'_, Runtime>,
     folder: String,
@@ -1661,9 +1670,12 @@ fn inspect_publication(
 /// Whether there is room for it is decided here rather than in the crate, because the answer
 /// lives in the index and the crate has never heard of one. See `LibraryHandle::import_reserving`
 /// for why the check and the copy are one act.
-#[tauri::command]
+#[tauri::command(async)]
 fn import_publication(state: tauri::State<'_, Runtime>, folder: String) -> Result<Entry, AppError> {
     let folder = chosen_publication_folder(&state, &folder)?;
+    // In flight from here until this function returns, whichever way it returns: `close_window`
+    // reads the flag, and the guard clears it on a refusal or a panic alike.
+    let _in_flight = InFlight::begin(&state.importing);
     let entry = state.library.import_reserving(
         &folder,
         &state.registry,
@@ -1673,8 +1685,24 @@ fn import_publication(state: tauri::State<'_, Runtime>, folder: String) -> Resul
     Ok(entry)
 }
 
+/// Marks an import as in flight for as long as it is held.
+struct InFlight<'a>(&'a AtomicBool);
+
+impl<'a> InFlight<'a> {
+    fn begin(flag: &'a AtomicBool) -> Self {
+        flag.store(true, Ordering::Relaxed);
+        InFlight(flag)
+    }
+}
+
+impl Drop for InFlight<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
+}
+
 /// Everything in the index, each with the answer to whether it is still there.
-#[tauri::command]
+#[tauri::command(async)]
 fn library_list(state: tauri::State<'_, Runtime>) -> Result<LibraryListing, AppError> {
     let entries = state.library.read(|library| {
         library
@@ -1705,7 +1733,7 @@ fn library_list(state: tauri::State<'_, Runtime>) -> Result<LibraryListing, AppE
 /// The two are separate decisions and the caller says which it means. A project somebody made
 /// is refused outright: this software did not put that file there and does not get to remove
 /// it, whatever an index that can be edited by hand happens to claim about it.
-#[tauri::command]
+#[tauri::command(async)]
 fn library_remove(
     state: tauri::State<'_, Runtime>,
     id: String,
@@ -1750,16 +1778,6 @@ fn report_dirty(state: tauri::State<'_, Runtime>, dirty: bool) {
     state.dirty.store(dirty, Ordering::Relaxed);
 }
 
-/// The editor telling this side that an import has started or finished.
-///
-/// The same arrangement as `report_dirty` and for the same reason: a close arrives from the
-/// operating system and has to be answered before anything can be asked of the webview, so the
-/// answer has to already be here. See [`Runtime::importing`] for why this is not `dirty`.
-#[tauri::command]
-fn report_busy(state: tauri::State<'_, Runtime>, importing: bool) {
-    state.importing.store(importing, Ordering::Relaxed);
-}
-
 /// Closes the window, after the person has said the unsaved work may go.
 ///
 /// The flag is set before the close is asked for, so [`should_prevent_close`] lets this one
@@ -1775,8 +1793,17 @@ fn close_window(app: tauri::AppHandle, state: tauri::State<'_, Runtime>) -> Resu
         return Err(AppError::ImportInFlight);
     }
     state.closing.store(true, Ordering::Relaxed);
-    let window = app.get_webview_window("main").ok_or(AppError::NoWindow)?;
-    window.close().map_err(|_| AppError::WindowWouldNotClose)
+    // If the close does not happen, the flag must not stay set: the next close the operating
+    // system sends would otherwise skip the unsaved-work prompt on the strength of a close that
+    // never was.
+    let outcome = app
+        .get_webview_window("main")
+        .ok_or(AppError::NoWindow)
+        .and_then(|window| window.close().map_err(|_| AppError::WindowWouldNotClose));
+    if outcome.is_err() {
+        state.closing.store(false, Ordering::Relaxed);
+    }
+    outcome
 }
 
 /// The commit this binary was built from, as one string the release manifest can find in the
@@ -1886,7 +1913,6 @@ pub fn run() {
             library_list,
             library_remove,
             report_dirty,
-            report_busy,
             close_window,
             about
         ])

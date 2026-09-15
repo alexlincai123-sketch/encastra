@@ -126,7 +126,6 @@ export interface Ipc {
    * import half-written is this software's mess — a process that exits between the staging write
    * and the rename leaves a directory nothing accounts for.
    */
-  reportBusy(importing: boolean): Promise<void>;
   /**
    * Closes the window, this time for good.
    *
@@ -290,10 +289,6 @@ class TauriIpc implements Ipc {
     return this.invoke<void>('report_dirty', { dirty });
   }
 
-  reportBusy(importing: boolean): Promise<void> {
-    return this.invoke<void>('report_busy', { importing });
-  }
-
   closeWindow(): Promise<void> {
     return this.invoke<void>('close_window');
   }
@@ -402,8 +397,6 @@ class PreviewIpc implements Ipc {
    * is the honest answer to "run this graph", never to "there are unsaved changes".
    */
   async reportDirty(): Promise<void> {}
-
-  async reportBusy(): Promise<void> {}
 
   async closeWindow(): Promise<void> {}
 

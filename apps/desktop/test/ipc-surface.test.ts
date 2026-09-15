@@ -33,7 +33,7 @@ describe('the IPC surface is documented and used', () => {
   it('registers the commands this build is known to have', () => {
     // A number, on purpose: a command added or removed changes the attack surface, and the
     // change should be a deliberate edit here beside the documentation edit, not a drift.
-    expect(commands.length).toBe(23);
+    expect(commands.length).toBe(22);
     expect(new Set(commands).size).toBe(commands.length);
   });
 

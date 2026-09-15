@@ -99,9 +99,9 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Rust tests, including the security suite
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
       - name: The symlink escape tests must actually run, not skip
         run: |
@@ -245,8 +245,10 @@ jobs:
         if: env.HAS_CERTIFICATE != 'true'
         shell: bash
         run: |
-          if [ "${{ inputs.allow_unsigned }}" != "true" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "::error::This tree has no certificate. Publishing unsigned needs the allow_unsigned input."
+          # On a tag push there is no input, so an unsigned build from a tag push is refused
+          # outright: dispatch the workflow on the tag with allow_unsigned to make the decision.
+          if [ "${{ inputs.allow_unsigned }}" != "true" ]; then
+            echo "::error::This tree has no certificate. Publishing unsigned needs the allow_unsigned input: dispatch this workflow on the tag with it set."
             exit 1
           fi
           echo "::warning::These artefacts are UNSIGNED. Whoever receives this installer cannot tell it from a tampered one."

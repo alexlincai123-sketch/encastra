@@ -15,7 +15,7 @@ done by the people named there.
 | Privacy | the product makes no network connection, keeps no account, sends no telemetry; a statement saying so is drafted | `PRIVACY_POLICY_DRAFT.md` |
 | Terms of use / EULA | drafted for a proprietary desktop application distributed as an installer | `TERMS_DRAFT.md`, `EULA_DRAFT.md` |
 | Trademark | **not searched**; `docs/BRANDING.md` says so and no ™/® appears anywhere | `TRADEMARK_CHECKLIST.md` |
-| Export / sanctions | not assessed; the software contains no cryptography of its own (TLS through the platform's `ureq`/`rustls`) — a line a lawyer should confirm | `TERMS_DRAFT.md` §Export |
+| Export / sanctions | not assessed. The shipped executable **bundles** `rustls` 0.23 and `ring` 0.17 (TLS for the `net.http` component; see `docs/THIRD-PARTY.md`) — it does not rely on the platform's TLS. That is a fact an export-control assessment has to start from, and a line a lawyer should confirm | `TERMS_DRAFT.md` §Export |
 | Company / seller of record | none named anywhere; every draft has `[COMPANY]` | all |
 
 ## Exactly what requires a lawyer

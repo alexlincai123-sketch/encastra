@@ -1347,9 +1347,11 @@ function summarise(journal: RunJournal): string {
  * Moves the machine, and keeps the two things outside it that have to agree.
  *
  * `busy` is the store's own flag for "something is in flight", read by controls that have nothing
- * to do with importing; `report_busy` is the privileged side's copy, which exists because a window
- * close arrives from the operating system and has to be answered before the webview can be asked
- * anything. Both are derived from the phase here rather than set by hand at six call sites.
+ * to do with importing. It is derived from the phase here rather than set by hand at six call
+ * sites. The privileged side keeps its own flag for the copy it is writing (`import_publication`
+ * sets it for exactly as long as it runs) — it is not told by this side, because a window close
+ * arrives from the operating system and a guard that rests on the editor's word is a guard the
+ * editor can leave set.
  */
 function setImportState(
   set: (partial: Partial<EditorState>) => void,
@@ -1358,10 +1360,6 @@ function setImportState(
 ): void {
   const busy = next.phase === 'busy';
   set({ importState: next, busy, ...extra });
-  // Best effort, and deliberately not awaited: the import is the thing being done, and a runtime
-  // that did not answer this must not fail it. The runtime's flag starting out false means the
-  // worst case is a close that is allowed — which is what happens today.
-  void ipc.reportBusy(busy).catch(() => {});
 }
 
 /** The same, for an event that ends the work in flight. */
