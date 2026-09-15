@@ -23,6 +23,8 @@ import { splitOnPlaceholder, translate, useTranslation } from '../i18n';
 import { usePreferences } from '../preferences';
 import { type EditorNode, useEditor } from '../store';
 import { ComponentNode } from './ComponentNode';
+import { ContextMenu, type MenuItem, type MenuRequest } from './ContextMenu';
+import { canvasMenuIds, stepToggleKey } from './menu';
 import { explainConnection, type RefusalNo } from './refusal';
 import { Wire } from './Wire';
 import { indexOf, step, walkOrder } from './walk';
@@ -39,6 +41,13 @@ export function Canvas() {
   const select = useEditor((s) => s.select);
   const selectedNodeId = useEditor((s) => s.selectedNodeId);
   const addNode = useEditor((s) => s.addNode);
+  const deleteStep = useEditor((s) => s.deleteStep);
+  const deleteConnection = useEditor((s) => s.deleteConnection);
+  const toggleDisabled = useEditor((s) => s.toggleDisabled);
+  const duplicateSelection = useEditor((s) => s.duplicateSelection);
+  const pasteClipboard = useEditor((s) => s.pasteClipboard);
+  const selectAll = useEditor((s) => s.selectAll);
+  const clipboard = useEditor((s) => s.clipboard);
   const journal = useEditor((s) => s.journal);
   const manifests = useEditor((s) => s.manifests);
   const { t } = useTranslation();
@@ -160,6 +169,91 @@ export function Canvas() {
   const lastRefusal = useRef<RefusalNo | null>(null);
   const [refusal, setRefusal] = useState<RefusalNo | null>(null);
 
+  const [menu, setMenu] = useState<MenuRequest | null>(null);
+
+  /** Selects one step where React Flow keeps its selection, for the reason `go` explains. */
+  const selectOnly = useCallback(
+    (nodeId: string) => {
+      onNodesChange([
+        ...nodes
+          .filter((n) => n.selected && n.id !== nodeId)
+          .map((n) => ({ id: n.id, type: 'select' as const, selected: false })),
+        { id: nodeId, type: 'select' as const, selected: true },
+      ]);
+    },
+    [nodes, onNodesChange],
+  );
+
+  /**
+   * Right-clicking a step.
+   *
+   * Every one of these handlers begins by refusing the default, because the default here is the
+   * WebView's own menu — Back, Reload, Save as, Print — which belongs to a browser and has
+   * nothing to say about a workflow. Removing a step was already possible from the keyboard;
+   * what was missing was anywhere to see that it was possible.
+   */
+  const openStepMenu = useCallback(
+    (event: React.MouseEvent, node: EditorNode) => {
+      event.preventDefault();
+      // Right-clicking selects, as it does in every editor: the menu then acts on the thing
+      // under the pointer and the inspector shows the same thing the menu is about.
+      selectOnly(node.id);
+      const items: MenuItem[] = [
+        { id: 'duplicate', label: t('canvas.menu.duplicate'), run: duplicateSelection },
+        {
+          id: 'disabled',
+          label: t(stepToggleKey(node.data.disabled === true)),
+          run: () => toggleDisabled(node.id),
+        },
+        {
+          id: 'delete',
+          label: t('canvas.menu.deleteStep'),
+          danger: true,
+          run: () => deleteStep(node.id),
+        },
+      ];
+      setMenu({ x: event.clientX, y: event.clientY, items });
+    },
+    [selectOnly, t, duplicateSelection, toggleDisabled, deleteStep],
+  );
+
+  const openConnectionMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      setMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            id: 'delete',
+            label: t('canvas.menu.deleteConnection'),
+            danger: true,
+            run: () => deleteConnection(edge.id),
+          },
+        ],
+      });
+    },
+    [t, deleteConnection],
+  );
+
+  const openCanvasMenu = useCallback(
+    // React Flow hands the pane a plain DOM event, not React's synthetic one — the pane listens
+    // for itself rather than through the tree. The two agree on everything used here.
+    (event: MouseEvent | React.MouseEvent) => {
+      event.preventDefault();
+      const run: Record<string, () => void> = { paste: pasteClipboard, selectAll };
+      const items: MenuItem[] = canvasMenuIds({
+        clipboard: (clipboard?.nodes.length ?? 0) > 0,
+        nodes: nodes.length > 0,
+      }).map((id) => ({ id, label: t(`canvas.menu.${id}`), run: run[id] ?? (() => {}) }));
+      // An empty canvas has nothing to offer, and a menu with no items in it is a worse answer
+      // than no menu — but the default is still refused above, so the browser's does not appear.
+      if (items.length === 0) return;
+      setMenu({ x: event.clientX, y: event.clientY, items });
+    },
+    [clipboard, nodes.length, pasteClipboard, selectAll, t],
+  );
+
   const isConnectionLegal: IsValidConnection = useCallback((connection) => {
     const { source, target, sourceHandle, targetHandle } = connection;
     if (!source || !target || !sourceHandle || !targetHandle) return false;
@@ -252,6 +346,9 @@ export function Canvas() {
         isValidConnection={isConnectionLegal}
         onNodeClick={(_, node) => select(node.id)}
         onPaneClick={() => select(null)}
+        onNodeContextMenu={openStepMenu}
+        onEdgeContextMenu={openConnectionMenu}
+        onPaneContextMenu={openCanvasMenu}
         // The inspector follows the *selection*, not the click that usually causes one, so a
         // step selected any other way — a box selection, an arrow key, anything programmatic —
         // also opens in the inspector. That is what lets the keyboard handler above do its job
@@ -292,6 +389,10 @@ export function Canvas() {
           />
         ) : null}
       </ReactFlow>
+
+      {menu ? (
+        <ContextMenu request={menu} onClose={() => setMenu(null)} label={t('canvas.menu.label')} />
+      ) : null}
 
       {nodes.length === 0 ? (
         <div className="canvas__empty">

@@ -92,6 +92,18 @@ const fr: Messages = {
       body: 'Un flux de travail est un petit nombre de composants reliés entre eux. Choisissez-en un à gauche pour placer votre première étape, reliez sa sortie à la suivante, puis appuyez sur Exécuter.',
       hint: 'Chaque composant indique ce qu’il peut atteindre avant de s’exécuter, et rien ne touche vos fichiers tant que vous ne l’avez pas autorisé.',
     },
+    // The menu a right-click opens on the canvas. Removing a step was always possible from
+    // the keyboard; this is where somebody finds out that it is.
+    menu: {
+      label: 'Actions du canevas',
+      duplicate: 'Dupliquer',
+      disable: 'Désactiver',
+      enable: 'Activer',
+      deleteStep: 'Supprimer l’étape',
+      deleteConnection: 'Supprimer la connexion',
+      paste: 'Coller',
+      selectAll: 'Tout sélectionner',
+    },
     keysHint:
       'Utilisez les flèches pour vous déplacer entre les étapes, Entrée pour ouvrir une étape dans l’inspecteur, Échap pour désélectionner, et Suppr pour retirer l’étape sélectionnée.',
     a11y: {
@@ -122,7 +134,83 @@ const fr: Messages = {
     },
   },
 
+  publish: {
+    heading: 'Préparer une publication',
+    intro:
+      'Encastra lit le projet enregistré comme le lirait la personne qui le reçoit, puis l’écrit dans un dossier de votre choix, avec le document qui l’accompagnerait. Rien n’est envoyé : il n’existe aucun registre où l’envoyer, ni compte avec lequel l’envoyer.',
+    saveFirst:
+      'Enregistrez d’abord le projet. Ce qui est publié, c’est le fichier, et il n’existe pas encore.',
+    saveChangesFirst:
+      'Enregistrez d’abord vos modifications. Ce qui est publié, c’est le fichier sur le disque, et il ne correspond plus au canevas.',
+    sections: {
+      about: 'Ce que c’est',
+      check: 'Ce qu’Encastra a trouvé',
+      done: 'Où cela a été écrit',
+    },
+    fields: {
+      title: {
+        label: 'Nom',
+        hint: 'Le nom affiché sur la page où quelqu’un décide.',
+      },
+      summary: {
+        label: 'Résumé',
+        hint: 'Une ou deux phrases : ce que cela fait, et pour qui.',
+      },
+      namespace: {
+        label: 'Votre espace de noms',
+        hint: 'Un nom de domaine inversé que vous contrôlez, comme dev.votrenom. Personne ne l’a vérifié — il n’y a pas de comptes —, c’est donc une affirmation, pas une preuve.',
+      },
+      version: {
+        label: 'Version',
+        hint: 'Numérotée comme 1.0.0. Une version publiée ne change jamais ; un changement reçoit un nouveau numéro.',
+      },
+      kind: {
+        label: 'Type',
+        hint: 'Un projet est fait pour être exécuté. Un modèle est fait pour être démonté et modifié.',
+      },
+      licence: {
+        label: 'Licence',
+        hint: 'Ce que quelqu’un d’autre peut en faire. Une partie dont la licence entre en conflit avec celle-ci est refusée.',
+      },
+    },
+    kinds: {
+      project: 'Projet',
+      template: 'Modèle',
+    },
+    licences: {
+      mit: 'MIT',
+      'apache-2.0': 'Apache-2.0',
+      'gpl-3.0-only': 'GPL-3.0-only',
+      proprietary: 'Tous droits réservés',
+    },
+    derivedName: 'Il serait connu sous',
+    freeOnly:
+      'Gratuit, et seulement gratuit. Il n’y a ni prestataire de paiement ni compte à débiter : un prix ici serait un nombre que rien ne pourrait encaisser.',
+    checking: 'Lecture du projet…',
+    checkAgain: 'Vérifier à nouveau',
+    prepare: 'Préparer…',
+    nothingFound: 'Rien ici n’empêcherait de le publier.',
+    notAnAudit:
+      'Ceci trouve les erreurs assez mécaniques pour être trouvées. Ce n’est pas un audit de sécurité, et personne n’en a fait.',
+    capabilities: {
+      none: 'Il ne demande rien en dehors de lui-même.',
+      some: 'La personne qui l’installe est interrogée, à chaque exécution, avant qu’il puisse utiliser :',
+    },
+    preparedInto: 'Le projet et son document de publication sont ici :',
+    nowhereToSend: 'Ils restent sur cette machine. Il n’y a encore nulle part où les envoyer.',
+    problems: {
+      namespaceMissing: 'Une publication a besoin d’un espace de noms.',
+      namespaceShape: 'Un espace de noms est un domaine inversé, comme dev.votrenom.',
+      titleMissing: 'Une publication a besoin d’un nom.',
+      titleUnusable: 'Ce nom ne contient ni lettre ni chiffre pour construire un identifiant.',
+      summaryMissing: 'Une publication a besoin d’un résumé.',
+      summaryShort: 'Quelques mots ne disent rien à qui doit décider. Dites ce que cela fait.',
+      versionShape: 'Une version se numérote comme 1.0.0.',
+    },
+  },
   toolbar: {
+    publish: 'Publier',
+    publishTitle: 'Préparer ce projet pour que quelqu’un d’autre l’installe',
     preview: {
       badge: 'aperçu',
       title: 'Aucun moteur d’exécution n’est rattaché à cette fenêtre.',

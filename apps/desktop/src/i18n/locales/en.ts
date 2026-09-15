@@ -98,6 +98,18 @@ const en: Messages = {
       body: 'A workflow is a few components joined together. Pick one from the left to place your first step, connect its output to the next, and press Run.',
       hint: 'Every component says what it can reach before it runs, and nothing touches your files until you allow it.',
     },
+    // The menu a right-click opens on the canvas. Removing a step was always possible from
+    // the keyboard; this is where somebody finds out that it is.
+    menu: {
+      label: 'Canvas actions',
+      duplicate: 'Duplicate',
+      disable: 'Switch off',
+      enable: 'Switch on',
+      deleteStep: 'Delete step',
+      deleteConnection: 'Delete connection',
+      paste: 'Paste',
+      selectAll: 'Select all',
+    },
     keysHint:
       'Use the arrow keys to move between steps, Enter to open a step in the inspector, Escape to deselect, and Delete to remove the selected step.',
     a11y: {
@@ -133,7 +145,82 @@ const en: Messages = {
     },
   },
 
+  publish: {
+    heading: 'Prepare a publication',
+    intro:
+      'Encastra reads the saved project the way somebody receiving it would, then writes it into a folder you choose, along with the document that would travel with it. Nothing is uploaded: there is no registry to send it to, and no account to send it with.',
+    saveFirst: 'Save the project first. What gets published is the file, and there is not one yet.',
+    saveChangesFirst:
+      'Save your changes first. What gets published is the file on disk, and it no longer matches the canvas.',
+    sections: {
+      about: 'What this is',
+      check: 'What Encastra found',
+      done: 'Where it went',
+    },
+    fields: {
+      title: {
+        label: 'Name',
+        hint: 'What it is called on a page somebody is deciding from.',
+      },
+      summary: {
+        label: 'Summary',
+        hint: 'A sentence or two: what it does, and who it is for.',
+      },
+      namespace: {
+        label: 'Your namespace',
+        hint: 'A reverse domain name you control, like dev.yourname. Nobody has checked it — there are no accounts — so it is a claim, not proof.',
+      },
+      version: {
+        label: 'Version',
+        hint: 'Numbered like 1.0.0. A published version never changes; a change gets a new number.',
+      },
+      kind: {
+        label: 'Kind',
+        hint: 'A project is meant to be run. A template is meant to be taken apart and changed.',
+      },
+      licence: {
+        label: 'Licence',
+        hint: 'What somebody else may do with it. A part whose licence conflicts with this one is refused.',
+      },
+    },
+    kinds: {
+      project: 'Project',
+      template: 'Template',
+    },
+    licences: {
+      mit: 'MIT',
+      'apache-2.0': 'Apache-2.0',
+      'gpl-3.0-only': 'GPL-3.0-only',
+      proprietary: 'All rights reserved',
+    },
+    derivedName: 'It would be known as',
+    freeOnly:
+      'Free, and only free. There is no payment provider and no account to charge, so a price here would be a number nothing could ever take.',
+    checking: 'Reading the project…',
+    checkAgain: 'Check again',
+    prepare: 'Prepare…',
+    nothingFound: 'Nothing here would stop this being published.',
+    notAnAudit:
+      'This finds the mistakes that are mechanical enough to find. It is not a security audit, and nobody has done one.',
+    capabilities: {
+      none: 'It asks for nothing outside itself.',
+      some: 'Whoever installs this is asked, every run, before it can use:',
+    },
+    preparedInto: 'The project and its publication document are here:',
+    nowhereToSend: 'They stay on this machine. There is nowhere to send them yet.',
+    problems: {
+      namespaceMissing: 'A publication needs a namespace.',
+      namespaceShape: 'A namespace is a reverse domain name, like dev.yourname.',
+      titleMissing: 'A publication needs a name.',
+      titleUnusable: 'This name has no letters or numbers to build an id from.',
+      summaryMissing: 'A publication needs a summary.',
+      summaryShort: 'A few words tell somebody deciding nothing. Say what it does.',
+      versionShape: 'A version is numbered like 1.0.0.',
+    },
+  },
   toolbar: {
+    publish: 'Publish',
+    publishTitle: 'Prepare this project for somebody else to install',
     preview: {
       badge: 'preview',
       title: 'No runtime is attached to this window.',

@@ -889,6 +889,7 @@ dependencies = [
  "encastra-core",
  "encastra-project",
  "encastra-protocol",
+ "encastra-publish",
  "serde",
  "serde_json",
  "tauri",
@@ -913,6 +914,20 @@ dependencies = [
 name = "encastra-protocol"
 version = "0.4.0-beta.1"
 dependencies = [
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "encastra-publish"
+version = "0.4.0-beta.1"
+dependencies = [
+ "encastra-core",
+ "encastra-project",
+ "encastra-protocol",
  "semver",
  "serde",
  "serde_json",

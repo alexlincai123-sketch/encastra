@@ -25,6 +25,7 @@ use encastra_core::validate::{Validation, validate_with_supplied};
 use encastra_core::value::{HandleKind, Value};
 use encastra_project::{History, LockedComponent, Lockfile, Project, SnapshotId};
 use encastra_protocol::manifest::ComponentManifest;
+use encastra_publish::{License, PublicationBundle, PublicationDraft, Publisher, Review};
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 
@@ -650,6 +651,103 @@ fn workflow_status(state: tauri::State<'_, Runtime>) -> Status {
 }
 
 /// The version shown in Settings, taken from the build rather than typed anywhere.
+/// What a prepared publication left on disk.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Prepared {
+    bundle: PublicationBundle,
+    /// The folder holding both files, so the interface can tell somebody where to look.
+    folder: String,
+}
+
+/// Reads a saved project the way somebody receiving it would, and reports what it finds.
+///
+/// The project is read from disk rather than from the editor's canvas on purpose: what gets
+/// published is the file, and the file is the only thing worth checking. An unsaved change is
+/// not in it.
+#[tauri::command]
+fn review_publication(
+    state: tauri::State<'_, Runtime>,
+    path: String,
+    license: License,
+) -> Result<Review, String> {
+    let project = Project::open(&PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    Ok(encastra_publish::review(
+        &project,
+        &state.registry,
+        &license,
+    ))
+}
+
+/// Prepares a publication into a folder of its own, or refuses with the reason.
+///
+/// The review runs again here, and its result is the one that decides. The interface shows
+/// somebody the findings first, but nothing it shows is what authorises this: a front end that
+/// has been through a debugger, or simply a stale one, must not be able to publish something
+/// this check refuses (`docs/THREAT-MODEL.md` T2 — the client is not a trust boundary).
+///
+/// Nothing is uploaded. There is no registry, so what this produces is a folder: the project
+/// file and the document that would travel with it, both of which stay on this machine until
+/// somewhere exists to send them.
+#[tauri::command]
+fn prepare_publication(
+    state: tauri::State<'_, Runtime>,
+    path: String,
+    draft: PublicationDraft,
+    publisher: Publisher,
+    into: String,
+) -> Result<Prepared, String> {
+    let source = PathBuf::from(&path);
+    let project = Project::open(&source).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(&source).map_err(|e| e.to_string())?;
+
+    let review = encastra_publish::review(&project, &state.registry, &draft.license);
+    let runtime = project.manifest.runtime.clone();
+    let bundle = PublicationBundle::prepare(
+        draft,
+        &publisher,
+        &bytes,
+        &runtime,
+        &review,
+        encastra_core::journal::now_ms(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    // One folder per version, named after what is in it, so a second version does not land on
+    // top of the first.
+    let folder = PathBuf::from(&into).join(format!(
+        "{id}-{version}",
+        id = bundle.draft.listing_id,
+        version = bundle.draft.version
+    ));
+    let document = folder.join("publication.json");
+    if document.exists() {
+        return Err(format!(
+            "{} already holds a publication. Delete it or choose another folder.",
+            folder.display()
+        ));
+    }
+    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+
+    // The project is copied rather than moved: publishing must never be able to take somebody's
+    // only copy of their own work.
+    let name = source
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project.encastra".to_string());
+    std::fs::write(folder.join(&name), &bytes).map_err(|e| e.to_string())?;
+    std::fs::write(
+        &document,
+        serde_json::to_vec_pretty(&bundle).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(Prepared {
+        bundle,
+        folder: folder.to_string_lossy().to_string(),
+    })
+}
+
 #[tauri::command]
 fn about() -> serde_json::Value {
     serde_json::json!({
@@ -683,6 +781,8 @@ pub fn run() {
             start_workflow,
             stop_workflow,
             workflow_status,
+            review_publication,
+            prepare_publication,
             about
         ])
         .run(tauri::generate_context!())

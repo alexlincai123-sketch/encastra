@@ -203,3 +203,69 @@ export interface About {
   protocolSchema: number;
   projectSchema: number;
 }
+
+/**
+ * What the runtime found when it read a saved project the way somebody receiving it would.
+ *
+ * Produced by the runtime, never built here. A review the interface assembled itself would be
+ * a review nobody ran.
+ */
+export interface PublicationFinding {
+  code: string;
+  severity: 'note' | 'warning' | 'blocking';
+  title: string;
+  detail: string;
+  /** What would change the answer. Always present. */
+  remedy: string;
+  at?: string;
+}
+
+export interface PublicationReview {
+  outcome: 'may-publish' | { refused: { blocking: number } };
+  findings: PublicationFinding[];
+  /** Every permission this would ask of whoever installs it, gathered from the components. */
+  capabilities: string[];
+}
+
+/** What a person fills in. Mirrors `PublicationDraft` in `crates/encastra-publish`. */
+export interface PublicationDraft {
+  listing_id: string;
+  kind: 'project' | 'template';
+  version: string;
+  title: string;
+  summary: string;
+  categories: string[];
+  tags: string[];
+  license: { id: string; name?: string };
+  pricing: { kind: 'free' } | { kind: 'paid'; amount_minor: number; currency: string };
+  changelog?: string;
+}
+
+/**
+ * Who is offering it.
+ *
+ * `verified` is false here and cannot be anything else: there are no accounts, so nobody has
+ * checked that this name belongs to whoever typed it.
+ */
+export interface Publisher {
+  id: string;
+  display_name: string;
+  bio?: string;
+  verified: boolean;
+}
+
+export interface PublicationBundle {
+  draft: PublicationDraft;
+  publisher: string;
+  checksum: string;
+  size_bytes: number;
+  capabilities: string[];
+  runtime: string;
+  prepared_at_ms: number;
+}
+
+/** What preparing one left on disk. Nothing was uploaded; there is nowhere to upload to. */
+export interface Prepared {
+  bundle: PublicationBundle;
+  folder: string;
+}

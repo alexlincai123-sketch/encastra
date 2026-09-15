@@ -3,6 +3,12 @@
 Everything in this document is **design**. None of it exists in the shipped product, and nothing
 in the application or the website presents any of it as working.
 
+**One exception, added 2026-09-15.** The part of publishing that needs no server now
+exists: the shape of a publication, and the check that refuses one, in
+`crates/encastra-publish`, reached from the desktop application's Publish panel
+(ADR-0011). It produces a folder on the machine that made it. There is still no registry,
+no account, no upload and no money — everything else below remains design.
+
 It is written down now for one reason: these pieces constrain each other. The sandbox decides
 what a component may declare; the declaration decides what the registry must record; the record
 decides what a signature covers; the signature decides what an update can safely replace.
@@ -57,6 +63,25 @@ components, because the first invites people to run strangers' code.
 ---
 
 ## 2. Component registry
+
+### What exists already
+
+`crates/encastra-publish` holds the vocabulary this section uses — listing, release, publisher,
+licence, pricing, entitlement, purchase, payout, moderation state — as types with tests rather
+than as prose. Two things follow:
+
+- **A publication can be prepared today, offline.** The desktop application reads a saved project
+  the way somebody receiving it would, refuses it if it carries a secret, names its author's home
+  folder, uses a component this build cannot read, no longer matches a pinned digest, or carries
+  a copyleft part into other terms — and otherwise writes the project and a `publication.json`
+  into a folder. That document is what would be uploaded on the day there is anywhere to send it.
+- **The capability list in a release record is gathered, not typed.** It comes from the manifests
+  of the components the project actually uses, which is the only version of that field anybody
+  should trust.
+
+What this does **not** do: sign anything (the checksum is integrity, not provenance — ADR-0008),
+verify a publisher (there are no accounts), or move a publication anywhere. See ADR-0011.
+
 
 **Status: designed, not built.**
 

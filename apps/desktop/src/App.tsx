@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { selectPlural, useTranslation } from './i18n';
 import { ipc, recordedRuns } from './ipc';
 import { Welcome } from './onboarding/Welcome';
+import { Publish } from './panels/Publish';
 import { applyToDocument, usePreferences } from './preferences';
 import { Sidebar } from './Sidebar';
 import { useEditor } from './store';
@@ -52,6 +53,7 @@ function Toolbar() {
   const startWorkflow = useEditor((s) => s.startWorkflow);
   const stopWorkflow = useEditor((s) => s.stopWorkflow);
   const showRecording = useEditor((s) => s.showRecording);
+  const setPublishOpen = useEditor((s) => s.setPublishOpen);
   const { t } = useTranslation();
 
   const triggered = nodes.some((node) => manifests[node.data.componentRef]?.trigger === true);
@@ -86,6 +88,14 @@ function Toolbar() {
             title="Ctrl+S"
           >
             {t('toolbar.save')}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setPublishOpen(true)}
+            title={t('toolbar.publishTitle')}
+          >
+            {t('toolbar.publish')}
           </button>
           <span className="project-name">
             {projectName || t('messages.untitledProject')}
@@ -297,6 +307,27 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [startWorkflow, saveProject, openProject]);
 
+  /**
+   * The WebView offers a browser's menu on every right-click — Back, Reload, Save as, Print.
+   * This is an application window: there is nothing to go back to, reloading discards unsaved
+   * work, and "Save as" offers to write the interface itself to disk. The canvas answers a
+   * right-click with its own menu; everywhere else the answer is nothing at all.
+   *
+   * A text field keeps the browser's menu, because cut, copy and paste genuinely live there and
+   * this application does not reimplement them.
+   */
+  useEffect(() => {
+    const onContextMenu = (event: MouseEvent) => {
+      const target = event.target;
+      const editable =
+        target instanceof Element &&
+        target.closest('input, textarea, select, [contenteditable="true"]') !== null;
+      if (!editable) event.preventDefault();
+    };
+    window.addEventListener('contextmenu', onContextMenu);
+    return () => window.removeEventListener('contextmenu', onContextMenu);
+  }, []);
+
   return (
     <div className={`shell shell--${view}`}>
       <Sidebar />
@@ -305,6 +336,7 @@ export function App() {
       {/* Before the content, so the tour can outline the panel its current step is about
           without needing the highlight state lifted up here. */}
       <Welcome />
+      <Publish />
 
       <div className="content">
         {view === 'home' ? <Home /> : null}
