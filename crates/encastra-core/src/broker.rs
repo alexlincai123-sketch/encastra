@@ -488,6 +488,23 @@ impl Broker {
                 ));
         }
 
+        // A grant is permission to put files into a folder, not to replace what is already in
+        // it. The project chooses the name; the person chose the folder — and the folder they
+        // chose is a real one, with their files in it. `fs::copy` truncates what it finds, so a
+        // graph somebody else wrote could name `Thesis.docx` and a granted Documents folder
+        // would lose it. Refused, by name, with the way out in the hint: nothing is deleted
+        // by a run, ever.
+        if std::fs::symlink_metadata(&destination).is_ok() {
+            return Err(self
+                .deny(
+                    node,
+                    "fs.write",
+                    detail,
+                    "a file of that name is already there, and a run does not replace files",
+                )
+                .with_hint("Give the result another name, or move the existing file yourself."));
+        }
+
         std::fs::copy(&source, &destination).map_err(|e| {
             NodeError::new(
                 "write-failed",
@@ -1860,6 +1877,43 @@ mod tests {
                 .import_guarded(&node, &real, HandleKind::File)
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn a_file_already_in_the_granted_folder_is_not_replaced() {
+        // The realistic data-loss path for a tester: a graph written by somebody else names an
+        // output after a file that exists, and the folder granted is a real one. A grant lets a
+        // run add files; it never lets it truncate one that was there.
+        let dir = tempdir::TempDir::new();
+        let allowed = dir.path().join("allowed");
+        std::fs::create_dir_all(&allowed).unwrap();
+        let theirs = allowed.join("result.txt");
+        std::fs::write(&theirs, b"theirs, and they want it back").unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.write", GrantScope::Directory(allowed.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let out = broker
+            .create_output(&node, HandleKind::File, "result.txt")
+            .unwrap();
+        broker.write_output(&node, out, b"ours").unwrap();
+
+        let err = broker
+            .save_to(&node, out, &allowed, "result.txt")
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("already there"), "{}", err.message);
+        assert_eq!(
+            std::fs::read(&theirs).unwrap(),
+            b"theirs, and they want it back",
+            "the file that was there must be untouched"
+        );
+        // A different name in the same folder is what the grant is for.
+        let placed = broker
+            .save_to(&node, out, &allowed, "result-2.txt")
+            .unwrap();
+        assert_eq!(std::fs::read(&placed).unwrap(), b"ours");
     }
 
     #[test]
