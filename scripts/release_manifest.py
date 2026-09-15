@@ -32,8 +32,9 @@ Usage:
     python scripts/release_manifest.py --verify             # the manifest on disk matches the artefacts and the history
 
 Exit codes: 0 ok · 1 no artefacts, or unsigned under --require-signature · 2 usage ·
-3 unsigned production refused · 4 provenance (stamp missing, dirty, unknown, or not HEAD) ·
-5 --verify found a disagreement.
+3 unsigned production refused · 4 provenance (stamp missing, dirty, unknown, or not HEAD; or an
+installer in target/ that is not from this build: another version in its name, no version in its
+name, or older than the binary) · 5 --verify found a disagreement.
 """
 
 from __future__ import annotations
@@ -192,6 +193,49 @@ def signature(path: pathlib.Path) -> tuple[str, str]:
     # HashMismatch, NotTrusted, UnknownError: a signature that is present and does not check out
     # is worse news than no signature, and must never be reported as merely unsigned.
     return BROKEN, f"{status} — {subject}"
+
+
+# Tauri names an installer after the product and the version it was built from:
+# `Encastra_0.5.0-beta.1_x64-setup.exe`, `Encastra_0.5.0-beta.1_x64_en-US.msi`. The version is the
+# only thing an installer states about itself that this script can read without unpacking it.
+VERSION_IN_NAME = re.compile(r"_(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)_")
+
+
+def artefact_problems(files: list[pathlib.Path], binary: pathlib.Path) -> list[str]:
+    """Installers under target/ that are not from the build that produced the binary.
+
+    `cargo`/`tauri build` never delete the previous build's installer. A `0.4.0` setup left in
+    `bundle/nsis/` beside the new `0.5.0` one was once listed in the manifest as if it were part
+    of the release, under the new build commit's name. So an installer is refused when its name
+    carries a version other than the tree's, when it carries no version at all (nothing states
+    what it is), or when it is older than the binary it claims to contain — the bundler writes
+    the installer after the executable, never before.
+    """
+    problems: list[str] = []
+    current = version()
+    binary_mtime = binary.stat().st_mtime if binary.exists() else None
+    for path in files:
+        if path == binary:
+            continue
+        found = VERSION_IN_NAME.search(path.name)
+        if found is None:
+            problems.append(
+                f"{path.name} carries no version in its name; nothing states which build it is "
+                "from. Delete it from target/ if it is not this build's, or rebuild."
+            )
+            continue
+        if found.group(1) != current:
+            problems.append(
+                f"{path.name} is a {found.group(1)} installer but the tree is at {current}. It is "
+                "left over from another build; delete it from target/ or rebuild."
+            )
+            continue
+        if binary_mtime is not None and path.stat().st_mtime + 1 < binary_mtime:
+            problems.append(
+                f"{path.name} is older than {binary.name}; the bundler writes the installer after "
+                "the executable, so this installer is not from this build. Rebuild."
+            )
+    return problems
 
 
 def artefacts() -> list[pathlib.Path]:
@@ -544,7 +588,7 @@ def main() -> int:
     if not BINARY.exists():
         print(f"{BINARY} is missing; nothing states which commit the installer came from.", file=sys.stderr)
         return EXIT_PROVENANCE
-    problems = provenance_problems(BINARY)
+    problems = provenance_problems(BINARY) + artefact_problems(files, BINARY)
     if problems:
         for problem in problems:
             print(f"Refusing: {problem}", file=sys.stderr)
