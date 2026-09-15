@@ -1,7 +1,7 @@
 {
   "name": "encastra",
   "private": true,
-  "version": "0.5.0-beta.1",
+  "version": "0.5.0-rc.3",
   "description": "A local-first runtime that executes a typed graph of sandboxed components.",
   "license": "UNLICENSED",
   "type": "module",
@@ -25,7 +25,9 @@
     "clean": "tsc --build --clean",
     "build": "npm run build --workspace @encastra/desktop",
     "tauri:dev": "npm run tauri --workspace @encastra/desktop -- dev",
-    "tauri:build": "npm run tauri --workspace @encastra/desktop -- build"
+    "tauri:build": "npm run tauri --workspace @encastra/desktop -- build",
+    "release:check": "python scripts/release_check.py",
+    "release:reproduce": "python scripts/verify/reproduce.py"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",

@@ -53,7 +53,8 @@ state. Building it per call would let two calls disagree about what is installed
 
 | Command | What it does |
 |---|---|
-| `choose_folder` | opens the native folder chooser on the Rust side, resolves and sanity-checks the choice, and records it — the only way a folder becomes grantable, publishable-into or importable-from this session |
+| `choose_folder` | takes a `purpose`, opens the native folder chooser on the Rust side, resolves and sanity-checks the choice, and records the **pair** — the only way a folder becomes grantable, publishable-into or importable-from this session, and only for the one purpose it was chosen under |
+| `choose_file` | the same for a file: opens the native file chooser here and records it — the only way a path becomes something a run may be seeded with |
 | `list_components` | every manifest this build offers, for the palette |
 | `type_graph` | the coercion table, served by the runtime that enforces it |
 | `validate_graph` | validation for a graph plus the ports the application will supply |
@@ -67,8 +68,57 @@ state. Building it per call would let two calls disagree about what is installed
 | `import_publication` | copies the bytes that were verified into the library and records them — it does **not** open or run the project |
 | `library_list` | every entry, each with whether the file it names is still there and still what it was |
 | `library_remove` | forgets an entry, and — only for a copy Encastra made itself — deletes it too |
-| `report_dirty` / `close_window` | whether the canvas holds unsaved work, and the close that happens once somebody has said it may go |
+| `report_dirty` / `close_window` | whether the canvas holds unsaved work, and the close that happens once somebody has said it may go. Whether an import is being written is not reported: `import_publication` sets that flag itself for as long as it runs, so the close guard does not rest on the editor's word |
 | `about` | versions, taken from the build rather than typed anywhere |
+
+### Which path gate each command goes through
+
+Every command that takes a path, and what stands between the string the WebView sent and the
+filesystem. Consent is recorded as `(purpose, canonical path)`; a folder chosen for one purpose
+does not satisfy another.
+
+| Command | Path it takes | Gate |
+|---|---|---|
+| `choose_folder` | none — the chooser produces it | records `(FolderPurpose, resolved)`; there is **no** command that takes a path and adds it to the record |
+| `choose_file` | none — the chooser produces it | records `(FilePurpose::RunInput, resolved)`, by the same rule |
+| `run_graph`, `start_workflow` | `grants[].folder` | `grant-to-component` pair, after `resolve_grant_directory` |
+| `run_graph`, `start_workflow` | `inputs[].path` | `run-input` pair, after `canonicalize` and a check that it is a file; the refusal comes before the import, so an unchosen input reads nothing |
+| `prepare_publication` | `into` | `publish-into` pair |
+| `prepare_publication`, `review_publication` | `path` | must be a `.encastra` file; read only |
+| `inspect_publication`, `import_publication` | `folder` | `import-from` pair; refuses with `folder-not-chosen` |
+| `save_project` | `path` | must be a `.encastra` file; the only path this application writes outside a granted folder |
+| `open_project`, `restore_version`, `compare_versions` | `path` | must be a `.encastra` file |
+| `library_remove` | none — an entry id | deletion is confined by the library crate to copies under `imports/` |
+
+`FolderPurpose` has exactly four members — `publish-into`, `import-from`, `grant-to-component`,
+`projects-location` — and the editor cannot name a fifth: an unknown string fails to deserialise
+before the chooser opens. `projects-location` is the Settings preference for where somebody keeps
+their projects; it is recorded under its own name and no command acts on it, which is the point —
+browsing there used to make that folder grantable, publishable-into and importable-from.
+
+`FilePurpose` has one member, `run-input`, because a file reaches the runtime in exactly one way:
+as the value of an input port nothing upstream produces. `choose_file` opens the native file
+chooser on this side and records what the operating system returned; `seed_for` imports a file
+only if it is in that record. Until 2026-09-15 `inputs[].path` was whatever the WebView named,
+which meant a step could be handed any file this account can read — the shape the folder side had
+before `choose_folder`. A path stored anywhere, or typed by a renderer that has been through a
+debugger, is now displayed and not read: it has to be chosen again. A `.encastra` does not hold
+inputs at all (`Project` is a manifest, a graph, a lockfile, variables and history), and the
+editor clears the supplied inputs when a project is opened — but the gate does not rest on either
+of those, because the command is reachable without the editor.
+
+There is no deny-list for input files, unlike `resolve_grant_directory`. A folder grant is wide —
+everything in it now and everything that arrives in it later — so refusing the system tree
+outright is worth the bluntness. A single file somebody named in a native chooser is as narrow as
+a permission gets, and refusing it for where it lives would be refusing a choice that was made
+rather than one that was smuggled.
+
+Two choosers stay in the editor, on purpose: opening and saving a `.encastra` file goes through
+the dialog plugin from the page (`dialog:allow-open`, `dialog:allow-save` in
+`capabilities/default.json`). A project path is not a permission — the runtime accepts any path
+that ends in `.encastra` and resolves to a file, and the file is parsed with the same ceilings
+whoever named it — so nothing about consent rides on where that string came from. The two
+things that *are* permissions, a folder and an input file, are the two whose choosers moved.
 
 A few of these are worth spelling out.
 
@@ -112,6 +162,51 @@ out of the folder it was given, and grants no permission at all — every run st
 what was imported is a separate thing a person presses, and running it is a third. The refusals
 are returned as a serialised `ImportError` rather than as a sentence, so the interface branches
 on the reason rather than on English.
+
+**Every command that can fail refuses with a tag, not a sentence.** A failing command returns
+`Result<T, AppError>`, serialised internally tagged on `kind` in kebab-case with the values a
+sentence needs as named fields — the shape import refusals have always had. The editor matches on
+the tag and writes the sentence itself, so a refusal reaches a Spanish reader in Spanish rather
+than in whatever English the runtime happened to build. Four of the tags nest the refusal of the
+crate that raised it (`project`, `library`, `bundle`, `import`), keeping that crate's own
+vocabulary reachable instead of flattening it into prose; free text an operating system produced
+is a parameter the sentence quotes, never the sentence. `Status::message` — the one line the
+status bar shows while a workflow runs, and for that reason the one somebody actually watches — is
+tagged the same way. The full inventory — every command, every tag, every key, and the three gates
+that stop the two sides drifting — is [`docs/desktop/ERRORS.md`](desktop/ERRORS.md).
+
+**Taking a publication in is a state machine, not a flag.** `apps/desktop/src/import-machine.ts`
+holds it, the store delegates to it, and the panel reads everything it shows off the one value:
+
+    idle → busy(choosing | inspecting | importing) → success | error | cancelled → idle
+
+`cancelled` is the native chooser closed with nothing — not a refusal, because nobody said no to
+a folder there was none of. An event that is not a legal move from the current phase is ignored
+and the state comes back *unchanged, by identity*, which is how the store tells a refusal from a
+move without keeping a second flag. Three rules follow from it and each has a test:
+
+* **While it is busy the dialog cannot be closed.** Close is disabled, Escape does nothing, and
+  the focus trap stays — the bytes are going into the library whether the panel is on screen or
+  not, and a dialog that vanished mid-copy would be lying about that.
+* **A second Import is a no-op that can be observed.** `beginImport()` answers `false` and logs;
+  the button that could produce it is disabled everywhere it appears (the Library toolbar and its
+  empty state) from the same selector. It used to be possible to open a second native chooser in
+  the moment between the first one closing and the read finishing.
+* **The window will not close over it.** The editor refuses first, with a sentence, and
+  `close_window` refuses on the Rust side as well — it knows because `import_publication` marks
+  itself in flight for exactly as long as it runs, and clears the mark on any exit, a panic
+  included. The editor is not asked, because a flag the editor could set is a flag a reloaded or
+  hostile page could leave set, and a window that cannot be closed on the page's word is a
+  hostage. It is a separate flag from `report_dirty` deliberately: unsaved work is the person's
+  to lose if they say so, while a process that exits between an import's staging write and its
+  rename leaves a directory nothing accounts for. One boolean, one meaning.
+
+**There is a ceiling on what the library holds, in bytes.** `MAX_LIBRARY_BYTES` (4 GiB) is
+checked before anything is copied, and refused as `ImportError::LibraryFull { max, used, needed }`
+like any other refusal. `used` is *measured* from `imports/` rather than summed out of the index,
+because the index is a file and a file can understate itself; the check and the copy it authorises
+happen under one index lock, so two imports cannot both be told there is room for one. See
+[security/LIMITS.md](security/LIMITS.md#the-library).
 
 **The library only deletes what it made.** `library_remove` forgets an entry by default. Deleting
 the copy on disk is a second argument, and the runtime refuses it for anything whose origin is

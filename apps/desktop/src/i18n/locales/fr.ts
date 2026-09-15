@@ -411,6 +411,7 @@ const fr: Messages = {
     intro:
       'Encastra a lu le dossier que vous avez choisi comme doit le lire celui qui le reçoit : il a vérifié le fichier face au document qui l’accompagne et a refait ici le contrôle de l’éditeur. Rien n’a été écrit, rien n’a été exécuté.',
     reading: 'Lecture du dossier…',
+    writing: 'Copie en cours dans votre bibliothèque. Ce sera bref.',
     confirm: 'Importer',
     nothing: 'rien',
     copiesNothingRuns:
@@ -531,6 +532,8 @@ const fr: Messages = {
         'Le document et le projet ne s’accordent pas sur ce que ceci demande. Sous-déclarer les permissions est le problème évident ; les sur-déclarer apprend aux gens à survoler la liste, ce qui est le problème plus subtil. Les deux sont refusés.',
       alreadyImported:
         '{listing} {version} est déjà dans votre bibliothèque. Une version publiée ne change jamais : il n’y a donc rien de nouveau à récupérer.',
+      libraryFull:
+        'Votre bibliothèque est pleine. Elle contient déjà environ {used} Mo de copies importées et cette version en conserve {max} Mo au maximum ; celle-ci en demande environ {needed} Mo. Supprimez ce que vous n’utilisez plus et réessayez : rien n’a été importé.',
       io: 'Quelque chose sur cet ordinateur a refusé l’opération ({reason}). Rien n’a été récupéré.',
       unknown:
         'Encastra a refusé ce dossier pour une raison que cette version ne sait pas formuler. Il n’a pas été récupéré.',
@@ -879,8 +882,134 @@ const fr: Messages = {
       '{name} n’est plus là où il était. Remettez-le en place, ou ouvrez-le depuis l’endroit où il se trouve maintenant.',
     imported: '{name} récupéré. Rien ne s’est exécuté.',
     removedFromLibrary: '{name} ne figure plus dans la liste. Le fichier est resté où il était.',
+    importInFlight:
+      'Une importation est en cours d’écriture. La fenêtre se fermera une fois terminée.',
     removedAndDeleted:
       '{name} ne figure plus dans la liste, et la copie faite par Encastra a été supprimée.',
+  },
+
+  errors: {
+    unknown:
+      'Encastra a refusé pour une raison que cette version ne sait pas nommer ({kind}). Rien n’a été modifié.',
+    runtimeBusy: 'Le moteur est occupé ailleurs. Réessayez dans un instant.',
+    libraryBusy: 'Votre bibliothèque est occupée. Réessayez dans un instant.',
+    importInFlight:
+      'Une importation est en cours d’écriture. La fenêtre se fermera une fois terminée.',
+    chooserDidNotReturn: 'Le sélecteur de dossier s’est fermé sans répondre. Rien n’a été choisi.',
+    notAFolderOnThisMachine: 'Ce que le sélecteur a renvoyé n’est pas un dossier de cette machine.',
+    notAFileOnThisMachine: 'Ce n’est pas un fichier sur cette machine.',
+    fileUnusable: 'Ce fichier ne peut pas être utilisé : {reason}.',
+    folderUnusable: 'Ce dossier ne peut pas être utilisé ({reason}).',
+    notAProject: 'Ce n’est pas un projet Encastra. Le nom d’un projet se termine par .encastra.',
+    versionNotInProject:
+      'Cette version ne figure pas dans ce projet. Son historique a peut-être changé depuis votre dernière consultation.',
+    versionsNotInProject:
+      'L’une de ces deux versions ne figure pas dans ce projet : il n’y a donc rien à comparer.',
+    grantsRefused:
+      'Rien n’a été exécuté. {count} des autorisations accordées n’ont pas pu être données :',
+    workingFolder:
+      'Encastra n’a pas pu préparer un dossier de travail pour cette exécution ({reason}). Rien n’a été exécuté.',
+    inputUnreadable: '{path} n’a pas pu être ouvert ({reason}). Rien n’a été exécuté.',
+    inputUnusable:
+      'Le fichier de {node}.{port} ne peut pas être utilisé : {reason}. Rien n’a été exécuté.',
+    inputNotChosen:
+      'Choisissez le fichier de {node}.{port} avec le bouton Choisir avant d’exécuter. Rien n’a été exécuté.',
+    workflowAlreadyRunning: 'Un flux est déjà en cours. Arrêtez-le avant d’en lancer un autre.',
+    workflowInvalid:
+      'Ce flux ne peut pas encore s’exécuter : {problems} chose(s) à corriger d’abord.',
+    workflowNotStarted: 'Le flux n’a pas pu démarrer ({reason}). Rien n’a été exécuté.',
+    destinationMissing: 'Ce dossier n’existe pas. Choisissez-en un qui existe.',
+    destinationIsALink:
+      'Ce dossier est un lien vers un autre endroit : ce qui serait écrit atterrirait ailleurs que là où vous avez choisi. Choisissez le dossier lui-même.',
+    destinationIsAFile:
+      'C’est un fichier, pas un dossier. Une publication a besoin de son propre dossier.',
+    destinationNotChosen:
+      'Choisissez d’abord le dossier de publication avec le bouton Choisir, pour qu’Encastra écrive là où vous avez pointé.',
+    publicationPathEscapes:
+      'Cette publication ne peut pas être écrite à l’endroit demandé. Rien n’a été écrit.',
+    publicationAlreadyThere:
+      '{folder} contient déjà une publication. Supprimez-la ou choisissez un autre dossier.',
+    notOursToDelete:
+      'Ce fichier est le vôtre et il reste où il est. Encastra ne supprime que les copies qu’il a faites lui-même, c’est-à-dire ce que vous avez importé.',
+    copyNotDeleted:
+      'Il ne figure plus dans votre liste, mais la copie n’a pas pu être supprimée ({reason}).',
+    noWindow: 'Il n’y a aucune fenêtre à fermer.',
+    windowWouldNotClose: 'La fenêtre n’a pas voulu se fermer. Votre travail est toujours là.',
+    io: 'Quelque chose sur cet ordinateur a refusé l’opération ({reason}).',
+    status: {
+      triggerError: '{node} a cessé de surveiller les changements ({reason}).',
+      eventsDropped: {
+        one: '{count} événement a été abandonné : il arrivait plus vite qu’il ne pouvait être traité.',
+        other:
+          '{count} événements ont été abandonnés : ils arrivaient plus vite qu’ils ne pouvaient être traités.',
+      },
+      workflowStopped: 'Ce flux s’est arrêté de manière inattendue. Vous pouvez le relancer.',
+      runningFor: {
+        one: 'En cours depuis {seconds} seconde.',
+        other: 'En cours depuis {seconds} secondes.',
+      },
+    },
+    grant: {
+      folderUnusable: '{node} : ce dossier ne peut pas être utilisé ({reason}).',
+      folderNotChosen:
+        '{node} : choisissez ce dossier avec le bouton Choisir avant de l’autoriser, pour que ce qui est autorisé soit ce que vous avez pointé.',
+      notDeclared:
+        '{node} : cette étape ne demande jamais {capability}, il n’y a donc rien à autoriser.',
+    },
+    project: {
+      generic: 'Ce fichier de projet n’a pas pu être lu.',
+      unsupportedSchema:
+        'Cette version lit les projets en version {ours}, et celui-ci annonce la version {theirs}. Il a été créé par un Encastra plus récent.',
+      missingEntry:
+        'Le fichier de projet ne contient pas {entry} : ce n’est donc pas un projet complet.',
+      invalid: '{entry}, dans ce projet, n’est pas valide : {reason}.',
+      archive:
+        'Le fichier de projet n’a pas pu être lu comme une archive ({reason}). Il est peut-être endommagé.',
+      tooLarge:
+        '{entry}, dans ce projet, se décompresse au-delà de ce que cette version lit ({limit} octets).',
+      tooLargeInTotal:
+        'Ce projet se décompresse au-delà de ce que cette version lit ({limit} octets au total).',
+      tooManySnapshots:
+        'Ce projet conserve {count} versions, et cette version en accepte {limit} au maximum.',
+      fileTooLarge:
+        'Ce fichier de projet fait {size} octets, et cette version en lit {limit} au maximum.',
+      ambiguousArchive:
+        'L’archive du projet annonce {declared} entrées pour seulement {distinct} noms : elle nomme donc deux fois la même chose. Encastra ne devine pas laquelle était voulue.',
+      io: 'Le fichier de projet n’a pas pu être lu ni écrit ({reason}).',
+    },
+    library: {
+      generic: 'Votre bibliothèque n’a pas pu être lue.',
+      corrupt:
+        'L’index de votre bibliothèque n’a pas pu être lu ({reason}). Il a été laissé tel quel : c’est votre trace de votre propre travail, et Encastra ne la recommence pas.',
+      writtenByAnotherVersion:
+        'L’index de votre bibliothèque a été écrit par une autre version d’Encastra (il annonce la version {theirs}, et cette version lit la {ours}). Il a été laissé tel quel.',
+      tooManyEntries:
+        'L’index de votre bibliothèque recense {count} éléments, et cette version en accepte {max} au maximum. Il a été laissé tel quel.',
+      notOurs:
+        'Ce n’est pas Encastra qui a mis cela là, ce n’est donc pas à Encastra de l’enlever.',
+      io: 'Votre bibliothèque n’a pas pu être lue ni écrite ({reason}).',
+    },
+    bundle: {
+      generic: 'Cette publication n’a pas pu être préparée.',
+      reviewRefused:
+        'La vérification a trouvé {blocking} chose(s) à changer avant que cela puisse être publié.',
+      notAVersion:
+        '« {version} » n’est pas une version. Les publications sont numérotées comme 1.2.0.',
+      notYourNamespace:
+        '« {listing} » n’est pas dans l’espace de noms de {publisher}. Une publication est classée sous le nom de qui la publie.',
+      missing: 'Une publication a besoin d’un élément : {field}.',
+      tooLong:
+        'Le champ {field} est plus long que ce que cette version publie ({max} caractères au maximum).',
+      controlCharacters:
+        'Le champ {field} contient des caractères capables de masquer ce qu’il dit vraiment. Encastra le refuse plutôt que de réécrire en silence ce que vous avez écrit.',
+      tooLarge: 'Ce projet fait environ {size}, et cette version publie {max} au maximum.',
+      notInstallable:
+        'Cette version ne peut pas installer un élément de type {publicationKind} : elle ne le propose donc pas.',
+      notAnIdentifier: '« {value} » n’est pas un nom utilisable : {why}.',
+    },
+    import: {
+      generic: 'Cette publication n’a pas été intégrée, et rien n’a été modifié sur cette machine.',
+    },
   },
 
   demos: {

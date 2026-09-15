@@ -8,7 +8,7 @@
  */
 
 /** The release this website documents. Single module, imported everywhere. */
-export const VERSION = '0.5.0-beta.1';
+export const VERSION = '0.5.0-rc.3';
 
 export const SITE = {
   name: 'Encastra',
@@ -103,16 +103,16 @@ export const RELEASE: {
   installerFormat: string;
 } = {
   /** Exactly as published in docs/RELEASE.md. */
-  installerFilename: 'Encastra_0.5.0-beta.1_x64-setup.exe',
-  installerVersion: '0.5.0-beta.1',
+  installerFilename: 'Encastra_0.5.0-rc.3_x64-setup.exe',
+  installerVersion: '0.5.0-rc.3',
   installerSize: '3.4 MB',
-  installerSha256: '5678e5d06b659c178c8eaae0a874cbb539eb56e571b6400df4a12f68f6d66f91',
+  installerSha256: 'fecbf62a5735712414ae8063d6ba63daf6eff183e7b6e77654d71647e5cb5257',
   binaryFilename: 'encastra-desktop.exe',
-  binarySize: '9.2 MB',
-  binarySha256: 'be1945f9f8dc3dcf60e89f524f0d1f291d91585c8ba847a5e3736f1394de67a1',
+  binarySize: '9.4 MB',
+  binarySha256: 'a30a56ea482be940fba7f472081303c518701cb54507ad2ab540bbdd305ca457',
   builtOn: '2026-09-15',
   builtFor: 'Windows AMD64',
-  commit: '349b2ff972817798ef1175b73e5885fafe963ed6',
+  commit: '3264e07ab372d2370bec88b7062406cd71e3cc3a',
   signed: false,
   /** Installer format. Per user, no administrator required. See docs/RELEASE.md. */
   installerFormat: 'NSIS',
@@ -196,6 +196,27 @@ export const DOCS = [
     title: 'Product roadmap',
     summary: 'What ships when, and a named list of what would make this fail.',
     audience: 'everyone',
+  },
+  {
+    slug: 'THIRD-PARTY.md',
+    title: 'Third-party software',
+    summary:
+      'Every crate compiled into the application and every npm package bundled into its interface, with licence and origin. Generated from the dependency tree; the build fails when it is stale.',
+    audience: 'everyone',
+  },
+  {
+    slug: 'security/CI_SECURITY.md',
+    title: 'CI security',
+    summary:
+      'Two workflows, two trust levels: what pull-request CI may touch, what a release build may not, and the first real runs with what they found.',
+    audience: 'engineers',
+  },
+  {
+    slug: 'security/AI-AGENT-SURFACE.md',
+    title: 'The AI-agent attack surface',
+    summary:
+      'What changes when the thing driving Encastra is an agent: as the user’s tool, as the author of a file, or as a reader of text. What is tested and what is not.',
+    audience: 'engineers',
   },
   {
     slug: 'adr/',

@@ -38,17 +38,18 @@ jobs:
     name: Security gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-03
         with:
           toolchain: '1.98.1'
           components: rustfmt, clippy
@@ -98,9 +99,9 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Rust tests, including the security suite
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
       - name: The symlink escape tests must actually run, not skip
         run: |
@@ -116,11 +117,11 @@ jobs:
 
       - name: npm advisories
         run: npm audit --audit-level=high
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check advisories bans licenses sources
 
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -134,18 +135,29 @@ jobs:
       # secret's value never appears — only whether it is empty.
       HAS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v5
+      # The whole history: the build commit the manifest names is an ancestor of the tag, not
+      # the tag itself, and a depth-1 clone would not have it to check out.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          node-version: 22
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Node 24, the version the developer machine builds with: the frontend bundle is embedded
+      # in the executable, so a different Node is one candidate for the bytes differing between
+      # the two machines (B7 in docs/RELEASE_CANDIDATE_READINESS.md). The gates job keeps 22.
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
           cache: npm
       - run: npm ci
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-03
         with:
           toolchain: '1.98.1'
-      - uses: Swatinem/rust-cache@v2
+      # No build cache here on purpose. The Actions cache is shared with pull-request runs, and
+      # a compiled artefact planted by one of those would be linked into the release without
+      # anything in this file noticing. A release is built from nothing but the source and the
+      # pinned toolchain; it is slower, and that is the price of the hashes meaning anything.
 
       # Signing, when there is something to sign with.
       #
@@ -198,6 +210,12 @@ jobs:
             npm run tauri:build
           fi
 
+      # Every artefact in target/ must be this version's and this commit's, read from the
+      # artefact itself (the VS_VERSIONINFO resource and the build stamp), not from its name.
+      - name: Every artefact is this version's and this commit's
+        shell: bash
+        run: python scripts/release_identity.py --check
+
       # The manifest that was published, put back beside the artefacts this machine just built.
       # After the build, not before: the build script stamps the binary `-dirty` if a tracked
       # file differs from the commit, and the tree at the build commit carries the previous
@@ -213,6 +231,21 @@ jobs:
       # means, and it is checked here rather than assumed. A signed build differs from the
       # published unsigned hashes by its signature, so for it the manifest is regenerated from
       # the signed artefacts and uploaded, and `--require-signature` is the gate.
+      # What this runner built, kept whether or not it reproduces the published bytes: when it
+      # does not, the only way to learn *why* is to put the two files side by side under
+      # scripts/pe_diff.py, and a failed step that uploaded nothing leaves only a hash to look at.
+      # The first release run of a candidate found exactly that — the hosted runner's bytes
+      # differed from the developer machine's, and nothing was there to diff.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: encastra-runner-build-${{ github.run_id }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/encastra-desktop.exe
+          if-no-files-found: error
+          retention-days: 30
+
       - name: The build reproduces the published hashes
         if: env.HAS_CERTIFICATE != 'true'
         shell: bash
@@ -230,8 +263,10 @@ jobs:
         if: env.HAS_CERTIFICATE != 'true'
         shell: bash
         run: |
-          if [ "${{ inputs.allow_unsigned }}" != "true" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "::error::This tree has no certificate. Publishing unsigned needs the allow_unsigned input."
+          # On a tag push there is no input, so an unsigned build from a tag push is refused
+          # outright: dispatch the workflow on the tag with allow_unsigned to make the decision.
+          if [ "${{ inputs.allow_unsigned }}" != "true" ]; then
+            echo "::error::This tree has no certificate. Publishing unsigned needs the allow_unsigned input: dispatch this workflow on the tag with it set."
             exit 1
           fi
           echo "::warning::These artefacts are UNSIGNED. Whoever receives this installer cannot tell it from a tampered one."
@@ -243,11 +278,75 @@ jobs:
               sys.exit(1)
           PY
 
-      - uses: actions/upload-artifact@v4
+      # The verdict, machine-readable, uploaded beside the artefact. The gates already ran in
+      # the job above, so they are not re-run here and are marked NOT_VERIFIED in the file; CI
+      # evidence needs the GitHub API, which the runner's token is not asked to reach. A BLOCKED
+      # verdict does not fail this step — the file is the record of *why*, for the person who
+      # reads the artefact.
+      - name: The verdict, machine-readable
+        shell: bash
+        run: |
+          python scripts/release_check.py --skip-gate --skip-deps --no-network --out release-readiness.json || true
+          cat release-readiness.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: encastra-installer
           path: |
             target/release/bundle/nsis/*.exe
             docs/RELEASE.md
+            release-readiness.json
           if-no-files-found: error
           retention-days: 30
+
+  install:
+    name: Install on a clean Windows runner
+    needs: build
+    # Runs on what the runner built even when that build did not reproduce the published
+    # hashes: the reproduction gate keeps failing the workflow (a release that does not
+    # reproduce is not a release), but the installation evidence is about the runner's own
+    # bytes and is worth having either way. Two candidates in a row produced no installation
+    # evidence at all because this job waited for a green build that could not be green.
+    if: always() && needs.build.result != 'skipped' && needs.build.result != 'cancelled'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: encastra-runner-build-${{ github.run_id }}
+          path: artefact
+
+      # A hosted runner is a fresh Windows image that has never seen Encastra: the nearest thing
+      # to "a clean VM" this repository can reach on its own. `install_check.ps1` installs
+      # silently per-user, checks the version, the build stamp, the HKCU uninstall entry, that
+      # nothing landed under HKLM, the shortcut, the directory ACL, and that the installed copy
+      # launches and stays up. It is the same script a person runs on a real machine; what it
+      # cannot do here is click through the native folder chooser (scripts/verify/gui_chooser.ps1
+      # needs a desktop session), and this job does not claim to.
+      - name: Silent install and first launch
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $installer = Get-ChildItem artefact -Recurse -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw "no installer in the artefact" }
+          "installer: $($installer.FullName)"
+          $log = & pwsh -NoProfile -File scripts/verify/install_check.ps1 -Installer $installer.FullName -ExpectedVersion $version
+          $log
+          $fails = @($log | Where-Object { $_ -like 'FAIL*' })
+          if ($fails.Count -gt 0) { throw "$($fails.Count) check(s) failed" }
+
+      - name: Uninstall, and nothing is left
+        shell: pwsh
+        run: |
+          Get-Process encastra-desktop -ErrorAction SilentlyContinue | Stop-Process -Force
+          $dir = Join-Path $env:LOCALAPPDATA 'Encastra'
+          $p = Start-Process -FilePath (Join-Path $dir 'uninstall.exe') -ArgumentList '/S' -PassThru -Wait
+          "uninstall exit $($p.ExitCode)"
+          Start-Sleep 3
+          $entry = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_.DisplayName -eq 'Encastra' }
+          if ($entry) { throw "uninstall entry still present" }
+          if (Test-Path (Join-Path $dir 'encastra-desktop.exe')) { throw "binary still present after uninstall" }
+          "clean"

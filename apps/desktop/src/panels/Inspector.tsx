@@ -94,7 +94,10 @@ function ConfigControl({
             type="button"
             className="btn"
             onClick={async () => {
-              const chosen = await ipc.pickFolder();
+              // This path becomes a step's folder, and the folder in a grant on the next run.
+              // It is chosen to be given to a component and recorded as nothing else, so it
+              // does not also become somewhere a publication may be written.
+              const chosen = await ipc.pickFolder('grant-to-component');
               if (chosen) setConfig(nodeId, name, chosen);
             }}
           >

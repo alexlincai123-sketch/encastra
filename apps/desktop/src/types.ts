@@ -174,6 +174,41 @@ export interface GrantSpec {
   hosts?: string[];
 }
 
+/**
+ * What a folder is being chosen *for*.
+ *
+ * Consent is per question. The runtime records the folder somebody picked together with the
+ * purpose the chooser was opened to serve, and each command checks the pair for its own
+ * purpose — so a folder picked to import a publication from is not also a folder a component
+ * may write into, which is what it used to be.
+ *
+ * These four strings are the wire form of `FolderPurpose` in `apps/desktop/src-tauri/src/lib.rs`;
+ * `test/consent.test.ts` asserts the two lists are the same list. A string that is not one of
+ * them fails to deserialise on the Rust side, so there is nothing to gain by inventing one.
+ */
+export type FolderPurpose =
+  /** Where `prepare_publication` may write a publication. */
+  | 'publish-into'
+  /** Where `inspect_publication` and `import_publication` may read one from. */
+  | 'import-from'
+  /** A folder a step in the workflow may be given, via a grant on a run. */
+  | 'grant-to-component'
+  /** The Settings preference for where this person keeps their projects. */
+  | 'projects-location';
+
+/**
+ * What a *file* is being chosen for.
+ *
+ * One member, because a file reaches the runtime in exactly one way: as the value of a graph
+ * input that nothing upstream produces. `choose_file` records what the native chooser returned,
+ * and `run_graph` / `start_workflow` seed an input from a path in that record and from nothing
+ * else — so a path stored in a project, or named by a renderer that has been through a debugger,
+ * is displayed and not read.
+ *
+ * The wire form of `FilePurpose` in `apps/desktop/src-tauri/src/lib.rs`.
+ */
+export type FilePurpose = 'run-input';
+
 export interface Snapshot {
   id: string;
   parent?: string;
@@ -345,7 +380,130 @@ export type ImportError =
   | { kind: 'review-refused'; findings: PublicationFinding[] }
   | { kind: 'capabilities-disagree'; declared: string[]; actual: string[] }
   | { kind: 'already-imported'; listing: string; version: string }
+  // Bytes, not entries: the library caps how many things it lists and, separately, how much
+  // disk the copies it made may take. Raised before anything is copied.
+  | { kind: 'library-full'; max: number; used: number; needed: number }
   | { kind: 'io'; reason: string };
+
+/**
+ * Why a `.encastra` file could not be read or written.
+ *
+ * Mirrors `ProjectError` in `crates/encastra-project`, tagged on `kind` and kebab-case. It
+ * arrives nested inside `AppError` rather than flattened into a sentence, so the interface can
+ * be as specific as the crate that refused — "this project declares more versions than this
+ * build holds" rather than "the project could not be opened".
+ */
+export type ProjectError =
+  | { kind: 'unsupported-schema'; ours: number; theirs: number }
+  | { kind: 'missing-entry'; entry: string }
+  | { kind: 'invalid'; entry: string; reason: string }
+  | { kind: 'archive'; reason: string }
+  | { kind: 'too-large'; entry: string; limit: number }
+  | { kind: 'too-large-in-total'; limit: number }
+  | { kind: 'too-many-snapshots'; count: number; limit: number }
+  | { kind: 'file-too-large'; size: number; limit: number }
+  | { kind: 'ambiguous-archive'; declared: number; distinct: number }
+  | { kind: 'io'; reason: string };
+
+/** Why the library index could not be read, written or acted on. Mirrors `LibraryError`. */
+export type LibraryError =
+  | { kind: 'corrupt'; reason: string }
+  | { kind: 'written-by-another-version'; ours: number; theirs: number }
+  | { kind: 'too-many-entries'; count: number; max: number }
+  | { kind: 'not-ours' }
+  | { kind: 'io'; reason: string };
+
+/** Why a publication could not be prepared. Mirrors `BundleError` in `crates/encastra-publish`. */
+export type BundleError =
+  | { kind: 'review-refused'; blocking: number }
+  | { kind: 'not-a-version'; version: string }
+  | { kind: 'not-your-namespace'; listing: string; publisher: string }
+  | { kind: 'missing'; field: string }
+  | { kind: 'too-long'; field: string; max: number }
+  | { kind: 'control-characters'; field: string }
+  | { kind: 'too-large'; size: number; max: number }
+  // Named `publicationKind` for the reason `ImportError` gives: the tag is already `kind`.
+  | { kind: 'not-installable'; publicationKind: PublicationKind }
+  | { kind: 'not-an-identifier'; value: string; why: string };
+
+/**
+ * Why one grant a run asked for was not given.
+ *
+ * A run can be refused over several grants at once and each names its own step, so these arrive
+ * as a list inside `AppError` rather than as one newline-joined string — which is what they used
+ * to be, and which the interface could neither translate nor lay out.
+ */
+export type GrantRefusal =
+  | { kind: 'folder-unusable'; node: string; reason: string }
+  | { kind: 'folder-not-chosen'; node: string }
+  // `capability` rather than `kind`: the tag is already `kind`.
+  | { kind: 'not-declared'; node: string; capability: string };
+
+/**
+ * Every way a command in the runtime can say no.
+ *
+ * Mirrors `AppError` in `apps/desktop/src-tauri/src/error.rs`, tagged on `kind` and kebab-case.
+ * Matched on rather than read: before this existed, a command failed with an English sentence,
+ * and a Spanish reader got that sentence in English at the one moment an application most needs
+ * to be understood. `errors.ts` holds the mapping from each tag to a key that exists in all six
+ * locale files, and `test/fixtures/error-kinds.json` — written by a Rust test — is what stops
+ * the two sides drifting apart.
+ *
+ * Four of the tags nest a refusal from the crate that raised it, keeping that crate's own
+ * vocabulary reachable instead of flattening it into prose.
+ */
+export type AppError =
+  | { kind: 'runtime-busy' }
+  | { kind: 'library-busy' }
+  | { kind: 'import-in-flight' }
+  | { kind: 'chooser-did-not-return' }
+  | { kind: 'not-a-folder-on-this-machine' }
+  | { kind: 'not-a-file-on-this-machine' }
+  | { kind: 'file-unusable'; reason: string }
+  | { kind: 'folder-unusable'; reason: string }
+  | { kind: 'not-a-project' }
+  | { kind: 'project'; error: ProjectError }
+  | { kind: 'version-not-in-project' }
+  | { kind: 'versions-not-in-project' }
+  | { kind: 'grants-refused'; refusals: GrantRefusal[] }
+  | { kind: 'working-folder'; reason: string }
+  | { kind: 'input-unreadable'; path: string; reason: string }
+  | { kind: 'input-unusable'; node: string; port: string; reason: string }
+  | { kind: 'input-not-chosen'; node: string; port: string }
+  | { kind: 'workflow-already-running' }
+  | { kind: 'workflow-invalid'; problems: number }
+  | { kind: 'workflow-not-started'; reason: string }
+  | { kind: 'destination-missing' }
+  | { kind: 'destination-is-a-link' }
+  | { kind: 'destination-is-a-file' }
+  | { kind: 'destination-not-chosen' }
+  | { kind: 'bundle'; error: BundleError }
+  | { kind: 'publication-path-escapes' }
+  | { kind: 'publication-already-there'; folder: string }
+  | { kind: 'library'; error: LibraryError }
+  | { kind: 'not-ours-to-delete' }
+  | { kind: 'copy-not-deleted'; reason: string }
+  | { kind: 'import'; error: ImportError }
+  | { kind: 'no-window' }
+  | { kind: 'window-would-not-close' }
+  | { kind: 'io'; reason: string };
+
+/**
+ * What the status bar is being told while a workflow runs.
+ *
+ * Mirrors `StatusMessage` in `apps/desktop/src-tauri/src/error.rs`, tagged on `kind` and
+ * kebab-case like every refusal above. Not an error — a dropped event is not a failed command —
+ * but the same problem: these used to arrive as English sentences the runtime had built, which
+ * made the one line somebody watches while a workflow runs the one line nobody translated.
+ */
+export type StatusMessage =
+  // The whole `NodeError` travels, not just its sentence: it carries a stable `code` that a later
+  // build can translate without changing this payload again.
+  | { kind: 'trigger-error'; node: string; error: NodeError }
+  | { kind: 'events-dropped'; count: number }
+  | { kind: 'nothing-ran'; problems: number }
+  | { kind: 'workflow-stopped' }
+  | { kind: 'running-for'; seconds: number };
 
 /** Where an entry came from, which is the only thing that decides what may be done to it. */
 export type LibraryOrigin = 'created' | 'imported' | 'prepared';

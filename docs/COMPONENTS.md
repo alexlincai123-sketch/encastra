@@ -139,6 +139,11 @@ This is the block that turns a result into something you can find. In most workf
 only step that touches your disk, which is precisely why it is separate from the components that
 do the actual work.
 
+It never replaces a file. If the folder already holds a file of the name this step would use,
+the step is refused with that reason and the run says so — a run may add to a folder you granted,
+not take from it. Give the result another name (the **Add to the name** setting exists for this)
+or move the existing file yourself.
+
 ### Move File
 
 `encastra.file.move` · Moves a file into another folder. The original is removed.

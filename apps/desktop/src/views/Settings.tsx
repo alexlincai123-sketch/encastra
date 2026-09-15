@@ -287,7 +287,10 @@ function ProjectsSection() {
   const about = useEditor((s) => s.about);
 
   const browse = () => {
-    void ipc.pickFolder().then((chosen) => {
+    // A preference, and only a preference. This used to share one record with grants, publishing
+    // and importing, so browsing here quietly made this folder writable by a component and
+    // publishable into. Under its own purpose it answers only the question it was asked.
+    void ipc.pickFolder('projects-location').then((chosen) => {
       if (chosen) set('projectFolder', chosen);
     });
   };

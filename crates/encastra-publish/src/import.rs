@@ -151,6 +151,17 @@ pub enum ImportError {
     },
     #[error("{listing} {version} is already here")]
     AlreadyImported { listing: String, version: String },
+    /// There is no room under the library's byte ceiling for what this import would write.
+    ///
+    /// Raised by whoever holds the library index — this crate has no notion of one — through the
+    /// reservation [`import_reserving`] takes, and named here rather than there so that running
+    /// out of room arrives in the same vocabulary as every other refusal and an interface can
+    /// tell it from a disk that is physically full. `needed` is measured from bytes that have
+    /// already been verified, never from what the document claimed about them.
+    #[error(
+        "this library holds {used} bytes of imports and at most {max}; this one needs {needed}"
+    )]
+    LibraryFull { max: u64, used: u64, needed: u64 },
     /// Something the filesystem refused, as its kind and nothing else — the message would carry
     /// the path it failed on.
     #[error("the folder could not be read ({reason})")]
@@ -242,6 +253,28 @@ pub fn import(
     runtime_version: &str,
     library_root: &Path,
 ) -> Result<Imported, ImportError> {
+    import_reserving(folder, registry, runtime_version, library_root, &|_| Ok(()))
+}
+
+/// [`import`], with somebody else deciding first whether there is room for it.
+///
+/// `reserve` is called once, with the number of bytes this import is about to write — measured
+/// from the bytes that were just verified, not from anything the document said about them — and
+/// **before the staging directory is created**, so a refusal writes nothing at all. Refusing is
+/// the reservation's own answer: it hands back the [`ImportError`] it wants the caller to see,
+/// which is how [`ImportError::LibraryFull`] reaches an interface from a crate that has never
+/// heard of a library index.
+///
+/// The caller is expected to hold whatever lock makes "how much is already there" and "these
+/// bytes are now mine" a single act. This crate cannot do that for it: two imports running at
+/// once would otherwise each be told there is room for one.
+pub fn import_reserving(
+    folder: &Path,
+    registry: &dyn ComponentRegistry,
+    runtime_version: &str,
+    library_root: &Path,
+    reserve: &dyn Fn(u64) -> Result<(), ImportError>,
+) -> Result<Imported, ImportError> {
     let (inspected, project_bytes) = read_publication(folder, registry, runtime_version)?;
 
     let listing = inspected.bundle.draft.listing_id.clone();
@@ -268,17 +301,32 @@ pub fn import(
         return Err(ImportError::AlreadyImported { listing, version });
     }
 
+    // Anything a previous run staged and abandoned goes before this one measures or writes.
+    // Otherwise a crash mid-import leaves bytes that count against the ceiling for ever and
+    // belong to nothing: see `sweep_staging` for why only old ones are taken.
+    sweep_staging(library_root, STAGING_GRACE);
+
+    // Serialised before the reservation rather than inside the write, because the reservation
+    // has to be told the whole size of what will land and the document is part of it. It is
+    // re-serialised from the parsed bundle for the reason in this function's own doc comment.
+    let document = serde_json::to_vec_pretty(&inspected.bundle).map_err(|e| {
+        ImportError::DocumentUnreadable {
+            reason: e.to_string(),
+        }
+    })?;
+
+    // Measured, not declared. These are the bytes that were verified a moment ago, and they are
+    // the same bytes that get staged and then moved — so counting them here counts the staging
+    // too, which is the only copy that exists until the rename.
+    let needed = (project_bytes.len() as u64).saturating_add(document.len() as u64);
+    reserve(needed)?;
+
     let staging = shelf.join(format!(".{version}.importing-{}", nonce()));
     std::fs::create_dir_all(&staging)?;
 
     let write = (|| -> Result<(), ImportError> {
         std::fs::write(staging.join(&inspected.project_file), &project_bytes)?;
-        let document = serde_json::to_vec_pretty(&inspected.bundle).map_err(|e| {
-            ImportError::DocumentUnreadable {
-                reason: e.to_string(),
-            }
-        })?;
-        std::fs::write(staging.join(DOCUMENT_FILE), document)?;
+        std::fs::write(staging.join(DOCUMENT_FILE), &document)?;
         Ok(())
     })();
     if let Err(e) = write {
@@ -691,6 +739,69 @@ fn is_path_segment(text: &str) -> bool {
         && !text.contains('\0')
 }
 
+/// What a staging directory's name holds, so one can be told from a version folder.
+///
+/// A version folder is a semver string, which cannot contain this and cannot begin with a dot.
+pub const STAGING_MARKER: &str = ".importing-";
+
+/// How old an abandoned staging directory has to be before it is swept.
+///
+/// Not zero, and the reason is another copy of this application: two instances can be running,
+/// and a staging directory that belongs to an import happening *now* in the other one would be
+/// deleted out from under it. That import would then fail at its rename rather than corrupt
+/// anything — but failing somebody's import to tidy up is not a trade worth making. An hour is
+/// far longer than any import this build will do (64 MB, twice) and far shorter than the time
+/// somebody would leave the leftovers of a crash lying about.
+pub const STAGING_GRACE: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
+/// Removes staging directories a previous run left behind, and returns how many went.
+///
+/// An import stages beside its destination and moves the whole folder into place, so a process
+/// that dies mid-import leaves a half-written temporary directory rather than a half-written
+/// publication. That is the right failure — but nothing used to remove it, and bytes that
+/// belong to nothing still take up room and still count against the library's ceiling.
+///
+/// Errors are swallowed on purpose: this is housekeeping running on the way to doing something
+/// else, and a folder that refuses to be listed or removed is not a reason to refuse an import.
+pub fn sweep_staging(library_root: &Path, grace: std::time::Duration) -> usize {
+    let Ok(shelves) = std::fs::read_dir(library_root.join("imports")) else {
+        return 0;
+    };
+    let now = std::time::SystemTime::now();
+    let mut removed = 0;
+
+    for shelf in shelves.flatten() {
+        let Ok(entries) = std::fs::read_dir(shelf.path()) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with('.') || !name.contains(STAGING_MARKER) {
+                continue;
+            }
+            // `symlink_metadata`, as everywhere else here: a link is not descended into, and a
+            // link is not a staging directory this crate made.
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                continue;
+            };
+            if !meta.is_dir() {
+                continue;
+            }
+            // An unreadable or future timestamp leaves it alone. The failure worth avoiding is
+            // deleting a live import, not keeping a dead one for another hour.
+            let old = meta
+                .modified()
+                .ok()
+                .and_then(|at| now.duration_since(at).ok())
+                .is_some_and(|age| age >= grace);
+            if old && std::fs::remove_dir_all(entry.path()).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
+}
+
 /// Something different every time, to name a staging directory.
 ///
 /// Not a secret and not unpredictable — it only has to stop two imports running at once from
@@ -750,5 +861,22 @@ mod tests {
     fn every_staging_name_differs_from_the_last() {
         let names: BTreeSet<String> = (0..64).map(|_| nonce()).collect();
         assert_eq!(names.len(), 64, "two imports would stage into one folder");
+    }
+
+    #[test]
+    fn a_staging_name_is_recognisable_and_a_version_folder_is_not() {
+        // What `sweep_staging` matches on: a leading dot and the marker. Both halves matter —
+        // the sweep removes whole directories, and a rule that matched a version folder would
+        // delete somebody's import rather than the leftovers of a crash.
+        let staged = format!(".1.0.0{}{}", STAGING_MARKER, nonce());
+        assert!(staged.starts_with('.') && staged.contains(STAGING_MARKER));
+        for version in ["1.0.0", "2.0.0-beta.1", "10.20.30+build.7"] {
+            assert!(
+                !version.starts_with('.') || !version.contains(STAGING_MARKER),
+                "{version} would be swept as if it were staging"
+            );
+        }
+        // A dot-folder that is not staging is left alone too: the marker is the other half.
+        assert!(!".hidden".contains(STAGING_MARKER));
     }
 }

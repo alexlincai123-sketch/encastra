@@ -98,7 +98,13 @@ fn mutate(bytes: &mut Vec<u8>, state: &mut u64) {
 }
 
 fn valid_project() -> Vec<u8> {
-    Project::new("fuzz", 1_700_000_000_000)
+    let mut project = Project::new("fuzz", 1_700_000_000_000);
+    // A fresh project records the runtime it was made with, so the seed used to change with
+    // every version bump — and the committed corpus went stale at 0.5.0-rc.1, on the release
+    // candidate's own CI run. A seed is a shape, not a version: pin the requirement to one that
+    // every runtime satisfies, so the corpus depends on the format and on nothing else.
+    project.manifest.runtime = ">=0.1.0".into();
+    project
         .to_bytes()
         .expect("a fresh project always serialises")
 }

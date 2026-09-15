@@ -75,7 +75,7 @@ class Repo:
         """Puts a binary and an installer in target/ whose binary states the given commit."""
         payload = b"" if stamp is None else f"encastra-build-commit={stamp};".encode()
         (self.root / "target/release/encastra-desktop.exe").write_bytes(pe_fixture.build(payload=payload))
-        (self.root / "target/release/bundle/nsis/Encastra_x64-setup.exe").write_bytes(
+        (self.root / "target/release/bundle/nsis/Encastra_0.5.0-beta.1_x64-setup.exe").write_bytes(
             pe_fixture.build(code=b"\x90\x90\xc3", payload=b"installer" + payload)
         )
 
@@ -108,19 +108,62 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         block = self.repo.block()
         self.assertIn(f"build commit `{self.head}`", block)
-        self.assertIn("Encastra_x64-setup.exe", block)
+        self.assertIn("Encastra_0.5.0-beta.1_x64-setup.exe", block)
         self.assertIn("encastra-desktop.exe", block)
         self.assertEqual(len(re.findall(r"`[0-9a-f]{64}`", block)), 2)
         self.assertNotIn("nothing yet", block)
         site = (self.repo.root / "apps/web/src/config/site.ts").read_text("utf-8")
         self.assertIn(f"commit: '{self.head}'", site)
-        self.assertIn("installerFilename: 'Encastra_x64-setup.exe'", site)
+        self.assertIn("installerFilename: 'Encastra_0.5.0-beta.1_x64-setup.exe'", site)
         self.assertIn("installerVersion: '0.5.0-beta.1'", site)
         self.assertIn("signed: false", site)
         installer_hash = re.search(
-            r"Encastra_x64-setup.exe` \| [^|]+ \| [^|]+ \| `([0-9a-f]{64})`", block
+            r"Encastra_0.5.0-beta.1_x64-setup.exe` \| [^|]+ \| [^|]+ \| `([0-9a-f]{64})`", block
         ).group(1)
         self.assertIn(f"installerSha256: '{installer_hash}'", site)
+
+    def test_an_installer_of_another_version_is_refused(self) -> None:
+        # The previous build's installer is still in target/; it must not be published as this one.
+        self.repo.build(self.head)
+        stale = self.repo.root / "target/release/bundle/nsis/Encastra_0.4.0-beta.1_x64-setup.exe"
+        stale.write_bytes(pe_fixture.build(code=b"\x90\xc3", payload=b"old installer"))
+        result = self.repo.manifest("--allow-unsigned")
+        self.assertEqual(result.returncode, 4, result.stderr)
+        self.assertIn("0.4.0-beta.1 installer but the tree is at 0.5.0-beta.1", result.stderr)
+        self.assertIn("nothing yet", self.repo.block())
+        stale.unlink()
+        self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
+
+    def test_an_installer_without_a_version_in_its_name_is_refused(self) -> None:
+        self.repo.build(self.head)
+        nameless = self.repo.root / "target/release/bundle/nsis/Encastra_x64-setup.exe"
+        nameless.write_bytes(pe_fixture.build(code=b"\x90\xc3", payload=b"nameless"))
+        result = self.repo.manifest("--allow-unsigned")
+        self.assertEqual(result.returncode, 4, result.stderr)
+        self.assertIn("carries no version in its name", result.stderr)
+        self.assertIn("nothing yet", self.repo.block())
+
+    def test_an_installer_older_than_the_binary_is_refused(self) -> None:
+        # Same name, same version, but written before the executable: a previous build's
+        # installer that a rebuild of the binary alone did not replace.
+        self.repo.build(self.head)
+        binary = self.repo.root / "target/release/encastra-desktop.exe"
+        installer = self.repo.root / "target/release/bundle/nsis/Encastra_0.5.0-beta.1_x64-setup.exe"
+        earlier = binary.stat().st_mtime - 120
+        os.utime(installer, (earlier, earlier))
+        result = self.repo.manifest("--allow-unsigned")
+        self.assertEqual(result.returncode, 4, result.stderr)
+        self.assertIn("is older than encastra-desktop.exe", result.stderr)
+        self.assertIn("nothing yet", self.repo.block())
+
+    def test_verify_notices_an_installer_the_manifest_does_not_describe(self) -> None:
+        self.repo.build(self.head)
+        self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
+        stale = self.repo.root / "target/release/bundle/nsis/Encastra_0.4.0-beta.1_x64-setup.exe"
+        stale.write_bytes(pe_fixture.build(code=b"\x90\xc3", payload=b"old installer"))
+        result = self.repo.manifest("--verify")
+        self.assertEqual(result.returncode, 5, result.stderr)
+        self.assertIn("in target/ but not in the manifest", result.stderr)
 
     def test_build_commit_prints_what_the_manifest_names(self) -> None:
         self.repo.build(self.head)
@@ -210,6 +253,36 @@ class ManifestTests(unittest.TestCase):
         result = self.repo.manifest("--verify")
         self.assertEqual(result.returncode, 5, result.stderr)
         self.assertIn("src.rs", result.stderr)
+
+    def test_verify_accepts_the_written_record_after_the_publication(self) -> None:
+        # The readiness report and the audits name the tag; they can only be written after it
+        # exists. Markdown under docs/ is not compiled into anything, so the hashes stay true.
+        self.repo.build(self.head)
+        self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
+        (self.repo.root / "docs/audits").mkdir()
+        (self.repo.root / "docs/audits/record.md").write_text("# what was observed\n", "utf-8")
+        self.repo.commit("the record of the release")
+        result = self.repo.manifest("--verify")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # A file that is not Markdown under docs/ is not a record; a script beside the docs is code.
+        (self.repo.root / "docs/audits/helper.py").write_text("print(1)\n", "utf-8")
+        self.repo.commit("code hiding among the records")
+        result = self.repo.manifest("--verify")
+        self.assertEqual(result.returncode, 5, result.stderr)
+        self.assertIn("docs/audits/helper.py", result.stderr)
+
+    def test_an_unsigned_production_version_is_refused_without_any_flag(self) -> None:
+        # The rule is "signed or it does not happen", not "unless nobody passed a flag". The
+        # synthetic artefacts carry no signature, and on a non-pre-release version that is enough.
+        self.repo.set_version("1.0.0")
+        head = self.repo.commit("production")
+        self.repo.build(head)
+        nsis = self.repo.root / "target/release/bundle/nsis"
+        (nsis / "Encastra_0.5.0-beta.1_x64-setup.exe").rename(nsis / "Encastra_1.0.0_x64-setup.exe")
+        result = self.repo.manifest()
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("not a pre-release", result.stderr)
+        self.assertIn("nothing yet", self.repo.block(), "the document must not be written")
 
     def test_verify_notices_a_tampered_hash(self) -> None:
         self.repo.build(self.head)

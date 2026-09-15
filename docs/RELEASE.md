@@ -8,20 +8,20 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.5.0-beta.1** · built 2026-09-15 on Windows AMD64 · build commit `349b2ff972817798ef1175b73e5885fafe963ed6`
+**Version 0.5.0-rc.3** · built 2026-09-15 on Windows AMD64 · build commit `3264e07ab372d2370bec88b7062406cd71e3cc3a`
 
 Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0. Two builds of the build commit with this toolchain produce these exact bytes; `scripts/pe_diff.py` says how they differ if they do not.
 
 | Artefact | Size | Signature | SHA-256 |
 |---|---|---|---|
-| `Encastra_0.5.0-beta.1_x64-setup.exe` | 3.4 MB | **not signed** | `5678e5d06b659c178c8eaae0a874cbb539eb56e571b6400df4a12f68f6d66f91` |
-| `encastra-desktop.exe` | 9.2 MB | **not signed** | `be1945f9f8dc3dcf60e89f524f0d1f291d91585c8ba847a5e3736f1394de67a1` |
+| `Encastra_0.5.0-rc.3_x64-setup.exe` | 3.4 MB | **not signed** | `fecbf62a5735712414ae8063d6ba63daf6eff183e7b6e77654d71647e5cb5257` |
+| `encastra-desktop.exe` | 9.4 MB | **not signed** | `a30a56ea482be940fba7f472081303c518701cb54507ad2ab540bbdd305ca457` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.5.0-beta.1_x64-setup.exe -Algorithm SHA256
-Get-AuthenticodeSignature .\Encastra_0.5.0-beta.1_x64-setup.exe
+Get-FileHash .\Encastra_0.5.0-rc.3_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Encastra_0.5.0-rc.3_x64-setup.exe
 ```
 
 These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking — with the caveat that a hash published beside the download is only as trustworthy as the site serving both.
@@ -71,10 +71,21 @@ git commit -m "release: <version>" docs/RELEASE.md apps/web/src/config/site.ts
 #    copy, and that only those two files changed since the build commit.
 python scripts/release_manifest.py --verify
 
-# 6. Tag the publication commit. The release workflow checks out the build commit it names,
-#    builds it again on a clean machine, and fails unless the bytes are the published bytes.
+# 6. The verdict. Every gate above plus artefact identity, signing for the mode, a second build
+#    to compare, the CI run for this commit and the clean-machine log — one word, and
+#    release-readiness.json for anything that reads JSON rather than prose.
+npm run release:reproduce          # two builds from two paths; prints IDENTICAL or the differing bytes
+npm run release:check -- --compare %TEMP%\encastra-reproduce\a --evidence-vm docs/release/vm/<version>/install.log
+
+# 7. Tag the publication commit only on BETA_READY (a pre-release) or RELEASE_READY. The release
+#    workflow checks out the build commit it names, builds it again on a clean machine, and
+#    fails unless the bytes are the published bytes.
 git tag v<version>
 ```
+
+What each of those refuses, and why, is in `docs/release/` — `SIGNING_PIPELINE.md` for the
+three modes (dev, beta, release) and the signing chain, `CLEAN_WINDOWS_VM.md` for the machine
+procedure, `COMMERCIAL_RELEASE_CLOSURE.md` for what is automated and what is still a person's.
 
 `npm run tauri:build` invokes `vite build` first, through Tauri's `beforeBuildCommand`, so there
 is no separate frontend step to forget.

@@ -1,0 +1,15 @@
+Encastra
+Copyright (c) 2026 the Encastra author.
+
+This software is proprietary and unlicensed for redistribution: `license = "UNLICENSED"` in
+Cargo.toml and package.json means no licence has been granted, not that one is missing by
+accident. The decision between proprietary, source-available and open-source terms is open and
+recorded in docs/LICENSING.md; the legal identity that will hold the copyright (a person or a
+company) is part of that decision and is deliberately not asserted here.
+
+Third-party software compiled into the shipped application, with each package's licence and
+origin, is listed in docs/THIRD-PARTY.md, generated from the dependency tree by
+scripts/third_party.py. The licence allowlist every Rust dependency has to pass is deny.toml.
+
+"Encastra" is used as a product name. No trademark registration for it exists at the time of
+writing; see docs/BRANDING.md.
