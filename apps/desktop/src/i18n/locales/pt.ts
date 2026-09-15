@@ -409,6 +409,7 @@ const pt: Messages = {
     intro:
       'O Encastra leu a pasta que escolheu como deve lê-la quem a recebe: comparou o ficheiro com o documento ao lado e voltou a correr aqui a verificação do editor. Não se escreveu nada e não se executou nada.',
     reading: 'A ler a pasta…',
+    writing: 'A copiar isto para a tua biblioteca. Não vai demorar.',
     confirm: 'Importar',
     nothing: 'nada',
     copiesNothingRuns:
@@ -527,6 +528,8 @@ const pt: Messages = {
         'O documento e o projeto não concordam sobre o que isto pede. Declarar permissões a menos é o problema óbvio; declarar a mais ensina as pessoas a passar os olhos pela lista, que é o mais subtil. Ambos são recusados.',
       alreadyImported:
         '{listing} {version} já está na sua biblioteca. Uma versão publicada nunca muda, por isso não há aqui nada de novo para receber.',
+      libraryFull:
+        'A tua biblioteca está cheia. Já guarda cerca de {used} MB de cópias importadas e esta versão mantém no máximo {max} MB; esta precisa de cerca de {needed} MB. Remove algo que já não uses e tenta de novo: não foi importado nada.',
       io: 'Algo neste computador recusou a operação ({reason}). Não se recebeu nada.',
       unknown:
         'O Encastra recusou esta pasta por um motivo para o qual esta versão não tem palavras. Não foi recebida.',
@@ -872,6 +875,7 @@ const pt: Messages = {
       '{name} não está onde estava. Volte a pô-lo lá, ou abra-o de onde estiver agora.',
     imported: '{name} recebido. Não se executou nada.',
     removedFromLibrary: '{name} já não está na lista. O ficheiro continua onde estava.',
+    importInFlight: 'Está a ser escrita uma importação. A janela fecha assim que terminar.',
     removedAndDeleted: '{name} já não está na lista, e a cópia que o Encastra fez foi apagada.',
   },
 

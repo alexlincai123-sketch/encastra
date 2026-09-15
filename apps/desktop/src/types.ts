@@ -345,6 +345,9 @@ export type ImportError =
   | { kind: 'review-refused'; findings: PublicationFinding[] }
   | { kind: 'capabilities-disagree'; declared: string[]; actual: string[] }
   | { kind: 'already-imported'; listing: string; version: string }
+  // Bytes, not entries: the library caps how many things it lists and, separately, how much
+  // disk the copies it made may take. Raised before anything is copied.
+  | { kind: 'library-full'; max: number; used: number; needed: number }
   | { kind: 'io'; reason: string };
 
 /** Where an entry came from, which is the only thing that decides what may be done to it. */

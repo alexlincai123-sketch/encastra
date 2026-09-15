@@ -38,6 +38,28 @@ pub const INDEX_FILE: &str = "library.json";
 /// every time the application starts.
 pub const MAX_ENTRIES: usize = 10_000;
 
+/// The most disk the copies under `imports/` may take, all of them together.
+///
+/// The entry ceiling above bounds the *index*, and nothing bounded the bytes: ten thousand
+/// entries at the 64 MB an import may be is six hundred gigabytes, which is not a ceiling
+/// anybody would notice being under. Four gibibytes is sixty-four imports at the largest size
+/// this build installs and many thousands at the size real ones are — a number a person will
+/// not reach by using the product, and one an automated caller cannot walk past one import at
+/// a time.
+///
+/// It bounds what this software *wrote*, not the disk. A project somebody made lives wherever
+/// they put it and is none of this crate's business; `imports/` is the one tree it created and
+/// the one it is therefore accountable for.
+pub const MAX_LIBRARY_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
+/// How many files [`measure_imports`] will stat before it stops counting and says "full".
+///
+/// Bounded for the same reason every other walk here is: how many things are in a folder stops
+/// being this software's decision the moment somebody has a file manager. Two files per import
+/// and ten thousand imports is twenty thousand; a hundred thousand is generous and still a
+/// fraction of a second of `stat`.
+pub const MAX_IMPORT_FILES_MEASURED: usize = 100_000;
+
 /// The index revision. Additive-only; a value this build does not know is refused rather than
 /// guessed at, the way `encastra-project` treats its own.
 pub const LIBRARY_SCHEMA: u32 = 1;
@@ -272,6 +294,100 @@ impl Library {
     pub fn find_by_path(&self, path: &str) -> Option<&Entry> {
         self.entries.iter().find(|e| e.path == path)
     }
+
+    /// What the index *says* the imported copies weigh.
+    ///
+    /// Only [`Origin::Imported`] entries: the others name files this software did not write and
+    /// has no business budgeting for. Saturating, because this is a sum of numbers out of a file
+    /// that can be edited by hand, and a total that wrapped to nothing would be the one number
+    /// an attacker wants.
+    ///
+    /// This is a claim, not a measurement — see [`bytes_in_use`], which is what a decision
+    /// should be made on.
+    pub fn imported_bytes(&self) -> u64 {
+        self.entries
+            .iter()
+            .filter(|entry| entry.origin == Origin::Imported)
+            .fold(0_u64, |sum, entry| {
+                sum.saturating_add(entry.size_bytes.unwrap_or(0))
+            })
+    }
+}
+
+// -- how much room is left ---------------------------------------------------------------------
+
+/// What `imports/` actually weighs, by walking it.
+///
+/// `stat` only: nothing is opened and nothing is hashed, so [`MAX_BYTES_TO_HASH`] does not come
+/// into it. Two levels deep is all this tree ever is (`imports/<listing>/<version>/`), and the
+/// walk is recursive anyway because a folder somebody dropped in there by hand is still bytes.
+///
+/// Staging directories are counted like anything else: until an import renames its staging into
+/// place, the staged copy is the only copy, and pretending otherwise would let two imports each
+/// be told there is room for one.
+///
+/// Past [`MAX_IMPORT_FILES_MEASURED`] files it stops and answers [`u64::MAX`], which every
+/// caller reads as "there is no room" — the honest answer for a tree nobody can finish counting.
+pub fn measure_imports(root: &Path) -> u64 {
+    fn walk(dir: &Path, total: &mut u64, seen: &mut usize) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            if *seen >= MAX_IMPORT_FILES_MEASURED {
+                *total = u64::MAX;
+                return;
+            }
+            *seen += 1;
+            // Never followed. A link inside `imports/` points at bytes this software did not
+            // write, and counting them would let a link somebody planted decide the budget.
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                continue;
+            };
+            if meta.file_type().is_symlink() {
+                continue;
+            }
+            if meta.is_dir() {
+                walk(&entry.path(), total, seen);
+                if *total == u64::MAX {
+                    return;
+                }
+            } else {
+                *total = total.saturating_add(meta.len());
+            }
+        }
+    }
+
+    let mut total = 0;
+    let mut seen = 0;
+    walk(&root.join("imports"), &mut total, &mut seen);
+    total
+}
+
+/// What the library holds now: the larger of what it claims and what is there.
+///
+/// The index is a file. A hostile or merely stale one can understate `size_bytes` — say zero for
+/// every entry — and a ceiling that believed it would be a ceiling on a number the attacker
+/// writes. So the tree is measured, and the larger of the two answers is used.
+///
+/// The tradeoff, stated because it is a real one: this is a directory walk on every import.
+/// It is `stat` only and `imports/` is bounded by [`MAX_ENTRIES`] imports of two files each, and
+/// an import is a thing a person does by hand after picking a folder in a chooser — so the cost
+/// lands where somebody is already waiting for a file dialog, and never on drawing the Library.
+/// Trusting the index instead would be cheaper and would bound nothing.
+pub fn bytes_in_use(library: &Library, root: &Path) -> u64 {
+    measure_imports(root).max(library.imported_bytes())
+}
+
+/// Whether `needed` more bytes fit under `max`, as the refusal an interface will show.
+///
+/// The ceiling is a parameter rather than a constant read from inside, so the branch can be
+/// exercised against a small value — the alternative is a branch that has never run.
+pub fn room_for(used: u64, needed: u64, max: u64) -> Result<(), encastra_publish::ImportError> {
+    if used.saturating_add(needed) > max {
+        return Err(encastra_publish::ImportError::LibraryFull { max, used, needed });
+    }
+    Ok(())
 }
 
 /// Whether what an entry names is still there, and still what it was.

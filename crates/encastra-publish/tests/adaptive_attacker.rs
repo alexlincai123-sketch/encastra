@@ -144,9 +144,15 @@ struct Sandbox(PathBuf);
 
 impl Sandbox {
     fn new() -> Self {
+        Sandbox::named("strategies")
+    }
+    /// Named, because two tests in this file run in the same process at the same time and a
+    /// sandbox keyed only on the process id would have each wiping the other's library out from
+    /// under it — which reads as the boundary failing when it is the fixture failing.
+    fn named(name: &str) -> Self {
         let path = std::env::temp_dir()
             .join("encastra-adaptive-attacker")
-            .join(std::process::id().to_string());
+            .join(format!("{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).expect("sandbox");
         Sandbox(path)
@@ -529,6 +535,76 @@ fn twenty_strategies_later_the_library_holds_exactly_what_the_honest_import_left
         assert!(
             !reason.contains(&sandbox.0.to_string_lossy().to_string()),
             "{name}: the refusal leaked the machine's path: {reason}"
+        );
+    }
+}
+
+/// The last strategy: outlast the ceiling rather than get past a check.
+///
+/// Every attempt above tries to be *accepted*. This one accepts being refused and asks what the
+/// refusal cost: an attacker who cannot install anything can still ask to, over and over, and if
+/// each refusal left a staging directory or a half-copied file behind then a boundary that holds
+/// perfectly still fills the disk. The reservation is where that is decided — it runs before a
+/// directory is created — so this drives `import_reserving` with one that always says no, which
+/// is what a full library looks like from in here.
+#[test]
+fn a_reservation_that_refuses_costs_the_library_nothing_however_often_it_is_asked() {
+    use encastra_publish::ImportError;
+    use encastra_publish::import::import_reserving;
+
+    let sandbox = Sandbox::named("reservation");
+    let library = sandbox.library();
+    let registry = registry();
+
+    let (document, bytes) = honest();
+    let first = sandbox.folder("honest");
+    lay_out(&first, &document, PROJECT_FILE, &bytes);
+    import(&first, &registry, RUNTIME, &library).expect("the honest folder imports");
+    let before = snapshot(&library);
+
+    let full = |needed: u64| {
+        Err(ImportError::LibraryFull {
+            max: 1_024,
+            used: 1_024,
+            needed,
+        })
+    };
+
+    for round in 0..8 {
+        // A different version each time, so nothing is refused as already-imported and the
+        // reservation is genuinely the check being reached.
+        let mut document = document.clone();
+        document["draft"]["version"] = Value::String(format!("2.0.{round}"));
+        let folder = sandbox.folder(&format!("full-{round}"));
+        lay_out(&folder, &document, PROJECT_FILE, &bytes);
+
+        let refused = import_reserving(&folder, &registry, RUNTIME, &library, &full)
+            .expect_err("a library with no room takes nothing in");
+        let tag = serde_json::to_value(&refused).expect("an error serialises")["kind"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert_eq!(tag, "library-full", "refused by the wrong check: {refused}");
+        // The refusal quotes the size it was asked about, measured from bytes already verified.
+        match refused {
+            ImportError::LibraryFull { needed, .. } => assert!(needed >= bytes.len() as u64),
+            other => panic!("the wrong refusal: {other}"),
+        }
+
+        assert_eq!(
+            snapshot(&library),
+            before,
+            "round {round} changed the library although it was refused"
+        );
+        let shelf = library.join("imports").join("dev.alice.thumbnails");
+        let leftovers: Vec<_> = std::fs::read_dir(&shelf)
+            .expect("the shelf exists")
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with('.'))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "round {round} left staging behind: {leftovers:?}"
         );
     }
 }

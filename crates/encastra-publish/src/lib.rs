@@ -34,7 +34,9 @@ pub mod money;
 pub mod review;
 
 pub use bundle::{BundleError, PublicationBundle, PublicationDraft};
-pub use import::{ImportError, Imported, Inspected, import, inspect};
+pub use import::{
+    ImportError, Imported, Inspected, import, import_reserving, inspect, sweep_staging,
+};
 pub use license::{License, LicenseVerdict};
 pub use listing::{Kind, Listing, Moderation, Publisher, Release, Withdrawal, is_listing_id};
 pub use money::{Currency, Entitlement, EntitlementSource, Payout, Pricing, Purchase, Split};
