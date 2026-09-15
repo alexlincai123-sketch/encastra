@@ -132,8 +132,19 @@ against, with their outcome. A run is listed whether it passed or not.
   did not run in either (it waited for a build that reproduced).
 
 **rc.3 (`e1c4c62` / build `3264e07`)** — same code; `release.yml` runs the install job on the
-runner's own build and builds the frontend with Node 24. Runs 34986565216 (CI), 34986561347
-(tag push), 34986561591 (dispatch): recorded below when finished.
+runner's own build and builds the frontend with Node 24.
+
+- CI 34986565216: **all green**.
+- Release 34986561347 (tag push) and 34986561591 (dispatch): gates ✓ · build ✓ · identity ✓ ·
+  **reproduction ✗** in both (the runner's executable `b50cbb4f…` in both runs; Node 24 did not
+  change the difference from the developer machine's `a30a56ea…`: code 199 608 and data
+  3 154 612 bytes — the MSVC toolset, then) · the runner's two installers differ from each
+  other again (`f21668e1…`, `442cdb9a…`) · **install on a clean Windows runner ✓ in both**:
+  `NotSigned` as documented, silent install exit 0 in 4 s, per-user directory, ProductVersion
+  `0.5.0-rc.3`, build stamp `3264e07` in the installed binary, HKCU entry and nothing under
+  HKLM, Start Menu shortcut, the application launches and stays up, uninstall exit 0 with
+  nothing left. The unsigned-decision step and the verdict file did not run in either (they sit
+  after the reproduction gate in the build job).
 
 Open question from the second row, now answered: pushing the annotated tag `v0.5.0-beta.1`
 seconds after the first push of `main` did not start `release.yml`; pushing `v0.5.0-rc.1` to a

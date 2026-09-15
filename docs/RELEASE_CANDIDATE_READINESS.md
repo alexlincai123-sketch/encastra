@@ -129,9 +129,10 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
   - **The runner's executable differs from this machine's** (`b26cb76c…`) in **code (199 111
     bytes) and data (3 162 440 bytes)**, sizes 9 860 608 vs 9 856 000 — not linker metadata.
     Same pinned rustc 1.98.1, same `Cargo.lock` (`--locked`), same commit stamp inside both.
-    The candidates are the MSVC toolset and CRT the runner image carries (this machine:
-    14.44.35207) and the Node that builds the embedded frontend (runner 22, this machine 24;
-    rc.3 equalises that one).
+    rc.3 built the frontend on the runner with the same Node as this machine (24) and the
+    difference did not move (code 199 608, data 3 154 612 bytes; the runner's executable again
+    identical across its two runs, `b50cbb4f…`). **So the cause is the MSVC toolset and CRT
+    the runner image carries** (this machine: 14.44.35207), not Node.
   - **The runner's installer is not deterministic even with itself:** the two runner installers
     of rc.2 wrap the identical executable and differ in 3 540 070 bytes, all in the NSIS
     overlay (the compressed payload after the stub; every PE section identical). On this
@@ -158,7 +159,7 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
 | Path | Status |
 |---|---|
 | Clean Windows VM on this machine | **BLOCKED — EXTERNAL INFRASTRUCTURE.** Windows 11 Home: no Hyper-V, no Windows Sandbox; no Docker, no VirtualBox. `docs/release/CLEAN_WINDOWS_VM.md` is the procedure |
-| Hosted Windows runner (`release.yml` → `install`) | IMPLEMENTED; executes in run 34978859110: silent install, version, stamp, HKCU entry, nothing under HKLM, shortcut, ACL, first launch stays up, uninstall leaves nothing. It cannot drive a native chooser |
+| Hosted Windows runner (`release.yml` → `install`) | **CI EXECUTED on rc.3, twice** (runs 34986561347 and 34986561591, on the runner's own build): installer `NotSigned` as documented · silent install exit 0 in 4 s · binary in the per-user directory · ProductVersion `0.5.0-rc.3` · build stamp `3264e07` read from the installed binary · uninstaller present · HKCU uninstall entry, nothing under HKLM · Start Menu shortcut · the installed application launches and stays up (`title='Encastra'`) · uninstall exit 0 and nothing left. It cannot drive a native chooser (B5) |
 | Real install of the beta on this machine | done by the security session for `c975bd4`; the candidate was **not** installed here (the runtime QA ran the built executable) |
 | **Native chooser journeys with a purpose** | **NOT VERIFIED on any build.** The 17/17 GUI run of 2026-09-15 drove Settings → Projects → Browse — `projects-location`, the one purpose that gates nothing. Publish-into, import-from, grant-to-component and the new file chooser have never been driven by a person or by `gui_chooser.ps1`. This is the internal blocker (B5): it needs a machine where nobody is working, and this session could not use this one for it |
 
@@ -242,7 +243,7 @@ that neither fix has been exercised through the GUI on this build (B5).
 | B4 | No external security assessment | owner (+ provider) | every security claim is the project's own | contract a test against `v0.5.0-rc.1` with the hand-off | the tag (done) | the report and the fixes it produces |
 | B5 | **Chooser journeys with a purpose never driven** | owner, or this project on a free machine | the permission-gating flows of this candidate have no GUI evidence on any build | on a machine where nobody is working: install the candidate, run `scripts/verify/install_check.ps1`, then `scripts/verify/gui_chooser.ps1` extended to publish-into, import-from, grant-to-component and the file chooser — or do the four flows by hand and attach the observations to `docs/audits/` | the candidate (done) | PASS lines for the four flows on `137c93a` |
 | B6 | Branch protection unavailable | owner | a private repository on a free plan cannot protect `main` | GitHub Pro, or make the repository public (which is B2's decision) | B2 | the protection rule visible on `main` |
-| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | the diff is code and data, not metadata (§6). Next: (1) read rc.3's runner build — if Node 24 removed the data difference, the rest is the MSVC toolset: pin it in CI to the developer's (14.44.35207) or make the runner's build the published artefact and reproduce *it* locally with the same toolset; (2) make the NSIS step deterministic on the runner (compare the two rc.2 runner installers' overlays; suspect the packaging inputs, not the exe) | rc.3 release runs | `release.yml`'s "the build reproduces the published hashes" step green on a tag, and two runner installers of one commit identical |
+| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | the diff is code and data, not metadata, and Node is ruled out (§6): it is the MSVC toolset. Two ways, pick one: (a) pin the toolset in CI to the developer's 14.44.35207 (`ilammy/msvc-dev-cmd` with `toolset`, if the runner image carries it) and rebuild; or (b) make the runner's build the published artefact — the runner reproduces itself run to run — and have the developer machine reproduce *it* with the same toolset. Separately, make the NSIS step deterministic on the runner: two runner installers of one identical executable still differ in the overlay (rc.2 and rc.3 both); compare the overlays and find which packaging input varies | none | `release.yml`'s "the build reproduces the published hashes" step green on a tag, and two runner installers of one commit identical |
 
 ## 14. Integration record, final numbers, self-critique
 
@@ -251,7 +252,8 @@ that neither fix has been exercised through the GUI on this build (B5).
 `rc/commercial-closure` f7dcf0a…d5f1618, review fixes 260b0c9, 137c93a.
 
 **Numbers:** §3. Runtime: 23/23 IPC checks on `137c93a`, `90e479d` and `3264e07`; 3/3 main-thread
-checks on the first two (`docs/audits/2026-09-15-rc-runtime-qa.md`).
+checks on the first two (`docs/audits/2026-09-15-rc-runtime-qa.md`). Clean runner: the install
+checks above, twice on rc.3.
 
 **Reproducibility and CI outcomes for the candidate:** recorded in `CI_SECURITY.md` §4.1 and
 below as they landed; a row that is empty at the commit you are reading means the run had not
@@ -266,8 +268,9 @@ finished when this file was committed, and the next docs-only commit fills it.
 | `reproduce.py` on `90e479d` (rc.2) | **IDENTICAL** to the published bytes, both fresh builds (326 s) |
 | CI run 34981764114 (rc.2 tree) | **all green** — TypeScript, supply chain, secrets, Rust Linux (corpus gate, symlink and link-refusal anti-skip), Rust Windows (startup-folder and junction anti-skip) |
 | Release runs 34981765564 (tag push) / 34981768456 (dispatch) for rc.2 | gates ✓ · build ✓ · identity ✓ · **reproduction ✗** in both; the runner's builds were uploaded and are what §6 measures; the install job did not run (it waited for a green build) |
-| `reproduce.py` on `3264e07` (rc.3) | see the last commit of this file |
-| CI 34986565216 / Release 34986561347 (tag push) / 34986561591 (dispatch) for rc.3 | see the last commit of this file — the install job now runs on the runner's build |
+| `reproduce.py` on `3264e07` (rc.3) | **IDENTICAL** to the published bytes, both fresh builds |
+| CI 34986565216 (rc.3 tree) | **all green** |
+| Release 34986561347 (tag push) / 34986561591 (dispatch) for rc.3 | gates ✓ · build ✓ · identity ✓ · **reproduction ✗** (B7, now attributed to the MSVC toolset) · **install on a clean runner ✓ in both** (§7) |
 
 **Self-critique — twenty questions, answered without softening:**
 

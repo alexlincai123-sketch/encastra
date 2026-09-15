@@ -110,4 +110,4 @@ not the machine it ran on; the folder beside it is what proves the machine.
 | Version | Machine | Steps | Result |
 |---|---|---|---|
 | 0.5.0-beta.1 | development machine (Windows 11 26200), **not** a clean VM | 2, 4, and steps 1/3/5–9 **not executed** | see `docs/audits/2026-09-15-final-release-readiness.md` |
-| next | — | — | NOT EXECUTED |
+| 0.5.0-rc.3 | GitHub-hosted `windows-latest` runner (a fresh image; not a VM anyone can inspect afterwards), `release.yml` → `install`, runs 34986561347 and 34986561591 | 1 (hash, `NotSigned`), 3 (silent install, per-user, nothing under HKLM), 4 in part (ACL recorded), 5 in part (the window opens and stays up; network and file-creation checks **not** made), 9 (uninstall leaves nothing) — steps 2, 6, 7, 8 **not** executed (no chooser can be driven there) | PASS for what it covers; the rest is B5 in `docs/RELEASE_CANDIDATE_READINESS.md` |
