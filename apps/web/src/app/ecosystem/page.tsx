@@ -42,7 +42,7 @@ const LOOP = [
   { id: 'build', state: STATUS.desktopApp },
   { id: 'publish', state: STATUS.publishPreparation },
   { id: 'discover', state: STATUS.registry },
-  { id: 'install', state: STATUS.registry },
+  { id: 'install', state: STATUS.importFromFolder },
   { id: 'reuse', state: STATUS.projectFormat },
 ] as const;
 

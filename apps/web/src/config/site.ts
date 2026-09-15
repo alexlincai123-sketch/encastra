@@ -61,6 +61,8 @@ export const STATUS = {
   windowsInstaller: 'built',
   /** Preparing a publication on your own machine. The registry it would be sent to is not built. */
   publishPreparation: 'built',
+  /** Taking a publication folder in, checked again on this machine, into a local library. Nothing runs on import. */
+  importFromFolder: 'built',
 
   macosBuild: 'planned',
   linuxBuild: 'planned',

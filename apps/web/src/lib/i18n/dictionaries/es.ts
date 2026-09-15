@@ -1058,12 +1058,12 @@ const es: Messages = {
     },
     hero: {
       eyebrow: 'Ecosistema',
-      title: 'Constrúyelo, publícalo y algún día dáselo a alguien',
-      lead: 'Encastra construye software con componentes. Todo lo que se deriva de eso — publicar lo que has hecho, encontrar lo que han hecho otros, instalarlo sin fiarte de nadie — está casi todo diseñado y sin construir. Esta página dice qué es cada cosa.',
+      title: 'Constrúyelo, publícalo y dáselo a alguien — en mano, por ahora',
+      lead: 'Encastra construye software con componentes. Publicar lo que has hecho y recibir lo que alguien te ha pasado ya funcionan hoy, sin conexión, como una carpeta que una persona lleva. Encontrar lo que han hecho otros, y conseguirlo sin fiarte de nadie, está diseñado y sin construir. Esta página dice qué es cada cosa.',
     },
     loop: {
       eyebrow: 'El ciclo',
-      title: 'Cinco momentos, de los cuales funcionan dos',
+      title: 'Cinco momentos, de los cuales funcionan tres',
       lead: 'Cada uno lleva el estado en el que está de verdad, leído de la misma tabla que lee el resto del sitio.',
       build: {
         title: 'Construir',
@@ -1079,11 +1079,11 @@ const es: Messages = {
       },
       install: {
         title: 'Instalar',
-        body: 'No se puede instalar nada desde fuera de la aplicación. Un componente de otra persona necesitaría el sandbox que está diseñado y sin construir; un proyecto de otra persona necesita un registro del que venir y una firma contra la que comprobarse.',
+        body: 'Una carpeta de publicación que alguien te haya pasado se puede importar: la aplicación comprueba que el archivo es el que describe el documento, repite la misma revisión que hizo quien publicó — contra sus propios componentes, no contra su palabra —, rechaza un documento que declare menos o más permisos de los que el proyecto pide, y copia los bytes verificados a tu biblioteca. Al importar no se ejecuta nada; abrir es otro paso, y ejecutar sigue pidiendo permiso. El hash prueba que el archivo no se alteró, no quién lo hizo: no hay firma ni registro del que descargar. Un componente de otra persona sigue sin poder instalarse.',
       },
       reuse: {
         title: 'Reutilizar',
-        body: 'Un archivo de proyecto ya es portátil, ya lleva su propio historial de versiones y ya fija por contenido cada componente que usa. Quien te pase uno, por el medio que sea, te pasa algo que puedes abrir y cambiar.',
+        body: 'Un archivo de proyecto ya es portátil, ya lleva su propio historial de versiones y ya fija por contenido cada componente que usa. Quien te pase uno, por el medio que sea, te pasa algo que puedes abrir y cambiar — y la biblioteca guarda lo que hiciste, lo que importaste y lo que preparaste, con un hash de contenido que dice si cada cosa sigue siendo la que era.',
       },
     },
     today: {
