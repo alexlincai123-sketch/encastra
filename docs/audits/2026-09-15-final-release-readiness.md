@@ -369,7 +369,8 @@ trust* (a signature) are separate columns and one does not stand in for the othe
 | Releases are unsigned; SmartScreen warns | **ACCEPTED for a beta, prohibited for a production version by the script and the workflow** | owner (certificate) |
 | Reproducibility is proven on one machine and one linker version; `link.exe` is not pinned by the repository | **DESIGN LIMITATION**, documented; the release workflow's rebuild-and-compare gate would extend it to a second machine | — |
 | The shipping build commit is the merge of this branch, not `c975bd4`; its two-build proof has to be run before its hashes are published | **PENDING** — handed to the candidate owner with the exact procedure | candidate owner |
-| ENC-NEW-16 (library bytes uncapped), ENC-01b (prompt rendered by the webview), hard links, no per-node timeout | unchanged from the closure report | — |
+| ENC-01b (prompt rendered by the webview), hard links, no per-node timeout | unchanged from the closure report | — |
+| ENC-NEW-16 (library bytes uncapped) | **FIXED** after this audit, on `rc/import-policy`: `MAX_LIBRARY_BYTES` 4 GiB, measured rather than believed, reserved under the index lock | — |
 | Node 24 here vs 22 in CI | INFO — the frontend built identically twice; CI's pin stands | — |
 
 ## Acceptance matrix

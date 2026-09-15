@@ -58,6 +58,8 @@ pub enum AppError {
     RuntimeBusy,
     #[error("The library is busy. Try that again.")]
     LibraryBusy,
+    #[error("An import is being written. The window will close once it has finished.")]
+    ImportInFlight,
 
     // -- choosing a folder ------------------------------------------------------------------
     #[error("The folder chooser did not return.")]
@@ -185,6 +187,7 @@ impl AppError {
         match self {
             AppError::RuntimeBusy => "runtime-busy",
             AppError::LibraryBusy => "library-busy",
+            AppError::ImportInFlight => "import-in-flight",
             AppError::ChooserDidNotReturn => "chooser-did-not-return",
             AppError::NotAFolderOnThisMachine => "not-a-folder-on-this-machine",
             AppError::FolderUnusable { .. } => "folder-unusable",
@@ -235,6 +238,7 @@ impl GrantRefusal {
 pub const KINDS: &[&str] = &[
     "runtime-busy",
     "library-busy",
+    "import-in-flight",
     "chooser-did-not-return",
     "not-a-folder-on-this-machine",
     "folder-unusable",
@@ -281,6 +285,7 @@ mod tests {
         vec![
             AppError::RuntimeBusy,
             AppError::LibraryBusy,
+            AppError::ImportInFlight,
             AppError::ChooserDidNotReturn,
             AppError::NotAFolderOnThisMachine,
             AppError::FolderUnusable {

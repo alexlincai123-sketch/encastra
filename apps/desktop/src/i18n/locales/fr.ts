@@ -411,6 +411,7 @@ const fr: Messages = {
     intro:
       'Encastra a lu le dossier que vous avez choisi comme doit le lire celui qui le reçoit : il a vérifié le fichier face au document qui l’accompagne et a refait ici le contrôle de l’éditeur. Rien n’a été écrit, rien n’a été exécuté.',
     reading: 'Lecture du dossier…',
+    writing: 'Copie en cours dans votre bibliothèque. Ce sera bref.',
     confirm: 'Importer',
     nothing: 'rien',
     copiesNothingRuns:
@@ -531,6 +532,8 @@ const fr: Messages = {
         'Le document et le projet ne s’accordent pas sur ce que ceci demande. Sous-déclarer les permissions est le problème évident ; les sur-déclarer apprend aux gens à survoler la liste, ce qui est le problème plus subtil. Les deux sont refusés.',
       alreadyImported:
         '{listing} {version} est déjà dans votre bibliothèque. Une version publiée ne change jamais : il n’y a donc rien de nouveau à récupérer.',
+      libraryFull:
+        'Votre bibliothèque est pleine. Elle contient déjà environ {used} Mo de copies importées et cette version en conserve {max} Mo au maximum ; celle-ci en demande environ {needed} Mo. Supprimez ce que vous n’utilisez plus et réessayez : rien n’a été importé.',
       io: 'Quelque chose sur cet ordinateur a refusé l’opération ({reason}). Rien n’a été récupéré.',
       unknown:
         'Encastra a refusé ce dossier pour une raison que cette version ne sait pas formuler. Il n’a pas été récupéré.',
@@ -879,6 +882,8 @@ const fr: Messages = {
       '{name} n’est plus là où il était. Remettez-le en place, ou ouvrez-le depuis l’endroit où il se trouve maintenant.',
     imported: '{name} récupéré. Rien ne s’est exécuté.',
     removedFromLibrary: '{name} ne figure plus dans la liste. Le fichier est resté où il était.',
+    importInFlight:
+      'Une importation est en cours d’écriture. La fenêtre se fermera une fois terminée.',
     removedAndDeleted:
       '{name} ne figure plus dans la liste, et la copie faite par Encastra a été supprimée.',
   },
@@ -888,6 +893,7 @@ const fr: Messages = {
       'Encastra a refusé pour une raison que cette version ne sait pas nommer ({kind}). Rien n’a été modifié.',
     runtimeBusy: 'Le moteur est occupé ailleurs. Réessayez dans un instant.',
     libraryBusy: 'Votre bibliothèque est occupée. Réessayez dans un instant.',
+    importInFlight: 'Une importation est en cours d’écriture. La fenêtre se fermera une fois terminée.',
     chooserDidNotReturn: 'Le sélecteur de dossier s’est fermé sans répondre. Rien n’a été choisi.',
     notAFolderOnThisMachine: 'Ce que le sélecteur a renvoyé n’est pas un dossier de cette machine.',
     folderUnusable: 'Ce dossier ne peut pas être utilisé ({reason}).',

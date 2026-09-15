@@ -67,7 +67,7 @@ state. Building it per call would let two calls disagree about what is installed
 | `import_publication` | copies the bytes that were verified into the library and records them — it does **not** open or run the project |
 | `library_list` | every entry, each with whether the file it names is still there and still what it was |
 | `library_remove` | forgets an entry, and — only for a copy Encastra made itself — deletes it too |
-| `report_dirty` / `close_window` | whether the canvas holds unsaved work, and the close that happens once somebody has said it may go |
+| `report_dirty` / `report_busy` / `close_window` | whether the canvas holds unsaved work, whether an import is being written, and the close that happens once somebody has said it may go |
 | `about` | versions, taken from the build rather than typed anywhere |
 
 A few of these are worth spelling out.
@@ -123,6 +123,36 @@ vocabulary reachable instead of flattening it into prose; free text an operating
 is a parameter the sentence quotes, never the sentence. The full inventory — every command, every
 tag, every key, and the three gates that stop the two sides drifting — is
 [`docs/desktop/ERRORS.md`](desktop/ERRORS.md).
+
+**Taking a publication in is a state machine, not a flag.** `apps/desktop/src/import-machine.ts`
+holds it, the store delegates to it, and the panel reads everything it shows off the one value:
+
+    idle → busy(choosing | inspecting | importing) → success | error | cancelled → idle
+
+`cancelled` is the native chooser closed with nothing — not a refusal, because nobody said no to
+a folder there was none of. An event that is not a legal move from the current phase is ignored
+and the state comes back *unchanged, by identity*, which is how the store tells a refusal from a
+move without keeping a second flag. Three rules follow from it and each has a test:
+
+* **While it is busy the dialog cannot be closed.** Close is disabled, Escape does nothing, and
+  the focus trap stays — the bytes are going into the library whether the panel is on screen or
+  not, and a dialog that vanished mid-copy would be lying about that.
+* **A second Import is a no-op that can be observed.** `beginImport()` answers `false` and logs;
+  the button that could produce it is disabled everywhere it appears (the Library toolbar and its
+  empty state) from the same selector. It used to be possible to open a second native chooser in
+  the moment between the first one closing and the read finishing.
+* **The window will not close over it.** The editor refuses first, with a sentence, and
+  `close_window` refuses on the Rust side as well — `report_busy` is how it knows. It is a
+  separate flag from `report_dirty` deliberately: unsaved work is the person's to lose if they
+  say so, while a process that exits between an import's staging write and its rename leaves a
+  directory nothing accounts for. One boolean, one meaning.
+
+**There is a ceiling on what the library holds, in bytes.** `MAX_LIBRARY_BYTES` (4 GiB) is
+checked before anything is copied, and refused as `ImportError::LibraryFull { max, used, needed }`
+like any other refusal. `used` is *measured* from `imports/` rather than summed out of the index,
+because the index is a file and a file can understate itself; the check and the copy it authorises
+happen under one index lock, so two imports cannot both be told there is room for one. See
+[security/LIMITS.md](security/LIMITS.md#the-library).
 
 **The library only deletes what it made.** `library_remove` forgets an entry by default. Deleting
 the copy on disk is a second argument, and the runtime refuses it for anything whose origin is

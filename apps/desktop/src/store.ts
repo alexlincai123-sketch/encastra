@@ -34,6 +34,13 @@ import {
 // not a render, and `translate()` reads the active locale itself at call time the same way
 // `canvas/Canvas.tsx` does inside `isConnectionLegal` — see `i18n/index.ts`'s own note on why.
 import { selectPlural, translate, useI18n } from './i18n';
+import {
+  IMPORT_IDLE,
+  type ImportState,
+  importBlocksWindowClose,
+  inspectedNow,
+  transition,
+} from './import-machine';
 import { ipc } from './ipc';
 import { decideRemoval } from './library';
 import { usePreferences } from './preferences';
@@ -45,7 +52,6 @@ import type {
   GrantSpec,
   ImportError,
   InputSpec,
-  Inspected,
   NodeStatus,
   OpenProject,
   Snapshot as ProjectSnapshot,
@@ -128,17 +134,15 @@ interface EditorState {
   libraryQuarantined: string | null;
   /** False until the list has been asked for once, so an empty library and an unread one differ. */
   libraryLoaded: boolean;
-  /** Whether the import dialog is open. One flag, because there is one of it. */
-  importOpen: boolean;
   /**
-   * What was read out of a chosen folder, and the folder it was read from.
+   * Where taking a publication in has got to: idle, busy, or settled one of three ways.
    *
-   * Holding one of these means nothing has been written: inspecting is a read. Importing is a
-   * second, separate thing somebody presses, and it never happens on its own.
+   * One value rather than the three flags this used to be (`importOpen`, `importInspected`,
+   * `importError`) plus the global `busy`. Whether the dialog is on screen, whether it may be
+   * closed, and what is in it are all read off this through the selectors in `import-machine.ts`,
+   * so there is nothing to keep in step and no combination of flags that means nothing.
    */
-  importInspected: { folder: string; inspected: Inspected } | null;
-  /** Why the folder was refused. A structured refusal where there is one, a sentence otherwise. */
-  importError: ImportError | string | null;
+  importState: ImportState;
 
   /**
    * The question about unsaved work currently on screen, and what is waiting behind it.
@@ -206,10 +210,29 @@ interface EditorState {
   /** Opens something already in the library, without asking where it is. */
   openFromLibrary: (row: EntryWithStatus) => Promise<void>;
   removeFromLibrary: (row: EntryWithStatus, deleteCopy: boolean) => Promise<void>;
-  setImportOpen: (open: boolean) => void;
-  /** Asks for a folder and reads it. Nothing is imported: that is `confirmImport`. */
-  beginImport: () => Promise<void>;
-  confirmImport: () => Promise<void>;
+  /**
+   * Puts the import dialog away, if it may be put away.
+   *
+   * Answers `false` while an import is being written — Close, Escape and anything else that
+   * would dismiss it are refused there, because the bytes are going into the library whether
+   * the panel is on screen or not and a dialog that vanished mid-copy would be lying.
+   */
+  closeImport: () => boolean;
+  /**
+   * Asks for a folder and reads it. Nothing is imported: that is `confirmImport`.
+   *
+   * Answers `false` when it did not start — a second press while one is already running, a
+   * chooser somebody backed out of, or a folder that was refused.
+   */
+  beginImport: () => Promise<boolean>;
+  confirmImport: () => Promise<boolean>;
+  /**
+   * Whether the window may not be closed yet, saying so on screen when it may not.
+   *
+   * The runtime refuses such a close itself; this is the same answer on this side so that the X
+   * produces a sentence rather than appearing to do nothing.
+   */
+  importBlocksClose: () => boolean;
   attachRuntime: () => Promise<() => void>;
   startWorkflow: () => Promise<void>;
   stopWorkflow: () => Promise<void>;
@@ -270,9 +293,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   library: [],
   libraryQuarantined: null,
   libraryLoaded: false,
-  importOpen: false,
-  importInspected: null,
-  importError: null,
+  importState: IMPORT_IDLE,
   pendingDiscard: null,
 
   async loadComponents() {
@@ -803,12 +824,15 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
   },
 
-  setImportOpen(open) {
-    // Closing throws away what was read, so reopening reads the folder again rather than
-    // showing an answer about a folder somebody may have changed in between.
-    set(
-      open ? { importOpen: true } : { importOpen: false, importInspected: null, importError: null },
-    );
+  closeImport() {
+    // Closing throws away what was read, so reopening reads the folder again rather than showing
+    // an answer about a folder somebody may have changed in between. The machine refuses this
+    // outright while an import is in flight, and says so by handing back the state it was given.
+    const before = get().importState;
+    const next = transition(before, { type: 'acknowledge' });
+    if (next === before) return false;
+    set({ importState: next });
+    return true;
   },
 
   /**
@@ -816,46 +840,75 @@ export const useEditor = create<EditorState>((set, get) => ({
    *
    * Inspecting writes nothing, opens nothing and runs nothing; what it produces is something to
    * read. Importing is a second thing somebody presses, having read it.
+   *
+   * Busy from the moment the chooser opens rather than from the moment it returns: a second press
+   * of Import while the first chooser is up used to open a second chooser. That refusal is now
+   * the machine's — this only reports it.
    */
   async beginImport() {
-    if (get().busy) return;
-    // Busy from the moment the chooser opens, not from the moment it returns: a second press of
-    // Import while the first chooser is up used to open a second chooser.
-    set({ importInspected: null, importError: null, busy: true });
+    const before = get().importState;
+    const started = transition(before, { type: 'begin' });
+    if (started === before) {
+      // Observable rather than silent: a press that does nothing is a bug report somebody
+      // cannot write, and the button that produced it is disabled for exactly this reason.
+      console.warn('[import] a second import was asked for while one was already running');
+      return false;
+    }
+    setImportState(set, started);
+
     try {
       const folder = await ipc.pickFolder();
-      if (!folder) return;
-      set({ importOpen: true });
-      set({ importInspected: { folder, inspected: await ipc.inspectPublication(folder) } });
+      if (!folder) {
+        // The chooser was closed with nothing. Not a refusal and not a failure: nobody said no
+        // to this folder, because there was no folder.
+        settleImport(set, get, { type: 'dismissed' });
+        return false;
+      }
+      setImportState(set, transition(get().importState, { type: 'chose' }));
+      const inspected = await ipc.inspectPublication(folder);
+      settleImport(set, get, { type: 'inspected', folder, inspected });
+      return true;
     } catch (error) {
-      set({ importOpen: true, importError: asImportFailure(error) });
-    } finally {
-      set({ busy: false });
+      settleImport(set, get, { type: 'failed', error: asImportFailure(error) });
+      return false;
     }
   },
 
   async confirmImport() {
-    const pending = get().importInspected;
-    if (!pending) return;
+    const pending = inspectedNow(get().importState);
+    const started = transition(get().importState, { type: 'confirm' });
+    if (!pending || started === get().importState) return false;
 
-    set({ busy: true, importError: null, message: null });
+    setImportState(set, started, { message: null });
     try {
       const entry = await ipc.importPublication(pending.folder);
+      setImportState(set, transition(get().importState, { type: 'imported', entry }));
       await get().loadLibrary();
-      set({
-        importOpen: false,
-        importInspected: null,
-        view: 'library',
-        message: {
-          tone: 'info',
-          text: translate('messages.imported', { name: entry.name }),
+      // Acknowledged here rather than by a button: what replaces the dialog is the library with
+      // the thing in it, which is the confirmation. The machine is left idle, ready for the next.
+      settleImport(
+        set,
+        get,
+        { type: 'acknowledge' },
+        {
+          view: 'library',
+          message: {
+            tone: 'info',
+            text: translate('messages.imported', { name: entry.name }),
+          },
         },
-      });
+      );
+      return true;
     } catch (error) {
-      set({ importError: asImportFailure(error) });
-    } finally {
-      set({ busy: false });
+      settleImport(set, get, { type: 'failed', error: asImportFailure(error) });
+      return false;
     }
+  },
+
+  importBlocksClose() {
+    if (!importBlocksWindowClose(get().importState)) return false;
+    set({ message: { tone: 'info', text: translate('messages.importInFlight') } });
+    return true;
   },
 
   setView(view) {
@@ -1282,6 +1335,37 @@ function summarise(journal: RunJournal): string {
     default:
       return translate('runPanel.outcome.running');
   }
+}
+
+/**
+ * Moves the machine, and keeps the two things outside it that have to agree.
+ *
+ * `busy` is the store's own flag for "something is in flight", read by controls that have nothing
+ * to do with importing; `report_busy` is the privileged side's copy, which exists because a window
+ * close arrives from the operating system and has to be answered before the webview can be asked
+ * anything. Both are derived from the phase here rather than set by hand at six call sites.
+ */
+function setImportState(
+  set: (partial: Partial<EditorState>) => void,
+  next: ImportState,
+  extra: Partial<EditorState> = {},
+): void {
+  const busy = next.phase === 'busy';
+  set({ importState: next, busy, ...extra });
+  // Best effort, and deliberately not awaited: the import is the thing being done, and a runtime
+  // that did not answer this must not fail it. The runtime's flag starting out false means the
+  // worst case is a close that is allowed — which is what happens today.
+  void ipc.reportBusy(busy).catch(() => {});
+}
+
+/** The same, for an event that ends the work in flight. */
+function settleImport(
+  set: (partial: Partial<EditorState>) => void,
+  get: () => EditorState,
+  event: Parameters<typeof transition>[1],
+  extra: Partial<EditorState> = {},
+): void {
+  setImportState(set, transition(get().importState, event), extra);
 }
 
 /**

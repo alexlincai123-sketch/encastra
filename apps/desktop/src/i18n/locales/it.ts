@@ -409,6 +409,7 @@ const it: Messages = {
     intro:
       'Encastra ha letto la cartella che hai scelto come dovrebbe leggerla chi la riceve: ha confrontato il file con il documento che lo accompagna e ha rifatto qui lo stesso controllo dell’editore. Non è stato scritto niente e non è stato eseguito niente.',
     reading: 'Sto leggendo la cartella…',
+    writing: 'Copia in corso nella tua libreria. Non ci vorrà molto.',
     confirm: 'Importa',
     nothing: 'niente',
     copiesNothingRuns:
@@ -528,6 +529,8 @@ const it: Messages = {
         'Il documento e il progetto non concordano su che cosa chiede questa cosa. Dichiarare meno permessi del vero è il problema ovvio; dichiararne di più insegna alla gente a leggere l’elenco di sfuggita, che è quello più sottile. Vengono rifiutati entrambi.',
       alreadyImported:
         '{listing} {version} è già nella tua libreria. Una versione pubblicata non cambia mai, quindi qui non c’è niente di nuovo da ricevere.',
+      libraryFull:
+        'La tua libreria è piena. Contiene già circa {used} MB di copie importate e questa versione ne conserva al massimo {max} MB; questa ne richiede circa {needed} MB. Rimuovi qualcosa che non usi più e riprova: non è stato importato nulla.',
       io: 'Qualcosa su questo computer ha rifiutato l’operazione ({reason}). Non è stato ricevuto niente.',
       unknown:
         'Encastra ha rifiutato questa cartella per un motivo che questa versione non sa esprimere a parole. Non è stata ricevuta.',
@@ -873,6 +876,8 @@ const it: Messages = {
       '{name} non è più dov’era. Rimettilo a posto, oppure aprilo da dove si trova adesso.',
     imported: 'Ricevuto {name}. Non è stato eseguito niente.',
     removedFromLibrary: '{name} non è più nell’elenco. Il file è rimasto dov’era.',
+    importInFlight:
+      'È in corso la scrittura di un’importazione. La finestra si chiuderà al termine.',
     removedAndDeleted:
       '{name} non è più nell’elenco, e la copia fatta da Encastra è stata cancellata.',
   },
@@ -882,6 +887,7 @@ const it: Messages = {
       'Encastra ha rifiutato per un motivo che questa versione non sa nominare ({kind}). Non è stato modificato nulla.',
     runtimeBusy: 'Il motore è occupato con altro. Riprova tra un momento.',
     libraryBusy: 'La tua libreria è occupata. Riprova tra un momento.',
+    importInFlight: 'È in corso la scrittura di un’importazione. La finestra si chiuderà quando avrà finito.',
     chooserDidNotReturn:
       'Il selettore di cartelle si è chiuso senza rispondere. Non è stato scelto nulla.',
     notAFolderOnThisMachine:

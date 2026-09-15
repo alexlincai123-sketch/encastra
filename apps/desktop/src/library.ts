@@ -137,6 +137,7 @@ export const IMPORT_ERROR_KEYS: Record<ImportError['kind'], string> = {
   'review-refused': 'import.errors.reviewRefused',
   'capabilities-disagree': 'import.errors.capabilitiesDisagree',
   'already-imported': 'import.errors.alreadyImported',
+  'library-full': 'import.errors.libraryFull',
   io: 'import.errors.io',
 };
 
@@ -202,6 +203,11 @@ export function importErrorValues(
   error: ImportError,
   format: (value: number) => string,
   label: (token: string) => string = (token) => token,
+  // Whole megabytes, for the one refusal whose numbers are a library rather than a file. The
+  // default derives them from `format`, which renders whole kilobytes: dividing once before it
+  // divides again is megabytes, and it means a caller with one formatter to hand still gets a
+  // whole sentence. Four gibibytes in kilobytes is 4 194 304, which tells nobody anything.
+  formatLarge: (value: number) => string = (value) => format(value / 1024),
 ): Record<string, string | number> {
   switch (error.kind) {
     case 'document-too-large':
@@ -236,6 +242,12 @@ export function importErrorValues(
       return { declared: error.declared.join(', '), actual: error.actual.join(', ') };
     case 'already-imported':
       return { listing: error.listing, version: error.version };
+    case 'library-full':
+      return {
+        max: formatLarge(error.max),
+        used: formatLarge(error.used),
+        needed: formatLarge(error.needed),
+      };
     default:
       return {};
   }

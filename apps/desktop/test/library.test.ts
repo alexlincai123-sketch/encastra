@@ -205,6 +205,7 @@ const EVERY_KIND: ImportError['kind'][] = [
   'review-refused',
   'capabilities-disagree',
   'already-imported',
+  'library-full',
   'io',
 ];
 
@@ -276,6 +277,24 @@ describe('the values a refusal quotes', () => {
     expect(importErrorValues(error, kb, (token) => `<${token}>`)).toEqual({
       field: '<title>',
       max: 120,
+    });
+  });
+
+  it('quotes a full library in megabytes, because kilobytes of a library tell nobody anything', () => {
+    // Four gibibytes is 4 194 304 kB and 4 096 MB. The default formatter derives megabytes from
+    // the kilobyte one it is given, which is what every caller but the panel has to hand.
+    const error: ImportError = {
+      kind: 'library-full',
+      max: 4 * 1024 * 1024 * 1024,
+      used: 4 * 1024 * 1024 * 1024 - 1024,
+      needed: 2 * 1024 * 1024,
+    };
+    expect(importErrorValues(error, kb)).toEqual({ max: '4096', used: '4096', needed: '2' });
+    // And a caller with a real megabyte formatter gets exactly that instead.
+    expect(importErrorValues(error, kb, undefined, (bytes) => `${bytes}b`)).toEqual({
+      max: '4294967296b',
+      used: '4294966272b',
+      needed: '2097152b',
     });
   });
 

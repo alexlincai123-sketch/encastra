@@ -445,6 +445,7 @@ const en: Messages = {
     intro:
       'Encastra has read the folder you chose the way somebody receiving it should: it checked the file against the document beside it, and ran the publisher’s own check again here. Nothing has been written, and nothing has run.',
     reading: 'Reading the folder…',
+    writing: 'Copying this into your library. This will not take long.',
     confirm: 'Import',
     nothing: 'nothing',
     copiesNothingRuns:
@@ -559,6 +560,8 @@ const en: Messages = {
         'The document and the project do not agree about what this asks for. Understating the permissions is the obvious problem; overstating them teaches people to skim the list, which is the subtler one. Both are refused.',
       alreadyImported:
         '{listing} {version} is already in your library. A published version never changes, so there is nothing new here to take in.',
+      libraryFull:
+        'Your library is full. It already holds about {used} MB of imported copies and this build keeps at most {max} MB; this one needs about {needed} MB. Remove something you no longer use and try again — nothing was taken in.',
       io: 'Something on this computer refused the operation ({reason}). Nothing was taken in.',
       unknown:
         'Encastra refused this folder for a reason this version has no words for. It was not taken in.',
@@ -930,6 +933,7 @@ const en: Messages = {
     libraryMissing: '{name} is not where it was. Move it back, or open it from wherever it is now.',
     imported: 'Imported {name}. Nothing has run.',
     removedFromLibrary: '{name} is off the list. The file is where it was.',
+    importInFlight: 'An import is being written. The window will close once it has finished.',
     removedAndDeleted: '{name} is off the list, and the copy Encastra made is deleted.',
   },
 
@@ -944,6 +948,7 @@ const en: Messages = {
       'Encastra refused this for a reason this version has no words for ({kind}). Nothing was changed.',
     runtimeBusy: 'The runtime is busy with something else. Try that again in a moment.',
     libraryBusy: 'Your library is busy. Try that again in a moment.',
+    importInFlight: 'An import is being written. The window will close once it has finished.',
     chooserDidNotReturn: 'The folder chooser closed without answering. Nothing was chosen.',
     notAFolderOnThisMachine: 'What the chooser gave back is not a folder on this machine.',
     folderUnusable: 'That folder cannot be used ({reason}).',

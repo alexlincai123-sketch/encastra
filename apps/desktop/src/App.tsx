@@ -306,7 +306,13 @@ export function App() {
   useEffect(() => {
     let off: (() => void) | undefined;
     void onCloseRequested(() => {
-      const { dirty, requestDiscard } = useEditor.getState();
+      const { dirty, requestDiscard, importBlocksClose } = useEditor.getState();
+      // An import being written is not unsaved work and must not be offered as something to
+      // discard: the bytes are going into the library, and a process that exits between the
+      // staging write and the rename leaves a directory nothing accounts for. The runtime
+      // refuses such a close itself; this says so on screen, because an X that appears to do
+      // nothing is worse than one that explains the wait.
+      if (importBlocksClose()) return;
       if (!dirty) {
         void ipc.closeWindow();
         return;

@@ -22,6 +22,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { formatDate, selectPlural, useTranslation } from '../i18n';
+import { canBeginImport } from '../import-machine';
 import { ipc } from '../ipc';
 import { arrange, LIBRARY_SORTS, type LibrarySort, mayDeleteCopy } from '../library';
 import { useEditor } from '../store';
@@ -176,6 +177,9 @@ function Row({ row }: { row: EntryWithStatus }) {
 function Empty() {
   const setView = useEditor((s) => s.setView);
   const beginImport = useEditor((s) => s.beginImport);
+  // The same guard as the toolbar's: this button is on screen at the same time as that one, and
+  // a second chooser opening on top of the first is exactly what it prevents.
+  const mayImport = useEditor((s) => canBeginImport(s.importState));
   const { t } = useTranslation();
 
   return (
@@ -199,7 +203,7 @@ function Empty() {
         <button
           type="button"
           className="btn"
-          disabled={!ipc.live}
+          disabled={!ipc.live || !mayImport}
           onClick={() => void beginImport()}
         >
           {t('library.import')}
@@ -216,8 +220,11 @@ export function Library() {
   const dismissLibraryNote = useEditor((s) => s.dismissLibraryNote);
   const loadLibrary = useEditor((s) => s.loadLibrary);
   const beginImport = useEditor((s) => s.beginImport);
-  // The toolbar's Import button is disabled while something is already in flight, so a second
-  // press cannot open a second native chooser on top of the first.
+  // The toolbar's Import button is disabled while an import is already in flight, so a second
+  // press cannot open a second native chooser on top of the first. Read from the machine rather
+  // than from the general `busy` flag: that one is also true while a graph is being validated,
+  // and an import is refused by the store for its own reason, which this mirrors exactly.
+  const mayImport = useEditor((s) => canBeginImport(s.importState));
   const busy = useEditor((s) => s.busy);
   const { t, locale } = useTranslation();
 
@@ -253,7 +260,7 @@ export function Library() {
         <button
           type="button"
           className="btn btn--primary"
-          disabled={!ipc.live || busy}
+          disabled={!ipc.live || busy || !mayImport}
           title={ipc.live ? t('library.importTitle') : t('library.importUnavailable')}
           onClick={() => void beginImport()}
         >

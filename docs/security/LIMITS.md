@@ -52,10 +52,50 @@ still a result — because they name a device in any directory and so are not co
 granted folder at all; and it settles trailing dots and spaces, which Windows drops when it
 opens a file.
 
-The library has two of its own, in `crates/encastra-library`: `MAX_ENTRIES` (10 000 entries in
-the index, refused rather than truncated) and `MAX_BYTES_TO_HASH` (64 MB — a larger file is
-reported present without being re-hashed, because hashing it on every listing would make the
-Library view cost a read of every large project it knows).
+## The library
+
+`crates/encastra-library/src/lib.rs`
+
+| Limit | Value | Bounds | Why |
+|---|---|---|---|
+| `MAX_ENTRIES` | 10 000 | Entries in the index, refused rather than truncated | Past this the index has stopped being a list of somebody's projects and started being the output of something writing to it in a loop. |
+| `MAX_LIBRARY_BYTES` | 4 GiB | Every copy under `imports/`, summed | The entry ceiling bounds the *index*; nothing bounded the bytes. Ten thousand entries at the 64 MB an import may be is six hundred gigabytes, which is not a ceiling anybody would notice being under (ENC-NEW-16). Four gibibytes is sixty-four imports at the largest size this build installs and many thousands at the size real ones are. It bounds what this software *wrote* — a project somebody made lives wherever they put it and is none of this crate's business. |
+| `MAX_BYTES_TO_HASH` | 64 MB | What `status` reads to decide whether a file changed | A larger file is reported present without being re-hashed; hashing it on every listing would make the Library view cost a read of every large project it knows. The length is still compared. |
+| `MAX_IMPORT_FILES_MEASURED` | 100 000 | Files `measure_imports` will stat | Past it the answer is `u64::MAX`, which every caller reads as "no room" — the honest answer for a tree nobody can finish counting. Two files per import and ten thousand imports is twenty thousand. |
+
+Three things about the byte ceiling are decisions rather than numbers.
+
+**`used` is measured, not believed.** The index records a `size_bytes` per entry and it would be
+cheaper to add them up — but the index is a file, and a ceiling compared against a figure whoever
+writes that file chooses is not a ceiling. `bytes_in_use` takes the larger of what the index
+claims and what walking `imports/` finds, and the walk is the half that cannot be talked down. The
+cost is one `stat` pass per import: nothing is opened and nothing is hashed, so `MAX_BYTES_TO_HASH`
+does not come into it, `imports/` is bounded by `MAX_ENTRIES` imports of two files each, and an
+import is something a person does by hand after picking a folder in a chooser — so the cost lands
+where somebody is already waiting for a file dialog, and never on drawing the Library.
+
+The accepted overshoot, stated plainly: because the check happens *before* the copy and the copy
+is at most `MAX_PUBLICATION_BYTES` plus a document, a library can end up holding at most one
+import's true size past the ceiling. What it cannot end up holding is a *lie's* worth more, which
+is what trusting the index would have allowed — and that is the difference the measurement buys.
+
+**Staging is counted, and swept.** An import stages into `imports/<listing>/.<version>.importing-…`
+and renames the whole folder into place, so a process that dies mid-import leaves a half-written
+temporary directory rather than a half-written publication. Those bytes are the only copy until
+the rename, so `measure_imports` counts them like any other; and `sweep_staging` removes leftovers
+older than an hour, at library load and at the start of every import. The hour is not tidiness: a
+second copy of the application may be importing right now, and deleting a live staging directory
+to reclaim room is not a trade worth making.
+
+**The check and the copy are one act.** `LibraryHandle::import_reserving` holds the index lock
+from measuring what is there until the new entry is written. Two imports running at once would
+otherwise each measure the same library, each be told there was room for one, and both land. The
+lock is therefore held across the copy — bounded by what an import may write, and what it blocks
+is the Library list redrawing for that long. A disk that runs out of space underneath it is an
+ordinary `std::io::Error` and arrives as the typed `ImportError::Io { reason }` carrying the error
+*kind* and no path; no dependency was added for free-space queries, because a check before writing
+would be a guess that another process can invalidate in between, and the write itself is the
+authority.
 
 ## The runner
 

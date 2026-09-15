@@ -47,6 +47,7 @@ export type Translate = (key: string, vars?: Record<string, string | number>) =>
 export const APP_ERROR_KEYS: Record<AppError['kind'], string> = {
   'runtime-busy': 'errors.runtimeBusy',
   'library-busy': 'errors.libraryBusy',
+  'import-in-flight': 'errors.importInFlight',
   'chooser-did-not-return': 'errors.chooserDidNotReturn',
   'not-a-folder-on-this-machine': 'errors.notAFolderOnThisMachine',
   'folder-unusable': 'errors.folderUnusable',

@@ -414,6 +414,7 @@ const de: Messages = {
     intro:
       'Encastra hat den gewählten Ordner so gelesen, wie ihn ein Empfänger lesen sollte: die Datei gegen das Dokument daneben geprüft und die Prüfung des Herausgebers hier noch einmal ausgeführt. Geschrieben wurde nichts, ausgeführt auch nichts.',
     reading: 'Der Ordner wird gelesen…',
+    writing: 'Wird in deine Bibliothek kopiert. Das dauert nicht lange.',
     confirm: 'Importieren',
     nothing: 'nichts',
     copiesNothingRuns:
@@ -532,6 +533,8 @@ const de: Messages = {
         'Dokument und Projekt sind sich nicht einig darüber, worum das bittet. Zu wenige Berechtigungen anzugeben ist das offensichtliche Problem; zu viele anzugeben bringt Leute dazu, die Liste zu überfliegen — das subtilere. Beides wird abgelehnt.',
       alreadyImported:
         '{listing} {version} liegt bereits in Ihrer Bibliothek. Eine veröffentlichte Version ändert sich nie, es gibt hier also nichts Neues zu übernehmen.',
+      libraryFull:
+        'Deine Bibliothek ist voll. Sie enthält bereits etwa {used} MB importierter Kopien, und diese Version behält höchstens {max} MB; diese hier braucht etwa {needed} MB. Entferne etwas, das du nicht mehr brauchst, und versuche es erneut – es wurde nichts übernommen.',
       io: 'Etwas auf diesem Rechner hat den Vorgang verweigert ({reason}). Übernommen wurde nichts.',
       unknown:
         'Encastra hat diesen Ordner aus einem Grund abgelehnt, für den diese Version keine Worte hat. Übernommen wurde er nicht.',
@@ -883,6 +886,8 @@ const de: Messages = {
       '{name} liegt nicht mehr, wo es lag. Legen Sie es zurück oder öffnen Sie es dort, wo es jetzt ist.',
     imported: '{name} übernommen. Ausgeführt wurde nichts.',
     removedFromLibrary: '{name} steht nicht mehr auf der Liste. Die Datei liegt, wo sie lag.',
+    importInFlight:
+      'Ein Import wird gerade geschrieben. Das Fenster schließt sich, sobald er fertig ist.',
     removedAndDeleted:
       '{name} steht nicht mehr auf der Liste, und die von Encastra angelegte Kopie ist gelöscht.',
   },
@@ -893,6 +898,7 @@ const de: Messages = {
     runtimeBusy:
       'Die Laufzeit ist gerade mit etwas anderem beschäftigt. Versuchen Sie es gleich noch einmal.',
     libraryBusy: 'Ihre Bibliothek ist beschäftigt. Versuchen Sie es gleich noch einmal.',
+    importInFlight: 'Ein Import wird gerade geschrieben. Das Fenster schließt sich, sobald er fertig ist.',
     chooserDidNotReturn:
       'Die Ordnerauswahl wurde ohne Antwort geschlossen. Es wurde nichts ausgewählt.',
     notAFolderOnThisMachine:

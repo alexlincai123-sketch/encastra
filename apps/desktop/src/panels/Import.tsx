@@ -24,6 +24,14 @@
 import { useEffect, useId, useRef } from 'react';
 import { useFocusTrap } from '../a11y/focus';
 import { formatNumber, selectPlural, useTranslation } from '../i18n';
+import {
+  canCloseImport,
+  canConfirmImport,
+  importErrorNow,
+  inspectedNow,
+  isImportBusy,
+  isImportDialogOpen,
+} from '../import-machine';
 import { importErrorKey, importErrorValues, isImportError, TRANSLATED_TOKENS } from '../library';
 import { useEditor } from '../store';
 import type { ImportError, Inspected, PublicationFinding } from '../types';
@@ -67,6 +75,8 @@ function Refusal({ error }: { error: ImportError | string }) {
     // A token this build has no word for is shown as it arrived. `t()` falls back to the key
     // itself, and `import.tokens.whatever` in the middle of a sentence is worse than the tag.
     (token) => (TRANSLATED_TOKENS.has(token) ? t(`import.tokens.${token}`) : token),
+    // Whole megabytes, for the refusal whose numbers describe a library rather than a file.
+    (bytes) => formatNumber(locale, Math.ceil(bytes / (1024 * 1024))),
   );
 
   return (
@@ -207,13 +217,20 @@ function Report({ inspected }: { inspected: Inspected }) {
 }
 
 export function Import() {
-  const open = useEditor((s) => s.importOpen);
-  const setOpen = useEditor((s) => s.setImportOpen);
-  const pending = useEditor((s) => s.importInspected);
-  const error = useEditor((s) => s.importError);
-  const busy = useEditor((s) => s.busy);
+  // Everything this panel shows and everything it will let somebody do is read off one value.
+  // There is no second flag for "the dialog is open" to fall out of step with the work in
+  // flight — the first time those two disagreed would be a dialog nobody could close.
+  const state = useEditor((s) => s.importState);
+  const closeImport = useEditor((s) => s.closeImport);
   const confirmImport = useEditor((s) => s.confirmImport);
   const { t } = useTranslation();
+
+  const open = isImportDialogOpen(state);
+  const pending = inspectedNow(state);
+  const error = importErrorNow(state);
+  const busy = isImportBusy(state);
+  const mayClose = canCloseImport(state);
+  const mayConfirm = canConfirmImport(state);
 
   const ids = useId();
   const panel = useRef<HTMLDivElement | null>(null);
@@ -238,9 +255,11 @@ export function Import() {
         ref={panel}
         tabIndex={-1}
         onKeyDown={(event) => {
-          // Nothing has been written, so leaving costs nothing — and having no way out of a
-          // dialog costs a great deal.
-          if (event.key === 'Escape') setOpen(false);
+          // Until something is being written, nothing has been written — so leaving costs
+          // nothing, and having no way out of a dialog costs a great deal. Once bytes are going
+          // into the library, Escape does nothing: the store refuses it, the focus trap stays,
+          // and the panel goes on saying what is happening. `closeImport` answers which it was.
+          if (event.key === 'Escape') closeImport();
         }}
       >
         <header className="publish__header">
@@ -256,6 +275,13 @@ export function Import() {
           </div>
         ) : null}
 
+        {/* Said while it is true, rather than leaving a disabled Close to be puzzled over. */}
+        {busy && pending ? (
+          <div className="publish__body">
+            <p className="publish__hint">{t('import.writing')}</p>
+          </div>
+        ) : null}
+
         {error ? (
           <div className="publish__body">
             <Refusal error={error} />
@@ -265,13 +291,19 @@ export function Import() {
 
         <footer className="publish__actions">
           <p className="import__promise">{t('import.copiesNothingRuns')}</p>
-          <button type="button" className="btn" onClick={() => setOpen(false)}>
+          <button
+            type="button"
+            className="btn"
+            disabled={!mayClose}
+            title={mayClose ? undefined : t('import.writing')}
+            onClick={() => closeImport()}
+          >
             {t('common.close')}
           </button>
           <button
             type="button"
             className="btn btn--primary"
-            disabled={busy || !pending}
+            disabled={!mayConfirm}
             onClick={() => void confirmImport()}
           >
             {t('import.confirm')}

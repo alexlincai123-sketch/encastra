@@ -80,6 +80,7 @@ function inLocale(locale: Locale) {
 const SAMPLES: AppError[] = [
   { kind: 'runtime-busy' },
   { kind: 'library-busy' },
+  { kind: 'import-in-flight' },
   { kind: 'chooser-did-not-return' },
   { kind: 'not-a-folder-on-this-machine' },
   { kind: 'folder-unusable', reason: 'that is not a folder' },
