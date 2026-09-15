@@ -1,0 +1,109 @@
+name: Toolchain inventory
+
+# What is actually installed on the runner that builds the release.
+#
+# 0.5.0-rc.3's release workflow built the build commit on `windows-latest` and could not reproduce
+# the developer machine's bytes. The executables say why: the Rich header — the records the MSVC
+# linker writes before the PE signature, naming the build number of every tool that contributed —
+# reads 35721 and 36256 on the runner against 35207 and 35228 here. Same rustc, same Cargo.lock,
+# a different C toolchain underneath.
+#
+# Nothing in the repository pins that toolchain, and nothing recorded which one the runner had.
+# This job records it, and answers the one question the fix depends on: whether the runner image
+# carries the toolset this project builds with, so the release can ask for it by version.
+#
+# It compiles nothing and downloads nothing. It runs on demand, and on a push that changes this
+# file, so re-reading the inventory after an image update costs one dispatch.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['rc/**']
+    paths: ['.github/workflows/toolchain-inventory.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: What windows-latest has
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Image, Visual Studio, toolsets, SDKs
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'toolchain.txt'
+          function Say($text) { Write-Output $text; Add-Content -Path $out -Value $text -Encoding utf8 }
+
+          Say "image          : $env:ImageOS / $env:ImageVersion"
+          Say "os             : $([Environment]::OSVersion.VersionString)"
+          Say "processor      : $env:PROCESSOR_ARCHITECTURE"
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) { Say "vswhere        : MISSING"; exit 0 }
+
+          $installs = & $vswhere -all -products * -format json | ConvertFrom-Json
+          foreach ($vs in $installs) {
+            Say ""
+            Say "visual studio  : $($vs.displayName)"
+            Say "  version      : $($vs.installationVersion)  ($($vs.catalog.productDisplayVersion))"
+            Say "  path         : $($vs.installationPath)"
+
+            $tools = Join-Path $vs.installationPath 'VC\Tools\MSVC'
+            if (Test-Path $tools) {
+              foreach ($toolset in Get-ChildItem $tools -Directory | Sort-Object Name) {
+                $cl = Join-Path $toolset.FullName 'bin\Hostx64\x64\cl.exe'
+                $link = Join-Path $toolset.FullName 'bin\Hostx64\x64\link.exe'
+                $clv = if (Test-Path $cl) { (& $cl 2>&1 | Select-Object -First 1) } else { 'no cl.exe' }
+                $lnv = if (Test-Path $link) { (& $link 2>&1 | Select-Object -First 1) } else { 'no link.exe' }
+                Say "  toolset      : $($toolset.Name)"
+                Say "      cl       : $clv"
+                Say "      link     : $lnv"
+              }
+            } else {
+              Say "  toolset      : none installed"
+            }
+          }
+
+          $sdkRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\Include"
+          if (Test-Path $sdkRoot) {
+            Say ""
+            Say "windows sdks   : $((Get-ChildItem $sdkRoot -Directory | Select-Object -ExpandProperty Name) -join ', ')"
+          }
+
+          Say ""
+          Say "node           : $(node --version)"
+          Say "npm            : $(npm --version)"
+          Say "rustc          : $(rustc --version 2>&1)"
+          $nsis = Join-Path $env:LOCALAPPDATA 'tauri\NSIS'
+          Say "tauri NSIS     : $(if (Test-Path $nsis) { 'already present' } else { 'not downloaded yet' })"
+
+      # The fix this is for: ask vcvarsall for the developer machine's toolset by version and see
+      # whether the image can give it. If it can, the release build can pin it and the Rich header
+      # stops being a difference. If it cannot, the answer is the other direction — publish the
+      # runner's build and reproduce that here instead — and this output says so plainly.
+      - name: Can this image select MSVC 14.44.35207?
+        shell: cmd
+        continue-on-error: true
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set VSPATH=%%i
+          echo VSPATH=%VSPATH%
+          call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64 -vcvars_ver=14.44 && (
+            echo SELECTED VCToolsVersion=%VCToolsVersion%
+            where cl.exe
+            where link.exe
+            cl.exe 2>&1 | findstr /C:"Version"
+            link.exe 2>&1 | findstr /C:"Version"
+          ) || echo COULD NOT SELECT 14.44
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: toolchain-inventory-${{ github.run_id }}
+          path: ${{ runner.temp }}/toolchain.txt
+          if-no-files-found: warn
+          retention-days: 30
