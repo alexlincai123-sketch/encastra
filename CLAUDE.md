@@ -46,12 +46,10 @@ export PATH="$HOME/.cargo/bin:$PATH"   # cargo no está en PATH por defecto en e
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-# Artefactos generados que van commiteados: CI falla si están desfasados (el primer run real
-# de CI en Linux cayó aquí porque el corpus llevaba tres commits sin regenerar).
-UPDATE_MATRIX=1 npx vitest run --silent && git diff --exit-code -- packages/protocol/data/compat-matrix.json
-UPDATE_FUZZ_CORPUS=1 cargo test -p encastra-project --test fuzz_smoke --quiet && git diff --exit-code -- fuzz/corpus
-python scripts/third_party.py --check
-python scripts/version.py --check
+# Artefactos generados que van commiteados (matriz, corpus fuzz, error kinds, inventario de
+# terceros, versión+lock): CI falla si están desfasados, y el candidato 0.5.0-rc.1 cayó ahí por
+# no ejecutar esto antes del tag. Un solo comando; también lo corre release_check.py.
+python scripts/generated_check.py
 python -m unittest discover -s scripts/tests
 ```
 
