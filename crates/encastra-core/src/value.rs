@@ -99,6 +99,36 @@ impl Value {
         matches!(self, Value::Absent)
     }
 
+    /// Roughly how much memory this value's payload occupies, for the runtime's own accounting.
+    ///
+    /// Deliberately an **estimate**, and deliberately cheap: it is called once per value as a
+    /// run produces and releases them, so it must not walk anything it does not have to. It
+    /// counts the bytes a payload actually holds — a string's length, the sum of a list's
+    /// items — and adds a small per-node constant for structured data, which stands in for the
+    /// key, tag and allocation overhead `serde_json` carries for every node it keeps.
+    ///
+    /// A [`Handle`] counts as **nothing**. Its content is a file the host owns; what travels
+    /// along the edge is an opaque number. Counting a handle as its file's size would make the
+    /// budget refuse a workflow that never held that file in memory at all — which is the whole
+    /// point of handles.
+    ///
+    /// Arithmetic saturates: a value big enough to overflow a `u64` is already far past any
+    /// budget, and wrapping round to a small number is the one answer that would be dangerous.
+    pub fn approx_bytes(&self) -> u64 {
+        match self {
+            Value::Bool(_) => 1,
+            Value::Int(_) | Value::Float(_) => 8,
+            Value::Text(s) => s.len() as u64,
+            Value::Json(v) => json_approx_bytes(v),
+            // The content is on disk and the host owns it — see the note above.
+            Value::Handle(_) => 0,
+            Value::List(items) => items.iter().fold(0u64, |total, item| {
+                total.saturating_add(item.approx_bytes())
+            }),
+            Value::Absent => 0,
+        }
+    }
+
     /// A description safe to write to disk.
     ///
     /// This is what goes in the run journal, so it contains **no content**: text and
@@ -148,6 +178,32 @@ impl Value {
             other => other.summary(),
         }
     }
+}
+
+/// The per-node constant in the structured-data estimate.
+///
+/// Every `serde_json` node costs something even when it holds nothing: the enum itself, the
+/// allocation behind an array or a map, the key a field is filed under. Thirty-two bytes is
+/// the right order of magnitude and errs on the high side, which is the safe direction for a
+/// budget — over-counting refuses a run early, under-counting lets one through.
+const JSON_NODE_OVERHEAD: u64 = 32;
+
+fn json_approx_bytes(v: &serde_json::Value) -> u64 {
+    let own = match v {
+        serde_json::Value::String(s) => s.len() as u64,
+        serde_json::Value::Array(a) => a.iter().fold(0u64, |total, item| {
+            total.saturating_add(json_approx_bytes(item))
+        }),
+        serde_json::Value::Object(o) => o.iter().fold(0u64, |total, (key, value)| {
+            total
+                .saturating_add(key.len() as u64)
+                .saturating_add(json_approx_bytes(value))
+        }),
+        // Null, booleans and numbers carry no payload of their own; the node constant is
+        // the whole of their cost.
+        _ => 0,
+    };
+    own.saturating_add(JSON_NODE_OVERHEAD)
 }
 
 fn json_shape(v: &serde_json::Value) -> String {
@@ -225,6 +281,56 @@ mod tests {
             kind: HandleKind::Image,
         });
         assert_eq!(h.summary(), "image #7");
+    }
+
+    #[test]
+    fn a_payloads_size_is_what_the_budget_counts() {
+        // Text is counted by the bytes it holds, not by its character count: a run's memory is
+        // measured in bytes, and a multi-byte character costs what it costs.
+        assert_eq!(Value::Text("a".repeat(1024)).approx_bytes(), 1024);
+        assert_eq!(Value::Text("é".into()).approx_bytes(), 2);
+
+        // Scalars are small constants; absence is free.
+        assert_eq!(Value::Bool(true).approx_bytes(), 1);
+        assert_eq!(Value::Int(9_000).approx_bytes(), 8);
+        assert_eq!(Value::Float(1.5).approx_bytes(), 8);
+        assert_eq!(Value::Absent.approx_bytes(), 0);
+
+        // A handle is an opaque number. The file behind it is the host's, never in the run's
+        // memory, and counting it would refuse workflows that hold nothing at all.
+        assert_eq!(
+            Value::Handle(Handle {
+                id: 1,
+                kind: HandleKind::Video,
+            })
+            .approx_bytes(),
+            0
+        );
+
+        // A list costs what its items cost.
+        let list = Value::List(vec![Value::Text("ab".into()), Value::Text("cde".into())]);
+        assert_eq!(list.approx_bytes(), 5);
+    }
+
+    #[test]
+    fn structured_data_is_counted_all_the_way_down() {
+        // A shallow estimate that only looked at the top-level node would see this as one
+        // small object, which is exactly how a large payload would slip past a budget.
+        let nested = Value::Json(serde_json::json!({
+            "outer": { "inner": ["x".repeat(100)] }
+        }));
+        let flat = Value::Json(serde_json::json!({ "outer": 1 }));
+        assert!(
+            nested.approx_bytes() > flat.approx_bytes() + 100,
+            "nested payloads must be walked: {} vs {}",
+            nested.approx_bytes(),
+            flat.approx_bytes()
+        );
+        // And every node carries its overhead, so even an empty structure is not free.
+        assert_eq!(
+            Value::Json(serde_json::json!({})).approx_bytes(),
+            JSON_NODE_OVERHEAD
+        );
     }
 
     #[test]

@@ -30,7 +30,9 @@ use crate::broker::{Broker, DirEntry};
 use crate::graph::{Graph, Node, NodeId, PortRef};
 use crate::journal::NodeError;
 use crate::registry::ComponentRegistry;
-use crate::runner::{CoreComponentSet, RunObserver, RunOutcome, RunRequest, execute_request};
+use crate::runner::{
+    CoreComponentSet, RunObserver, RunOutcome, RunRequest, execute_request_validated,
+};
 use crate::validate::{Validation, validate_with_supplied};
 use crate::value::{Handle, HandleKind, Value};
 
@@ -153,6 +155,18 @@ struct Mounted {
 
 pub struct Session {
     graph: Graph,
+    /// What [`Session::start`] worked out about this graph, kept rather than re-derived.
+    ///
+    /// A session owns its graph and nothing can edit it while the session holds it, so the
+    /// answer cannot change between one event and the next: the same order, the same
+    /// conversions. Re-validating per event did the work of the whole graph — every node, every
+    /// edge, every required input, the topological sort — before running one event through it,
+    /// which on a large graph costs more than the run itself.
+    ///
+    /// It is also the *right* answer to keep. `start` validated with every trigger port treated
+    /// as supplied; one event supplies a subset of those, so validating per event asks a
+    /// narrower question than the one the session already answered when it allowed Start.
+    validation: Validation,
     components: CoreComponentSet,
     triggers: Vec<Mounted>,
     pending: VecDeque<(NodeId, Fired)>,
@@ -200,6 +214,7 @@ impl Session {
 
         Ok(Session {
             graph,
+            validation,
             components,
             triggers: mounted,
             pending: VecDeque::new(),
@@ -318,12 +333,11 @@ impl Session {
                 observer,
             };
 
-            match execute_request(request, broker) {
-                Ok(outcome) => tick.runs.push(outcome),
-                // The graph validated when the session started, so this cannot normally
-                // happen. If it does, stopping beats looping on the same failure forever.
-                Err(_) => self.stop(),
-            }
+            // With the validation from `start`, rather than working it out again per event —
+            // see the field. There is no "it did not validate" branch here any more, because
+            // the session could not have started if it did not.
+            tick.runs
+                .push(execute_request_validated(request, broker, &self.validation));
         }
 
         tick
@@ -412,6 +426,9 @@ mod tests {
         // A watcher pointed at a churning folder must not grow without limit.
         let mut session = Session {
             graph: Graph::default(),
+            // These tests drive the queue, not the executor: an empty graph has nothing to
+            // validate and nothing to run.
+            validation: Validation::default(),
             components: CoreComponentSet::new(),
             triggers: vec![Mounted {
                 node: NodeId("t".into()),
@@ -441,10 +458,116 @@ mod tests {
         assert_eq!(reported, dropped, "each turn must report what it dropped");
     }
 
+    /// Counts what the runtime asks of a registry.
+    ///
+    /// Validation resolves every node's manifest exactly once, and so does execution, so the
+    /// number of lookups a turn makes says plainly whether the graph was validated again. A
+    /// timing test would say the same thing less reliably and only on a fast enough machine.
+    struct Counting<'a> {
+        inner: &'a crate::registry::InMemoryRegistry,
+        gets: std::cell::Cell<usize>,
+    }
+
+    impl ComponentRegistry for Counting<'_> {
+        fn get(&self, reference: &crate::graph::ComponentRef) -> Option<&ComponentManifest> {
+            self.gets.set(self.gets.get() + 1);
+            self.inner.get(reference)
+        }
+
+        fn list(&self) -> Vec<&ComponentManifest> {
+            self.inner.list()
+        }
+    }
+
+    fn manifest(id: &str, trigger: bool) -> ComponentManifest {
+        ComponentManifest::parse(
+            &serde_json::json!({
+                "schema": 1, "id": id, "version": "1.0.0", "name": id,
+                "runtime": ">=0.1.0", "kind": "core", "trigger": trigger,
+                "ports": { "outputs": { "value": { "type": "i64" } } }
+            })
+            .to_string(),
+        )
+        .expect("fixture manifest must be valid")
+    }
+
+    #[test]
+    fn a_session_validates_its_graph_once_and_not_once_per_event() {
+        // A session runs the same graph for every event a trigger produces. The graph cannot
+        // change while the session holds it, so re-deriving the order, the conversions and
+        // every required input per event is work with an answer already in hand — and on a
+        // graph of any size it is more work than the run it precedes.
+        const NODES: usize = 12;
+
+        let mut inner = crate::registry::InMemoryRegistry::new();
+        inner.insert(manifest("test.trigger", true)).unwrap();
+        inner.insert(manifest("test.step", false)).unwrap();
+
+        let mut nodes = serde_json::Map::new();
+        nodes.insert(
+            "t".into(),
+            serde_json::json!({ "component": "test.trigger@1.0.0" }),
+        );
+        for n in 1..NODES {
+            nodes.insert(
+                format!("n{n}"),
+                serde_json::json!({ "component": "test.step@1.0.0" }),
+            );
+        }
+        let graph =
+            Graph::parse(&serde_json::json!({ "nodes": nodes, "edges": [] }).to_string()).unwrap();
+
+        let registry = Counting {
+            inner: &inner,
+            gets: std::cell::Cell::new(0),
+        };
+        let mut triggers = TriggerSet::new();
+        triggers.insert("test.trigger@1.0.0", || {
+            Box::new(Burst {
+                per_poll: 1,
+                polls_left: 100,
+            })
+        });
+
+        let mut session = Session::start(
+            graph,
+            &registry,
+            CoreComponentSet::new(),
+            &triggers,
+            "validation-once",
+        )
+        .expect("the fixture graph must validate");
+
+        let mut broker = broker();
+        let runs = 4usize;
+        registry.gets.set(0);
+        for _ in 0..runs {
+            session.tick(&registry, &mut broker, None);
+        }
+        let per_run = registry.gets.get() / runs;
+
+        assert_eq!(
+            session.runs_completed(),
+            runs as u64,
+            "each turn must have run one event"
+        );
+        // Executing resolves each node once, plus once for the event the trigger seeded.
+        // Validating again would roughly double that: every node resolved a second time, for an
+        // answer the session worked out when it started.
+        assert!(
+            per_run <= NODES + 2,
+            "each run resolved {per_run} components for a {NODES} node graph, which is the \
+             graph being validated all over again"
+        );
+    }
+
     #[test]
     fn stopping_ends_the_session_immediately() {
         let mut session = Session {
             graph: Graph::default(),
+            // These tests drive the queue, not the executor: an empty graph has nothing to
+            // validate and nothing to run.
+            validation: Validation::default(),
             components: CoreComponentSet::new(),
             triggers: vec![Mounted {
                 node: NodeId("t".into()),
