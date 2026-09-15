@@ -302,14 +302,19 @@ impl Project {
     }
 }
 
-/// Every entry gets the same fixed timestamp and no extra metadata.
+/// Every entry gets the same fixed timestamp, the same declared origin, and no extra metadata.
 ///
 /// A real clock here would make two saves of an unchanged project produce different bytes,
-/// which would break hash comparison and fill version control with noise.
+/// which would break hash comparison and fill version control with noise. The "version made
+/// by" system byte is pinned for the same reason: left unset, the `zip` crate writes the
+/// platform it is running on, so the same project saved on Windows and on Linux differed by
+/// one byte per entry in the central directory. The first real CI run found it — the fuzz
+/// corpus generated on Linux did not match the one committed from Windows.
 fn deterministic_options() -> zip::write::SimpleFileOptions {
     zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .last_modified_time(zip::DateTime::default())
+        .system(zip::System::Unix)
         .unix_permissions(0o644)
 }
 
@@ -517,6 +522,43 @@ pub fn node_ids(graph: &Graph) -> Vec<NodeId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bytes a project serialises to do not depend on the machine that wrote them. The
+    /// `zip` crate writes the running platform into every entry's "version made by" unless
+    /// told otherwise; this pins it, and the fuzz corpus gate in CI is what noticed. The reader
+    /// API does not expose that byte, so the central directory is read as bytes: each record
+    /// starts `PK`, and the upper byte of "version made by" is at offset 5, where 3 is
+    /// Unix in the ZIP specification (appendix II of APPNOTE).
+    #[test]
+    fn a_project_serialises_the_same_on_every_platform() {
+        let bytes = Project::new("anywhere", 1_700_000_000_000)
+            .to_bytes()
+            .expect("serialises");
+        let records: Vec<usize> = bytes
+            .windows(4)
+            .enumerate()
+            .filter(|(_, window)| *window == b"PK")
+            .map(|(at, _)| at)
+            .collect();
+        assert_eq!(records.len(), 6, "one central directory record per entry");
+        for at in records {
+            assert_eq!(
+                bytes[at + 5],
+                3,
+                "version made by: system byte at record {at}"
+            );
+        }
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).expect("a zip");
+        for index in 0..archive.len() {
+            let entry = archive.by_index(index).expect("an entry");
+            assert_eq!(
+                entry.last_modified(),
+                Some(zip::DateTime::default()),
+                "{}",
+                entry.name()
+            );
+        }
+    }
 
     fn sample_graph() -> Graph {
         Graph::parse(

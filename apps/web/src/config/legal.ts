@@ -274,24 +274,24 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
     slug: 'third-party-notices',
     title: 'Third-Party & Open-Source Notices',
     summary:
-      'What this project is built on. A full generated attributions file does not exist yet.',
+      'What this project is built on: a generated inventory of every dependency compiled into the application, with its licence and origin.',
     sections: [
       {
         heading: 'What this build depends on',
         body: [
-          'Encastra is built on open-source software, including the Rust toolchain and its crate ecosystem, Node.js, React, Next.js, and Tauri, each under its own licence. This page names the major pieces for transparency; it is not yet the complete, generated list a finished release would ship.',
+          'Encastra is built on open-source software, including the Rust toolchain and its crate ecosystem, Node.js, React, Next.js, and Tauri, each under its own licence. The complete list is generated from the dependency tree rather than written by hand: docs/THIRD-PARTY.md in the repository names every crate compiled into the desktop executable and every npm package bundled into its interface, with version, licence and origin. The build fails if that file no longer matches the tree.',
         ],
       },
       {
-        heading: 'What is missing',
+        heading: 'What the inventory is and is not',
         body: [
-          'A machine-generated notices file — listing every direct and transitive dependency with its licence text — has not been produced for this beta. Producing one is listed among the steps before a non-beta release, alongside code signing and a chosen licence for the source itself.',
+          'It is an inventory. It lists each package’s licence identifier and where its source, and therefore its full licence text, lives. It does not reproduce every licence text inline, and it is not a legal opinion about what each licence obliges; a review of those obligations by counsel is among the steps before a non-beta release, alongside code signing and a chosen licence for Encastra itself.',
         ],
       },
       {
         heading: 'Requesting the list',
         body: [
-          'Until a generated file exists, the authoritative source is each dependency’s own lockfile in the repository. If you need the full list for compliance purposes, ask through /contact.',
+          'The generated file ships with the source tree. If you need it for compliance purposes and do not have the repository, ask through /contact and it will be sent as generated for the release you name.',
         ],
       },
     ],

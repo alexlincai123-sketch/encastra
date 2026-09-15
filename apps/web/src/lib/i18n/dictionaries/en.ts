@@ -694,6 +694,21 @@ const en: Messages = {
         title: 'Product roadmap',
         summary: 'What ships when, and a named list of what would make this fail.',
       },
+      thirdParty: {
+        title: 'Third-party software',
+        summary:
+          'Every crate compiled into the application and every npm package bundled into its interface, with licence and origin. Generated from the dependency tree; the build fails when it is stale.',
+      },
+      ciSecurity: {
+        title: 'CI security',
+        summary:
+          'Two workflows, two trust levels: what pull-request CI may touch, what a release build may not, and the first real runs with what they found.',
+      },
+      aiAgentSurface: {
+        title: 'The AI-agent attack surface',
+        summary:
+          'What changes when the thing driving Encastra is an agent: as the user’s tool, as the author of a file, or as a reader of text. What is tested and what is not.',
+      },
       adr: {
         title: 'Decision records',
         summary: 'The decisions, with the alternatives that lost.',

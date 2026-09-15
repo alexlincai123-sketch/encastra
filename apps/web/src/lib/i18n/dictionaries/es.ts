@@ -682,6 +682,21 @@ const es: Messages = {
         title: 'Roadmap del producto',
         summary: 'Qué se lanza cuándo, y una lista con nombre de lo que haría que esto fallara.',
       },
+      thirdParty: {
+        title: 'Software de terceros',
+        summary:
+          'Cada crate compilado en la aplicación y cada paquete npm empaquetado en su interfaz, con licencia y origen. Generado a partir del árbol de dependencias; la build falla cuando está desfasado.',
+      },
+      ciSecurity: {
+        title: 'Seguridad de la CI',
+        summary:
+          'Dos flujos, dos niveles de confianza: qué puede tocar la CI de un pull request, qué no puede tocar una build de release, y las primeras ejecuciones reales con lo que encontraron.',
+      },
+      aiAgentSurface: {
+        title: 'La superficie de ataque de los agentes de IA',
+        summary:
+          'Qué cambia cuando quien maneja Encastra es un agente: como herramienta del usuario, como autor de un fichero o como lector de texto. Qué está probado y qué no.',
+      },
       adr: {
         title: 'Registros de decisiones',
         summary: 'Las decisiones, con las alternativas que perdieron.',
