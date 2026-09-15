@@ -10,11 +10,11 @@ useDefault = true
 
 # `review.rs` tests that a publication carrying an API key in a component setting is refused.
 # The fixture value is not a credential to anything; it is the string the refusal is tested
-# against. Allowlisted by exact value AND exact file, with AND, so that a real key of the same
-# shape anywhere else — or this value pasted somewhere else — is still a finding.
-[[allowlists]]
-description = "the fake API key the publication review is tested against"
-condition = "AND"
-paths = ['''crates/encastra-publish/src/review\.rs''']
-regexTarget = "secret"
+# against. Allowlisted by its exact value, anchored, against the finding's Secret (the global
+# allowlist's default target): a real key of any other value, in this file or anywhere else,
+# is still a finding. The first attempt used a per-rule `[[allowlists]]` table with an AND
+# condition; gitleaks 8.24 read the file and still reported both findings, so this is the
+# global table the README documents.
+[allowlist]
+description = "the fake API key the publication review is tested against (crates/encastra-publish/src/review.rs)"
 regexes = ['''^sk-live-9d2f4a7c1b8e6f30$''']
