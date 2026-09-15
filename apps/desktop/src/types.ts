@@ -196,6 +196,19 @@ export type FolderPurpose =
   /** The Settings preference for where this person keeps their projects. */
   | 'projects-location';
 
+/**
+ * What a *file* is being chosen for.
+ *
+ * One member, because a file reaches the runtime in exactly one way: as the value of a graph
+ * input that nothing upstream produces. `choose_file` records what the native chooser returned,
+ * and `run_graph` / `start_workflow` seed an input from a path in that record and from nothing
+ * else — so a path stored in a project, or named by a renderer that has been through a debugger,
+ * is displayed and not read.
+ *
+ * The wire form of `FilePurpose` in `apps/desktop/src-tauri/src/lib.rs`.
+ */
+export type FilePurpose = 'run-input';
+
 export interface Snapshot {
   id: string;
   parent?: string;

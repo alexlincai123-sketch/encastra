@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ipc } from '../src/ipc';
 import { useEditor } from '../src/store';
-import type { FolderPurpose } from '../src/types';
+import type { FilePurpose, FolderPurpose, OpenProject } from '../src/types';
 
 /**
  * Consent is per purpose, and this is the editor's half of that claim.
@@ -172,5 +172,90 @@ describe('the import flow, run rather than read', () => {
     await useEditor.getState().beginImport();
 
     expect(useEditor.getState().busy).toBe(false);
+  });
+});
+
+/**
+ * The file a run is seeded with.
+ *
+ * `inputs[].path` was the last path the WebView named freely: the runtime canonicalised it and
+ * imported the file into the run's scratch folder, where the step wired to that port read it.
+ * The chooser now runs on the privileged side, which is the half that matters; this is the
+ * editor's half — that nothing here can put a path into an input except that chooser, and that
+ * opening a project cannot arrive with one already filled in.
+ */
+describe('the file an input is given', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    useEditor.setState({ inputs: [], projectPath: null, dirty: false, message: null });
+  });
+
+  it('is chosen through the runtime, not through the dialog plugin', () => {
+    const source = read('apps/desktop/src/ipc.ts');
+    const tauri = source.slice(
+      source.indexOf('class TauriIpc'),
+      source.indexOf('class PreviewIpc'),
+    );
+    const body = tauri.slice(tauri.indexOf('async pickFile'));
+    const implementation = body.slice(0, body.indexOf('\n  }'));
+
+    expect(implementation).toContain("invoke<string | null>('choose_file'");
+    // The plugin is still right for the two `.encastra` choosers, and wrong for this one: a path
+    // it produced is a string this side made up, which is exactly what the record exists to tell
+    // apart from a path the operating system handed over.
+    expect(implementation).not.toContain('plugin-dialog');
+  });
+
+  it('names the purpose the Rust enum accepts', () => {
+    const purpose: FilePurpose = 'run-input';
+    const lib = read('apps/desktop/src-tauri/src/lib.rs');
+    const block = lib.match(/enum FilePurpose \{([\s\S]*?)\n\}/);
+    expect(block, 'lib.rs should declare an enum FilePurpose').toBeTruthy();
+
+    const variants = [...(block?.[1] ?? '').matchAll(/^\s{4}([A-Z][A-Za-z]*),$/gm)].map((m) =>
+      m[1].replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase(),
+    );
+
+    expect(variants).toEqual([purpose]);
+    expect(read('apps/desktop/src/ipc.ts')).toContain(`const purpose: FilePurpose = '${purpose}'`);
+  });
+
+  it('reaches the store only through setInput, and only from the chooser', () => {
+    // `setInput` is the single door. If a second place started writing into `inputs`, a path
+    // could arrive without a chooser having been opened — and while the runtime would refuse
+    // it, the person would be shown a filled-in field for a file that cannot be read.
+    const inspector = read('apps/desktop/src/panels/Inspector.tsx');
+    expect(inspector).toContain('const chosen = await ipc.pickFile();');
+    expect(inspector).toContain('if (chosen) setInput(nodeId, port, chosen);');
+
+    const store = read('apps/desktop/src/store.ts');
+    // One assignment that adds to `inputs`; every other mention clears it or reads it.
+    const additions = [...store.matchAll(/\.\.\.s\.inputs\.filter\(/g)];
+    expect(additions).toHaveLength(1);
+  });
+
+  it('is cleared when a project is opened, so a file cannot arrive pre-chosen', async () => {
+    // A `.encastra` holds a manifest, a graph, a lockfile, variables and history — no inputs.
+    // The editor clears them anyway on open, and that is what this pins: a path left over from
+    // the previous project would be shown against a graph it has nothing to do with, and the
+    // person would press Run on a file they picked for something else.
+    const opened: OpenProject = {
+      name: 'Thumbnails',
+      path: 'C:\\work\\thumbnails.encastra',
+      graph: { nodes: {}, edges: [] },
+      history: { snapshots: [] },
+      missing: [],
+    };
+    vi.spyOn(ipc, 'pickProjectToOpen').mockResolvedValue(opened.path);
+    vi.spyOn(ipc, 'openProject').mockResolvedValue(opened);
+
+    useEditor.setState({
+      dirty: false,
+      inputs: [{ node: 'read', port: 'file', path: 'C:\\work\\private.csv' }],
+    });
+    await useEditor.getState().openProject();
+
+    expect(useEditor.getState().projectPath).toBe(opened.path);
+    expect(useEditor.getState().inputs).toEqual([]);
   });
 });

@@ -19,6 +19,7 @@ import type {
   About,
   ComponentManifest,
   EncastraGraph,
+  FilePurpose,
   FolderPurpose,
   GrantSpec,
   InputSpec,
@@ -41,6 +42,15 @@ export interface Ipc {
   listComponents(): Promise<ComponentManifest[]>;
   validateGraph(graph: EncastraGraph, inputs: InputSpec[]): Promise<Validation>;
   runGraph(graph: EncastraGraph, inputs: InputSpec[], grants: GrantSpec[]): Promise<RunResult>;
+  /**
+   * Opens the native file chooser for the one question a file answers: the value of a graph
+   * input.
+   *
+   * It takes no purpose because there is exactly one, and adding an argument nobody can vary
+   * would be ceremony. A second reason to pick a file adds the argument then, the way
+   * `pickFolder` has one. What matters is on the other side: the runtime records the file it
+   * handed back, and `run_graph`/`start_workflow` seed an input from nothing else.
+   */
   pickFile(): Promise<string | null>;
   /**
    * Opens the native folder chooser to answer one particular question.
@@ -151,9 +161,21 @@ class TauriIpc implements Ipc {
     return this.invoke<RunResult>('run_graph', { graph, inputs, grants });
   }
 
+  /**
+   * Choosing a file goes through the runtime, for the same reason choosing a folder does.
+   *
+   * This used to open the dialog plugin here and hand the path back as a string, and that
+   * string went straight into `inputs[].path` on the next run — where the runtime canonicalised
+   * it and imported the file into the scratch folder for the step wired to that port. The whole
+   * of the authority for reading somebody's file was a string produced on this side, which is
+   * indistinguishable from one a `.encastra` file supplied.
+   *
+   * `choose_file` opens the chooser on the privileged side and records what the operating system
+   * returned. A path this side merely *says* somebody picked no longer seeds anything.
+   */
   async pickFile(): Promise<string | null> {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const chosen = await open({ multiple: false, directory: false });
+    const purpose: FilePurpose = 'run-input';
+    const chosen = await this.invoke<string | null>('choose_file', { purpose });
     return typeof chosen === 'string' ? chosen : null;
   }
 

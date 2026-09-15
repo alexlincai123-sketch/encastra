@@ -54,6 +54,7 @@ state. Building it per call would let two calls disagree about what is installed
 | Command | What it does |
 |---|---|
 | `choose_folder` | takes a `purpose`, opens the native folder chooser on the Rust side, resolves and sanity-checks the choice, and records the **pair** — the only way a folder becomes grantable, publishable-into or importable-from this session, and only for the one purpose it was chosen under |
+| `choose_file` | the same for a file: opens the native file chooser here and records it — the only way a path becomes something a run may be seeded with |
 | `list_components` | every manifest this build offers, for the palette |
 | `type_graph` | the coercion table, served by the runtime that enforces it |
 | `validate_graph` | validation for a graph plus the ports the application will supply |
@@ -78,9 +79,10 @@ does not satisfy another.
 
 | Command | Path it takes | Gate |
 |---|---|---|
-| `choose_folder` | none — the chooser produces it | records `(purpose, resolved)`; there is **no** command that takes a path and adds it to the record |
+| `choose_folder` | none — the chooser produces it | records `(FolderPurpose, resolved)`; there is **no** command that takes a path and adds it to the record |
+| `choose_file` | none — the chooser produces it | records `(FilePurpose::RunInput, resolved)`, by the same rule |
 | `run_graph`, `start_workflow` | `grants[].folder` | `grant-to-component` pair, after `resolve_grant_directory` |
-| `run_graph`, `start_workflow` | `inputs[].path` | **not gated** — see the limitation below |
+| `run_graph`, `start_workflow` | `inputs[].path` | `run-input` pair, after `canonicalize` and a check that it is a file; the refusal comes before the import, so an unchosen input reads nothing |
 | `prepare_publication` | `into` | `publish-into` pair |
 | `prepare_publication`, `review_publication` | `path` | must be a `.encastra` file; read only |
 | `inspect_publication`, `import_publication` | `folder` | `import-from` pair; refuses with `folder-not-chosen` |
@@ -94,12 +96,22 @@ before the chooser opens. `projects-location` is the Settings preference for whe
 their projects; it is recorded under its own name and no command acts on it, which is the point —
 browsing there used to make that folder grantable, publishable-into and importable-from.
 
-**`inputs[].path` is not gated, and is the one remaining path the WebView names freely.** A file
-supplied for an input is canonicalised and imported into the run's scratch folder, so a step that
-reads its input can read any file this account can read, whether or not a person picked it. The
-file chooser still runs in the editor rather than on this side, which is exactly the shape the
-folder chooser had before `choose_folder`. Closing it means the same move for files: a
-`choose_file` command that records what the OS returned. It is not built.
+`FilePurpose` has one member, `run-input`, because a file reaches the runtime in exactly one way:
+as the value of an input port nothing upstream produces. `choose_file` opens the native file
+chooser on this side and records what the operating system returned; `seed_for` imports a file
+only if it is in that record. Until 2026-09-15 `inputs[].path` was whatever the WebView named,
+which meant a step could be handed any file this account can read — the shape the folder side had
+before `choose_folder`. A path stored anywhere, or typed by a renderer that has been through a
+debugger, is now displayed and not read: it has to be chosen again. A `.encastra` does not hold
+inputs at all (`Project` is a manifest, a graph, a lockfile, variables and history), and the
+editor clears the supplied inputs when a project is opened — but the gate does not rest on either
+of those, because the command is reachable without the editor.
+
+There is no deny-list for input files, unlike `resolve_grant_directory`. A folder grant is wide —
+everything in it now and everything that arrives in it later — so refusing the system tree
+outright is worth the bluntness. A single file somebody named in a native chooser is as narrow as
+a permission gets, and refusing it for where it lives would be refusing a choice that was made
+rather than one that was smuggled.
 
 A few of these are worth spelling out.
 

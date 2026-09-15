@@ -300,7 +300,7 @@ child, never as markup, and the CSP has no `unsafe-eval`. The threats below do n
 | **Elevation via an over-wide scope** | A grant naming a drive root, the system directory, the profile root, or the folder that decides what runs at login. | `resolve_grant_directory` canonicalises and refuses those, the startup folder as a whole tree. | It is a list, not a rule. `C:\Windows\System32` is not on it (the app runs unelevated), nor is every unwise destination. |
 | **Elevation via port** | A grant given for `internal.example`'s web API also reaching `:22` or `:5432`. | The port is part of the permission identity in **both** parsers, and a shared conformance table asserts they agree. | None known. |
 | **Arbitrary write via a save path** | `save_project` writing bytes to any path the renderer names. | The destination must be a `.encastra` file. | Still any `.encastra` path the user's account can write. `open_project` and `restore_version` still take an arbitrary path to *read*. |
-| **Arbitrary read via an input path** | `run_graph`/`start_workflow` take `inputs[].path`; the file is canonicalised and imported into the run's scratch folder, where the step wired to that port can read it. | None yet. The *file* chooser still runs in the editor, so this is the shape the folder chooser had before `choose_folder`. | Open. Any file this account can read, whether or not a person picked it. Closing it means a `choose_file` command that records what the OS returned, the way `choose_folder` does for folders — not built. |
+| **Arbitrary read via an input path** | `run_graph`/`start_workflow` take `inputs[].path`; the file is imported into the run's scratch folder, where the step wired to that port can read it. A path filled in from anywhere but a chooser used to be enough. | `choose_file` opens the file chooser on the runtime side and records `(run-input, canonical path)` in the same per-session state as the folders. `seed_for` refuses any input path not in that record, *before* the import, so an unchosen input reads nothing. `canonicalize` means a link whose name sits beside the chosen file and whose content is elsewhere resolves elsewhere, and is refused. | A person can still pick a file they should not have. Informed consent, not prevented consent. `.encastra` holds no inputs, so there is nothing stored to pre-seed — and if that changed the gate would still refuse it, because the gate does not consult the project. |
 | **Denial of service** | A component panics; the workflow thread unwinds past the bookkeeping that says a run has finished. | The work is wrapped in `catch_unwind`; cleanup runs either way and the status bar says the run stopped. | A panicking node still ends its run. |
 
 ### What this boundary still rests on
@@ -438,7 +438,8 @@ An earlier revision of this table listed all four as things that run. They do no
    boundary, refuses any folder the person did not choose in the native chooser *for that
    purpose*: the record is a `(purpose, canonical path)` pair, held in memory for the session and
    never written to disk, so a folder chosen to import from does not become one a component may
-   be given. What remains is
+   be given. The same record holds the files a run may be seeded with (`choose_file`,
+   `run-input`), so `inputs[].path` is no longer a path the renderer names freely. What remains is
    that a list of known-bad destinations can never be complete: `C:\Windows\System32` is not on
    it (the application runs unelevated and cannot write there anyway), and neither is every other
    unwise choice. The allow-list containment check is still the stronger of the two controls.

@@ -339,9 +339,10 @@ Stated plainly, because a security document that only lists controls is marketin
    is what keeps foreign code out of it, and an XSS there would still be a consent-forging bug,
    not merely a defacement.
 
-   **Consent is per purpose, not per folder.** `choose_folder` takes a purpose — `publish-into`,
-   `import-from`, `grant-to-component` or `projects-location` — and records the folder paired
-   with it; each command checks the pair for its own question and refuses otherwise
+   **Consent is per purpose, not per path.** `choose_folder` takes a purpose — `publish-into`,
+   `import-from`, `grant-to-component` or `projects-location` — and `choose_file` takes
+   `run-input`; each records the path paired with its purpose, and each command checks the pair
+   for its own question and refuses otherwise
    (`folder-not-chosen` on the import path, and the equivalent refusal on the others). It was
    one shared set until 2026-09-15, so a folder picked to import a publication *from* also
    answered "may this component write here" and "may a publication be written into this" —
@@ -352,10 +353,15 @@ Stated plainly, because a security document that only lists controls is marketin
    pointing somewhere else is refused because it resolves somewhere else. Nothing is written to
    disk — a restart forgets every choice, which is what makes "this session" true.
 
-   **`inputs[].path` is still not gated.** A file supplied for a graph input is imported into the
-   run's scratch folder on the strength of the WebView naming it, because the *file* chooser
-   still runs in the editor. That is the shape the folder chooser had before `choose_folder`;
-   the same move for files is not built. See [DESKTOP](DESKTOP.md) §2.
+   **`inputs[].path` is gated too.** *(Was a limitation; fixed 2026-09-15.)* A file supplied for
+   a graph input used to be imported into the run's scratch folder on the strength of the WebView
+   naming it, because the *file* chooser still ran in the editor — the shape the folder chooser
+   had before `choose_folder`. `choose_file` now opens the file chooser on this side and records
+   `(run-input, canonical path)` in the same per-session state; `seed_for` refuses any input path
+   that is not in it, and refuses it *before* the import, so an unchosen input reads nothing. A
+   path stored anywhere, or named by a renderer that has been through a debugger, is displayed
+   and has to be chosen again. There is no deny-list for a single picked file, deliberately —
+   see [DESKTOP](DESKTOP.md) §2.
 
 10. **No external audit.** This model has been reviewed by the people who built it and by the
     tests in [TESTING](TESTING.md) §5. That is not the same thing, and an audit is a
