@@ -25,7 +25,9 @@
     "clean": "tsc --build --clean",
     "build": "npm run build --workspace @encastra/desktop",
     "tauri:dev": "npm run tauri --workspace @encastra/desktop -- dev",
-    "tauri:build": "npm run tauri --workspace @encastra/desktop -- build"
+    "tauri:build": "npm run tauri --workspace @encastra/desktop -- build",
+    "release:check": "python scripts/release_check.py",
+    "release:reproduce": "python scripts/verify/reproduce.py"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",
