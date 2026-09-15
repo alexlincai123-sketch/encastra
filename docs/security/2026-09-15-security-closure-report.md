@@ -26,7 +26,7 @@ review by somebody who did not write it — are named as such, with what each wo
 installer that ships must be built from the final commit, and this document says which commit
 that is, or that it is not yet known.
 
-Five new defects were found in this pass, on code that landed while the previous pass was being
+Seven new defects were found in this pass, on code that landed while the previous pass was being
 written. That is the expected shape of things — an audit is a statement about a commit, and
 commits keep arriving — and it is the reason the last section is a procedure rather than a
 verdict.
@@ -37,9 +37,9 @@ verdict.
 
 | Branch | Base | Contents | State |
 |---|---|---|---|
-| `feat/readiness` | `main` `4f2932e` | The release candidate. Merged `sec/hardening-audit` at `4944b41`. | Owned by a parallel session; final SHA pending |
+| `feat/readiness` | `main` `4f2932e` | The release candidate. Merged `sec/hardening-audit` at `4944b41`, `sec/readiness-findings` at `c424042`/`1730711`/`ee08d59`. Release commit **`966c5e0`** (0.5.0-beta.1); `df4ce47`/`ae39f15` after it are docs-only | Owned by a parallel session; rebuilt independently by this session at `966c5e0` |
 | `sec/hardening-audit` | `main` | Passes 1 and 2 | Merged into the candidate at `4944b41` |
-| `sec/readiness-findings` | `4944b41` | This pass: `a02d5b8` (findings) + merge of `sec/findings-runtime` at `df5fc33` + docs `0b29848` | Verified; handed to the candidate's owner to merge |
+| `sec/readiness-findings` | `4944b41` | This pass: `a02d5b8` (findings) + merge of `sec/findings-runtime` at `df5fc33` + docs `0b29848` | Merged into the candidate (`ee08d59`); independently re-verified there: 313 Rust, 462 TS, deny ok |
 | `sec/findings-runtime` | `4944b41` | `b70e4a1`: the run budget, log caps, cached validation | Merged into `sec/readiness-findings` |
 
 `main` has not been written to by this work at any point.
@@ -90,6 +90,8 @@ Severity is about this build as it ships: Windows-only, first-party components o
 | **ENC-NEW-14** | MEDIUM | Logs per node unbounded; whole journal cloned over IPC | `MAX_LOG_LINES_PER_NODE` 200, `MAX_LOG_LINE_CHARS` 2 000 | 2 tests | **VERIFIED** | Journal size still scales with node count (≤ 10 000) |
 | **ENC-NEW-15** | LOW | Validation recomputed from scratch on every session tick | Cached in `Session`, `execute_request_validated` | Counting-registry test | **VERIFIED** | None known |
 | **ENC-NEW-16** | MEDIUM | The library caps entries (10 000) but not bytes: 10 000 imports × 64 MB is disk with no ceiling, and an automated agent driving the UI could produce it | Not fixed in this pass | — | **ACCEPTED RISK**, mitigated | Every import requires a folder chosen in the native chooser this session — a human action per import; no renderer-only path reaches it. A `MAX_LIBRARY_BYTES` is the right fix and needs one variant plus the six-language fan-out |
+| **ENC-NEW-17** | LOW | `release_manifest.py` records `git rev-parse HEAD` as the manifest's commit; the release commit is created *after* the manifest, so the field is off by one by construction (the shipped manifest names `f6e7c29`, the release is `966c5e0`) | Not fixed in this pass | — | **ACCEPTED RISK** | Process finding, not a code path an attacker reaches. Fix: write the manifest from the tag/commit it describes, or record the tree hash. Owner informed |
+| **ENC-NEW-18** | LOW | Two builds of `966c5e0` on the same toolchain (1.98.1) and the same `Cargo.lock` do not match by hash | Not fixed in this pass | Structural diff of the two binaries (§11) | **ACCEPTED RISK** | The two `encastra-desktop.exe` are the same size (9 619 456 B) and differ in exactly 24 bytes: the COFF `TimeDateStamp`, the three `IMAGE_DEBUG_DIRECTORY` timestamps and the 16-byte PDB GUID in the `RSDS` record. No code, data or path bytes differ. Fix candidate: `-C link-arg=/Brepro` for the MSVC target. Until then an independent rebuild is verified by structural diff, not by hash |
 
 ---
 
@@ -118,13 +120,13 @@ machine, exit codes read rather than summaries.
 
 | Command | Result |
 |---|---|
-| `cargo test --workspace` | **312 passed, 0 failed**, 27 suites (99 before the cycle; 286 at `4944b41`) |
-| `npx vitest run` | **445 passed, 0 failed, 24 files** (265 before the cycle) |
+| `cargo test --workspace` | **313 passed, 0 failed** at `966c5e0` (99 before the cycle; 286 at `4944b41`; 312 on `sec/readiness-findings`) |
+| `npx vitest run` | **500 passed, 0 failed** at `966c5e0` (265 before the cycle; 445 on `sec/readiness-findings`) |
 | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
 | `cargo fmt --all --check` | clean |
 | `npx tsc --build` / desktop `tsc --noEmit` | exit 0 |
-| `npx biome check .` | clean, 219 files |
-| `cargo deny check advisories bans licenses sources` | exit 0 (no dependency change in this pass; re-verified by the candidate's owner at `4944b41`) |
+| `npx biome check .` | clean, 225 files at `966c5e0` |
+| `cargo deny check advisories bans licenses sources` | exit 0 at `966c5e0` (this session) |
 | `npm audit --audit-level=low` | 0 |
 | `npm run build --workspace @encastra/desktop` | succeeds |
 | `next build` (website) | succeeds |
@@ -237,7 +239,29 @@ report does not pretend otherwise.
 
 ## 11. Release artefacts
 
-{{ARTEFACTS}}
+Built by this session from a fresh detached worktree at **`966c5e0`** (`C:\Users\alexl\encastra-release`),
+Rust 1.98.1 (`rust-toolchain.toml`), Node 22, after `python3 scripts/version.py --check`,
+`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace` (313/0), `tsc`, Biome,
+`vitest` (500/0), `cargo deny check`, `npm audit` (0), then `npm run tauri:build`.
+
+| Artefact | SHA-256 (this session's build) | SHA-256 (candidate owner's build) |
+|---|---|---|
+| `target/release/encastra-desktop.exe` (9 619 456 B) | `21f523f59846926e81a93e4b74bda7cd0f2dbc8be9f09ad91a1765528b21cbd2` | `dbbbff757e4a0b6db215638c545f3ac40ab4fa1776397500e410985d0efc44be` |
+| `Encastra_0.5.0-beta.1_x64-setup.exe` (3 530 596 B) | `58530d0718773c1a331e46b8324016456658f40063b10468518da8e2ef426026` | `6d12bab6b90cd04f743e38167ad8a92d2492270c72bc9b342ab4e43bbb102994` |
+
+**The hashes do not match, and the reason was established rather than assumed** (ENC-NEW-18).
+A byte-level comparison of the two `encastra-desktop.exe` files: identical size, 24 differing
+bytes in five runs, every one of them a linker timestamp or the PDB GUID — the COFF
+`TimeDateStamp` at `0xf8` (values 929 s apart), the `TimeDateStamp` of each of the three
+`IMAGE_DEBUG_DIRECTORY` entries (types 2, 12, 13) and the 16-byte GUID of the `RSDS` record.
+Neither binary contains a worktree path. The installer differs in consequence: it embeds the
+binary and its own build time. So the two builds are **the same code**, and the build is **not
+bit-reproducible**; "installer matches final code" is therefore verified by structural diff,
+not by hash, and the table above records both hashes as equally valid for `966c5e0`. The
+candidate owner's manifest names `f6e7c29` as its commit — see ENC-NEW-17 for why that is one
+commit behind by construction.
+
+Both artefacts are **unsigned** (§12).
 
 ---
 
@@ -274,9 +298,9 @@ Applying the gate in the brief literally:
 | ENC-NEW-05 closed | yes — depth and width |
 | ENC-NEW-06 closed or accepted | accepted, with reason |
 | ENC-01b resolved or accepted | accepted as a design limitation |
-| Integration clean | `sec/readiness-findings` verified; **merge into the candidate pending** |
-| Final build generated from the final commit | **{{BUILD_STATUS}}** |
-| Installer matches final code | **{{BUILD_STATUS}}** |
+| Integration clean | `sec/readiness-findings` merged into the candidate (`ee08d59`); whole suite re-run there and at `966c5e0` by this session |
+| Final build generated from the final commit | **VERIFIED** — this session rebuilt `966c5e0` from a clean detached worktree; every gate green before the build |
+| Installer matches final code | **PARTIALLY VERIFIED** — same code by structural diff (24 bytes of timestamps + PDB GUID differ); not bit-reproducible, so not verifiable by hash (ENC-NEW-18) |
 | Runtime verified | tests yes; **GUI no** |
 | GUI verification done or marked external | marked external |
 | Linux symlink tests executed by CI | configured; **not observed in this session** |
@@ -287,7 +311,21 @@ Applying the gate in the brief literally:
 | Documentation current | yes |
 | Git working tree clean | yes on `sec/readiness-findings` |
 
-**{{DECISION}}**
+**RELEASE CANDIDATE** — for commit `966c5e0`, as an unsigned beta, under these conditions,
+each of which is a fact and not a hope:
+
+1. Nothing is signed. Publishing it means `release_manifest.py` is run with `allow_unsigned`
+   and the decision is recorded, as `RELEASE_SECURITY.md` requires.
+2. The native folder chooser has not been clicked through a GUI in this cycle. It compiles, is
+   registered and is exercised by the Tauri crate's tests; the ten-step clean-install procedure
+   in `RELEASE_SECURITY.md` is the acceptance test and has **NOT** been executed.
+3. Linux CI, where the symlink tests actually run, has not been observed green by this session.
+   A CI run on the release commit before the tag is part of the gate, not optional.
+4. Two LOW process findings (ENC-NEW-17, ENC-NEW-18) and one accepted MEDIUM (ENC-NEW-16) are
+   carried, written down, with owners.
+
+If 2 or 3 fails, this becomes NOT RELEASE CANDIDATE without a new report: the decision is
+conditional on those two procedures, and the procedures are in the tree.
 
 ---
 
