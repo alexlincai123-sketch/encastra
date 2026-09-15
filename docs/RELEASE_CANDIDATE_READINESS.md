@@ -1,13 +1,15 @@
-# Release candidate readiness — Encastra 0.5.0-rc.1, written 2026-09-15
+# Release candidate readiness — Encastra 0.5.0-rc.2, written 2026-09-15
 
-**Verdict: RELEASE CANDIDATE — BLOCKED.** Six blockers are external (a certificate, a licence
-and a legal identity, a trademark clearance, an external security assessment, a clean-machine
-walkthrough by a person, a repository plan) and each has an owner, an exact action and the
-evidence that would close it (§13). One is internal and is stated as such: the four native
-chooser flows that gate permissions have never been driven end to end by a person or by GUI
-automation on any build (§7). Everything else that can be done from the repository has been
-done, and §14 says how it was verified — including what the second model that reviewed this
-document said before it was fixed.
+**Verdict: RELEASE CANDIDATE — BLOCKED.** Five blockers are external (a certificate, a licence
+and a legal identity, a trademark clearance, an external security assessment, a repository
+plan) and each has an owner, an exact action and the evidence that would close it (§13). Two
+are internal and are stated as such: the four native chooser flows that gate permissions have
+never been driven end to end by a person or by GUI automation on any build (§7, B5), and the
+candidate's bytes are reproducible on the developer machine but **were not reproduced by the
+hosted Windows runner** (§6, B7) — found by the release workflow itself on rc.1, under
+analysis on rc.2. Everything else that can be done from the repository has been done, and §14
+says how it was verified — including what the second model that reviewed this document said
+before it was fixed, and what CI found after that.
 
 Nothing here is a certification. It is the project's own account, written by the session that
 did the work, with an adversarial review by a second model (§12) whose findings were acted on
@@ -26,8 +28,9 @@ artefact), **CI EXECUTED** (a run on GitHub Actions with a URL), **NOT VERIFIED*
 |---|---|
 | Remote | `github.com/alexlincai123-sketch/encastra`, private, free plan, created 2026-09-15 |
 | Frozen beta | `v0.5.0-beta.1` → publication commit `7608bb1`, build commit `349b2ff`; not modified |
-| **Candidate** | **`v0.5.0-rc.1`** → publication commit `ea1ad29`, **build commit `137c93a`**; `docs/RELEASE.md` at the tag holds the hashes; unsigned, on record |
-| Branch | `feat/rc` (30 commits over `main` at the publication commit; merged into `main` at the end of this cycle — §14) |
+| **Candidate** | **`v0.5.0-rc.2`** → publication commit `8d96366`, **build commit `90e479d`**; `docs/RELEASE.md` at the tag holds the hashes; unsigned, on record |
+| Superseded | `v0.5.0-rc.1` (publication `ea1ad29`, build `137c93a`): its own CI run failed at the fuzz-corpus gate (the seed carried the runtime version and went stale with the bump — fixed by making the seed version-independent and by one command that checks every generated artefact), and its release run showed the hosted runner does not reproduce the developer machine's bytes (B7). Same code otherwise; rc.2 differs from it by the seed, the generated-artefacts check, the version and the runner-build upload |
+| Branch | `feat/rc` (36 commits over `main` at the rc.2 publication commit; merged into `main` at the end of this cycle — §14) |
 | Waves integrated, in order | `rc/release` (release engineering, CI, inventories, docs) · `rc/errors` (typed, localised refusals; status-bar messages) · `rc/import-policy` (import state machine; library byte ceiling) · `rc/consent` (folder and file consent by purpose; `choose_file`) · `rc/commercial-closure` (artefact identity from the artefact, one release verdict, reproduce script, hand-off and legal drafts — by the security session `akuinu-28`) · the adversarial review's fixes |
 | Working tree | clean at every build; the build commit's binary states its own commit |
 
@@ -80,13 +83,16 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
   found a test fixture gitleaks reads as a key; the first run on the hardened branch found the
   allowlist written in a table gitleaks ignores. All three fixed; run **34971056791** on
   `rc/release` @ `ae81122` is fully green with every anti-skip gate executed.
-- **The candidate's own tree** (the publication commit of `v0.5.0-rc.1`) was dispatched as run
-  **34978855319**; the tag started **34978855610** (expected to refuse: an unsigned build from a
-  tag push carries no decision) and the dispatch with `allow_unsigned=true` is run
-  **34978859110** (gates, build on a hosted runner, artefact identity, reproduction of the
-  published hashes, verdict file, install on a clean runner). Their outcomes are recorded in
-  `CI_SECURITY.md` §4.1 as they finish — see §14 for what had landed when this document was
-  committed.
+- **rc.1's own tree** was dispatched as run **34978855319**: **Rust Linux ✗** — the fuzz-corpus
+  gate again, because `Project::new` writes the runtime version into the seed and the bump had
+  changed it; the local check that catches this exists and was not run before the tag. The tag
+  push started **34978855610**: gates ✓, build ✓, artefact identity ✓, **reproduction of the
+  published hashes ✗** — the hosted runner's bytes differ from the developer machine's (B7).
+  The dispatch **34978859110** is the same workflow with the unsigned decision on record.
+- **rc.2** (seed version-independent; `scripts/generated_check.py` in the local gate and in the
+  verdict; the runner's build uploaded even when it does not reproduce, so it can be diffed):
+  CI **34981764114** on the publication commit, release **34981765564** (tag push) and
+  **34981768456** (dispatch, `allow_unsigned=true`). Outcomes in `CI_SECURITY.md` §4.1 and §14.
 - Hardening applied before any run was trusted: actions pinned to SHAs, tokens not persisted,
   read-only `GITHUB_TOKEN`, no `pull_request_target`, no cache and a full clone in the release
   build, `--locked`, macOS opt-in, unsigned refused without an explicit dispatch input.
@@ -106,10 +112,20 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
 
 ## 6. Release engineering
 
-- **Reproducibility:** `scripts/verify/reproduce.py` builds the build commit twice in two fresh
-  worktrees (short and long paths) and compares bytes. The security session ran it on `d527d46`
-  (executable `751232f8…`, installer `06ad30d3…`, identical, plus the in-tree build as a third).
-  For `137c93a` the run is recorded in §14.
+- **Reproducibility, on one machine:** `scripts/verify/reproduce.py` builds the build commit
+  twice in two fresh worktrees (short and long paths) and compares bytes. On `137c93a`: the
+  in-tree build and both fresh builds are byte-identical (installer `41168df8…`, executable
+  `b5d98cef…`, 378 s and 403 s). The security session had the same result on `d527d46`. For
+  `90e479d` see §14.
+- **Reproducibility, across machines: NOT ACHIEVED (B7).** The release workflow builds the
+  build commit on `windows-latest` and compares with the published hashes; on `137c93a` the
+  runner produced installer `9725e01e…` and executable `8e5d6ae1…` against the published
+  `41168df8…`/`b5d98cef…`. Same pinned rustc 1.98.1 and `package-lock.json`; the runner's MSVC
+  toolset, NSIS and Node differ from this machine's (local toolset 14.44.35207, Node 24; the
+  runner image's are in its log). `/Brepro` makes a build deterministic *for a toolchain*, not
+  across toolchains. rc.2 uploads the runner's bytes so `scripts/pe_diff.py` can say which
+  structures differ; until that says "linker metadata only" or the toolchains are made equal,
+  the honest claim is: *two builds on the same machine match; a build elsewhere has not.*
 - **The chain:** `version.py --set` (eight files and the lock) → clean build commit → build →
   `release_identity.py --check` → `release_manifest.py --allow-unsigned` (pre-release only;
   production refuses unsigned with no override) → publication commit → tag → `release.yml`
@@ -210,16 +226,16 @@ that neither fix has been exercised through the GUI on this build (B5).
 | B4 | No external security assessment | owner (+ provider) | every security claim is the project's own | contract a test against `v0.5.0-rc.1` with the hand-off | the tag (done) | the report and the fixes it produces |
 | B5 | **Chooser journeys with a purpose never driven** | owner, or this project on a free machine | the permission-gating flows of this candidate have no GUI evidence on any build | on a machine where nobody is working: install the candidate, run `scripts/verify/install_check.ps1`, then `scripts/verify/gui_chooser.ps1` extended to publish-into, import-from, grant-to-component and the file chooser — or do the four flows by hand and attach the observations to `docs/audits/` | the candidate (done) | PASS lines for the four flows on `137c93a` |
 | B6 | Branch protection unavailable | owner | a private repository on a free plan cannot protect `main` | GitHub Pro, or make the repository public (which is B2's decision) | B2 | the protection rule visible on `main` |
+| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | diff the runner's rc.2 build against the published bytes with `scripts/pe_diff.py`; if the difference is linker/toolchain metadata only, pin the toolset in CI (or publish the runner's build as the artefact and make the developer machine reproduce *it*); if it is code or data, find the source | rc.2 release run (uploads the runner's build) | `release.yml`'s "the build reproduces the published hashes" step green on a tag, or a documented equivalence with `pe_diff` output |
 
 ## 14. Integration record, final numbers, self-critique
 
-**Commits that matter:** `main` @ `f2446b5` (start) → `feat/rc` publication commit `ea1ad29`,
-build commit `137c93a`, tag `v0.5.0-rc.1`. Per-wave commits: `rc/release` a0c81af…ae81122,
+**Commits that matter:** `main` @ `f2446b5` (start) → rc.1: build `137c93a`, publication `ea1ad29` → rc.2: build `90e479d`, publication `8d96366`, tag `v0.5.0-rc.2`. Per-wave commits: `rc/release` a0c81af…ae81122,
 `rc/errors` 1ca6365, d3fe5d3, `rc/import-policy` 41ffa9d, 1a924be, `rc/consent` 369d688, aeff618,
 `rc/commercial-closure` f7dcf0a…d5f1618, review fixes 260b0c9, 137c93a.
 
-**Numbers:** §3. Runtime: 23/23 IPC checks and 3/3 main-thread checks on `137c93a`
-(`docs/audits/2026-09-15-rc-runtime-qa.md`).
+**Numbers:** §3. Runtime: 23/23 IPC checks and 3/3 main-thread checks on `137c93a` and again on
+`90e479d` (`docs/audits/2026-09-15-rc-runtime-qa.md`).
 
 **Reproducibility and CI outcomes for the candidate:** recorded in `CI_SECURITY.md` §4.1 and
 below as they landed; a row that is empty at the commit you are reading means the run had not
@@ -227,10 +243,13 @@ finished when this file was committed, and the next docs-only commit fills it.
 
 | Evidence | Outcome |
 |---|---|
-| `reproduce.py` on `137c93a` (two fresh worktrees, short and long paths) | see the next commit of this file |
-| CI run 34978855319 (`feat/rc` @ `ea1ad29`) | see the next commit of this file |
-| Release run 34978855610 (tag push) | expected refusal at the unsigned decision step |
-| Release run 34978859110 (dispatch, `allow_unsigned=true`) | see the next commit of this file |
+| `reproduce.py` on `137c93a` (rc.1) | **IDENTICAL** to the published bytes, both fresh builds |
+| CI run 34978855319 (rc.1 tree) | **✗** Rust Linux at the fuzz-corpus gate (seed carried the version); TypeScript, supply chain, secrets, Rust Windows ✓ |
+| Release run 34978855610 (rc.1, tag push) | gates ✓ · build ✓ · identity ✓ · **reproduction ✗** (B7); never reached the unsigned-decision step |
+| Release run 34978859110 (rc.1, dispatch) | see the last commit of this file |
+| `reproduce.py` on `90e479d` (rc.2) | see the last commit of this file |
+| CI run 34981764114 (rc.2 tree) | see the last commit of this file |
+| Release runs 34981765564 (tag push) / 34981768456 (dispatch) for rc.2 | see the last commit of this file; the runner's build is uploaded either way for `pe_diff` |
 
 **Self-critique — twenty questions, answered without softening:**
 
@@ -242,8 +261,9 @@ finished when this file was committed, and the next docs-only commit fills it.
 3. *Did I merge anything I did not run?* No wave was merged before its own gate; the merged tree
    ran the whole gate again (§3).
 4. *Was the tree clean at every build?* No — the first rc.1 build was dirty (F4). Fixed and gated.
-5. *Did CI run on the bytes that were tagged?* Dispatched; outcomes above. At the moment this
-   sentence was written they had not finished.
+5. *Did CI run on the bytes that were tagged?* Yes, and it failed rc.1 twice: a stale generated
+   fixture I had not checked locally, and bytes the runner could not reproduce. rc.2 exists
+   because of the first; B7 exists because of the second.
 6. *Did I invent state?* The GUI-verification claim inherited from the beta was overstated (F2);
    it is now stated as never done.
 7. *Did I weaken any test?* Two tests asserting that the editor reports busy were deleted because
@@ -252,7 +272,8 @@ finished when this file was committed, and the next docs-only commit fills it.
 8. *Is the verdict honest?* BLOCKED, with one internal item, after a reviewer said the earlier
    draft was not.
 9. *What did I not do that I could have?* Drive the four choosers by GUI — a person was using this
-   machine and keystroke injection had already gone wrong once in this project.
+   machine and keystroke injection had already gone wrong once in this project. And run the
+   generated-artefacts check before tagging rc.1: it was in the gate I had written that morning.
 10. *Is anything "coming soon"?* No; grep finds none.
 11. *Could an agent still turn text into a permission?* No path found; the IPC-surface test now
     holds the command list to the docs.

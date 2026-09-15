@@ -1,9 +1,9 @@
 # Runtime QA of the release-candidate binary — 2026-09-15
 
-**Build:** `encastra-desktop.exe` built from build commit `137c93a` (stamp read from the binary:
-`137c93a9e51a3acaac7077d0e89733150ddba608`, clean), version `0.5.0-rc.1` — the bytes the manifest
-at tag `v0.5.0-rc.1` describes. The same 23 checks had passed earlier on `e74e9ec` (before the
-adversarial review's fixes); the table below is the run on the tagged bytes.
+**Build:** `encastra-desktop.exe` built from build commit `90e479d` (stamp read from the binary,
+clean), version `0.5.0-rc.2` — the bytes the manifest at tag `v0.5.0-rc.2` describes. The same 23
+checks passed on `137c93a` (rc.1, superseded: same code, a version-carrying fuzz seed) and, before
+the adversarial review's fixes, on `e74e9ec`. The table below is the run on the rc.2 bytes.
 
 **Method:** the same as `2026-09-15-runtime-qa.md` — the binary launched with
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, every command invoked
@@ -49,8 +49,9 @@ The adversarial review pointed out that a non-`async` Tauri command runs on the 
 the window's message loop — so a long run or a large import would stop the window and every
 guard with it. Twelve commands now carry `#[tauri::command(async)]`. Measured on this binary
 (`qa-freeze.mjs`, both calls issued from inside the page so no CDP round-trip is in the number):
-a `save_project` of a 10 000-node graph followed by `open_project` took **438 ms**; an `about`
-issued 30 ms after it answered in **40 ms**, while the heavy command was still running. Before
+a `save_project` of a 10 000-node graph followed by `open_project` took **387 ms** (438 ms on
+rc.1); an `about` issued 30 ms after it answered in **31 ms** (40 ms on rc.1), while the heavy
+command was still running. Before
 the attribute the second call could not have answered until the first returned. Not measured on
 the previous binary (its bytes were replaced by this build); the claim about the old behaviour
 rests on Tauri's documented threading model, the claim about the new one on this measurement.

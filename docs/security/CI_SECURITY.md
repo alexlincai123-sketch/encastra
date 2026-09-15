@@ -88,10 +88,31 @@ against, with their outcome. A run is listed whether it passed or not.
 | [34978855610](https://github.com/alexlincai123-sketch/encastra/actions/runs/34978855610) | tag `v0.5.0-rc.1` | **tag push** | see §4.1 | This time the tag push *did* start `release.yml` (the open question below is answered). Expected to refuse at "an unsigned release is a pre-release, published on purpose": a tag push carries no `allow_unsigned` input, and since `260b0c9` that is a refusal, not a warning. |
 | [34978859110](https://github.com/alexlincai123-sketch/encastra/actions/runs/34978859110) | tag `v0.5.0-rc.1` | dispatch, `allow_unsigned=true` | see §4.1 | The run that builds the build commit on a hosted runner, checks artefact identity, reproduces the published hashes, writes the verdict file, and installs the result on a runner that has never seen Encastra. |
 
-### 4.1 Outcomes of the candidate's runs
+| [34981764114](https://github.com/alexlincai123-sketch/encastra/actions/runs/34981764114) | `feat/rc` @ `8d96366` (the publication commit of `v0.5.0-rc.2`) | dispatch | see §4.1 | rc.2's tree: version-independent fuzz seed, `generated_check.py`. |
+| [34981765564](https://github.com/alexlincai123-sketch/encastra/actions/runs/34981765564) | tag `v0.5.0-rc.2` | tag push | see §4.1 | Uploads the runner's build whether or not it reproduces; expected to refuse at the unsigned-decision step afterwards. |
+| [34981768456](https://github.com/alexlincai123-sketch/encastra/actions/runs/34981768456) | tag `v0.5.0-rc.2` | dispatch, `allow_unsigned=true` | see §4.1 | The run that decides rc.2. |
 
-Filled in when the runs finish (they take of the order of an hour together on the free plan's
-runners); until then this section says so rather than guessing.
+### 4.1 Outcomes of the candidates' runs
+
+**rc.1 (`ea1ad29` / build `137c93a`)**
+
+- CI 34978855319: TypeScript ✓ · supply chain ✓ · secrets ✓ · Rust Windows ✓ · **Rust Linux ✗**
+  at "the fuzz corpus must be committed and still what the code produces": `Project::new` writes
+  the runtime version into the seed's `project.json`, so the bump to rc.1 changed what the
+  corpus should be, and the local check that catches this was not run before the tag. Fixed by
+  pinning the seed's runtime requirement to `>=0.1.0` (a seed is a shape, not a version) and by
+  `scripts/generated_check.py`, one command for every generated artefact, run by the local gate
+  and by `release_check.py` as `gate.generated`.
+- Release 34978855610 (tag push): security gates ✓ (every gate, including the full-history
+  gitleaks with the allowlist) · build on `windows-latest` ✓ · "every artefact is this version's
+  and this commit's" ✓ · **"the build reproduces the published hashes" ✗**: the runner produced
+  installer `9725e01e…` and executable `8e5d6ae1…`; the published hashes (three byte-identical
+  builds on the developer machine) are `41168df8…`/`b5d98cef…`. Nothing was uploaded, so the
+  difference could not be classified. **This is B7 in the readiness report.** The unsigned
+  decision step, the verdict and the install job did not run.
+- Release 34978859110 (dispatch): recorded below when finished.
+
+**rc.2 (`8d96366` / build `90e479d`)** — recorded below when finished.
 
 Open question from the second row, now answered: pushing the annotated tag `v0.5.0-beta.1`
 seconds after the first push of `main` did not start `release.yml`; pushing `v0.5.0-rc.1` to a
