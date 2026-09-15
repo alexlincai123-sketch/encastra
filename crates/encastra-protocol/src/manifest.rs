@@ -375,6 +375,20 @@ fn reject_non_integer_numbers(value: &serde_json::Value, path: &str) -> Result<(
     }
 }
 
+/// Whether a string is a valid reverse-DNS identifier: `publisher.name`, lowercase, dotted.
+///
+/// Public because this is the product's one grammar for these, and a listing id in
+/// `encastra-publish` has to be the same shape as a component id rather than a second rule that
+/// can drift away from this one.
+///
+/// It also happens to be what makes an identifier safe to use as a directory name: nothing that
+/// passes here contains a path separator, a `..`, or an empty segment. Anything that builds a
+/// path out of an id should call this first. A namespace check is not a containment check — and
+/// a prefix test whose two sides both come from the same caller is not a check at all.
+pub fn validate_identifier(id: &str) -> Result<(), String> {
+    validate_id(id).map_err(|error| error.to_string())
+}
+
 fn validate_id(id: &str) -> Result<(), ManifestError> {
     if id.is_empty() || id.len() > 128 {
         return Err(ManifestError::Invalid(

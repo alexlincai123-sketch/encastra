@@ -62,6 +62,8 @@ pub enum BundleError {
     TooLarge { size: u64, max: u64 },
     #[error("this build cannot install a {0:?}, so it will not offer one")]
     NotInstallable(Kind),
+    #[error("\"{value}\" is not a usable identifier: {why}")]
+    NotAnIdentifier { value: String, why: String },
 }
 
 /// A prepared publication: the draft, plus everything measured rather than claimed.
@@ -105,6 +107,31 @@ impl PublicationBundle {
         if !draft.kind.installable_in_this_build() {
             return Err(BundleError::NotInstallable(draft.kind));
         }
+        // Both identifiers are checked against the product's one identifier grammar, and checked
+        // *before* the namespace test below rather than after.
+        //
+        // `owns()` compares a prefix, and both sides of that comparison arrive from the same
+        // caller — the draft and the publisher are two arguments to the same command. An
+        // attacker choosing both chooses the answer: `publisher.id = "x"` with
+        // `listing_id = "x./../../evil"` satisfies "starts with x, then a dot, then more".
+        //
+        // That would not matter if the listing id stayed a name. It does not: `prepare_publication`
+        // builds a directory from it, and a `..` in a directory name is a write outside the folder
+        // the person chose. Nothing that passes here contains a separator, a `..`, or an empty
+        // segment, so the namespace check is left deciding namespaces rather than paths.
+        encastra_protocol::manifest::validate_identifier(&draft.listing_id).map_err(|why| {
+            BundleError::NotAnIdentifier {
+                value: draft.listing_id.clone(),
+                why,
+            }
+        })?;
+        encastra_protocol::manifest::validate_identifier(&publisher.id).map_err(|why| {
+            BundleError::NotAnIdentifier {
+                value: publisher.id.clone(),
+                why,
+            }
+        })?;
+
         if !publisher.owns(&draft.listing_id) {
             return Err(BundleError::NotYourNamespace {
                 listing: draft.listing_id,
@@ -192,6 +219,78 @@ mod tests {
 
     fn prepare(draft: PublicationDraft, review: &Review) -> Result<PublicationBundle, BundleError> {
         PublicationBundle::prepare(draft, &publisher(), b"a project file", ">=0.4.0", review, 0)
+    }
+
+    #[test]
+    fn a_listing_id_cannot_be_a_path() {
+        // The listing id becomes a directory name in `prepare_publication`. `owns()` is a prefix
+        // test, and the publisher and the draft are two arguments to the same command — so an
+        // attacker who chooses both chooses the answer, and can satisfy the namespace check with
+        // a listing id full of traversal.
+        //
+        // The publisher here is crafted to make `owns()` return true for each of these, which is
+        // the point: the namespace check passes and the identifier check is what refuses.
+        for hostile in [
+            "x./../../evil",
+            "x./..\\..\\evil",
+            "x./etc/passwd",
+            "x.C:/Windows/evil",
+            "x..",
+            "x. ",
+        ] {
+            let publisher = Publisher {
+                id: "x".into(),
+                ..publisher()
+            };
+            let mut draft = draft();
+            draft.listing_id = hostile.into();
+
+            assert!(
+                publisher.owns(hostile),
+                "the fixture must satisfy the namespace check, or this proves nothing about it"
+            );
+
+            let error = PublicationBundle::prepare(
+                draft,
+                &publisher,
+                b"a project file",
+                ">=0.4.0",
+                &passed(),
+                0,
+            )
+            .expect_err(&format!("{hostile:?} must not be accepted as a listing id"));
+
+            assert!(
+                matches!(error, BundleError::NotAnIdentifier { .. }),
+                "{hostile:?} refused for the wrong reason: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_publisher_id_cannot_be_a_path_either() {
+        // Both sides of the namespace comparison are checked, because both arrive from the same
+        // caller and the publisher's id is written into the bundle.
+        let publisher = Publisher {
+            id: "../..".into(),
+            ..publisher()
+        };
+        let mut draft = draft();
+        draft.listing_id = "../...evil".into();
+
+        let error = PublicationBundle::prepare(draft, &publisher, b"x", ">=0.4.0", &passed(), 0)
+            .expect_err("a publisher id full of traversal must not be accepted");
+        assert!(
+            matches!(error, BundleError::NotAnIdentifier { .. }),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_listing_id_is_still_accepted() {
+        // The control. Every refusal above has to be about traversal, and that argument only
+        // holds if the shape a real publisher uses still goes through.
+        assert!(prepare(draft(), &passed()).is_ok());
     }
 
     #[test]

@@ -874,13 +874,33 @@ fn prepare_publication(
     )
     .map_err(|e| e.to_string())?;
 
+    // The destination is resolved and has to be a folder the person chose in the native chooser,
+    // for the same reason a folder grant does: `into` arrives as a string from the webview, and a
+    // string from the webview is not evidence that anybody picked anything. The Publish panel
+    // already opens the chooser, so this costs a legitimate flow nothing.
+    let destination = resolve_grant_directory(Path::new(&into))
+        .map_err(|why| format!("That folder cannot be used: {why}."))?;
+    if !chosen_folders(&state)?.contains(&destination) {
+        return Err(
+            "Choose the folder to publish into with the Choose button before preparing.".to_owned(),
+        );
+    }
+
     // One folder per version, named after what is in it, so a second version does not land on
     // top of the first.
-    let folder = PathBuf::from(&into).join(format!(
+    //
+    // Built from the resolved destination, and from a listing id that `PublicationBundle::prepare`
+    // has already checked against the identifier grammar — so it holds no separator and no `..`.
+    // The assertion below is the second half of that: a name is only safe as a path component if
+    // the result actually stays under the folder it was joined to.
+    let folder = destination.join(format!(
         "{id}-{version}",
         id = bundle.draft.listing_id,
         version = bundle.draft.version
     ));
+    if !folder.starts_with(&destination) {
+        return Err("That publication cannot be written where it was asked to go.".to_owned());
+    }
     let document = folder.join("publication.json");
     if document.exists() {
         return Err(format!(
