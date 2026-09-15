@@ -1,0 +1,55 @@
+# Keeping dependencies current, because the advisory gate assumes somebody does.
+#
+# `deny.toml` fails the build on a RUSTSEC advisory and `npm audit --audit-level=high` fails it on
+# an npm one. Both of those are only useful if a fix is available to take — which means somebody
+# has to be bumping versions between incidents. Doing that by hand means the first time anyone
+# looks at a dependency is the day it has a CVE and the build is already red.
+#
+# Grouped so that a routine week is one pull request per ecosystem rather than thirty. Security
+# updates are deliberately left ungrouped and unscheduled: those should arrive on their own, the
+# moment they exist, and be obvious in the list.
+
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      rust-patch-and-minor:
+        patterns: ['*']
+        update-types: [minor, patch]
+    # A major bump of the framework the whole desktop application is built on is not a routine
+    # weekly chore, and grouping it with twenty patch bumps is how it gets merged without being
+    # read. Left to arrive as its own pull request.
+    ignore:
+      - dependency-name: tauri
+        update-types: [version-update:semver-major]
+      - dependency-name: tauri-build
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      js-patch-and-minor:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: next
+        update-types: [version-update:semver-major]
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+
+  # The actions in the workflows are pinned to tags, which are mutable. Until they are pinned to
+  # commit SHAs, this is what notices that a tag moved to a new release.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

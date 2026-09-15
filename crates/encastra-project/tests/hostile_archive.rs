@@ -110,7 +110,10 @@ fn an_entry_name_that_climbs_out_of_the_archive_reaches_nothing() {
     // the first missing required entry and never reached any code that could have mishandled
     // them — it asserted a refusal that had nothing to do with traversal.
     let bytes = project_with(vec![
-        ("../../../../evil.json".to_owned(), br#"{"schema":1}"#.to_vec()),
+        (
+            "../../../../evil.json".to_owned(),
+            br#"{"schema":1}"#.to_vec(),
+        ),
         ("..\\..\\evil.json".to_owned(), br#"{"schema":1}"#.to_vec()),
     ]);
 
@@ -164,7 +167,8 @@ fn a_snapshot_id_cannot_escape_the_history_prefix() {
     // An id full of traversal cannot reach outside the archive, because the result is still only
     // ever a lookup by name — and a missing body must not be fatal: the entry is dropped and the
     // project still opens.
-    let history = br#"{"snapshots":[{"id":"../../../../etc/passwd","created_at_ms":0,"graph_hash":"x"}]}"#;
+    let history =
+        br#"{"snapshots":[{"id":"../../../../etc/passwd","created_at_ms":0,"graph_hash":"x"}]}"#;
     let bytes = project_with(vec![("versions/index.json".to_owned(), history.to_vec())]);
 
     let project = Project::from_bytes(&bytes)
@@ -250,7 +254,8 @@ fn an_archive_that_names_the_same_entry_twice_is_refused() {
     const REAL: &[u8] = b"graph.json";
     assert_eq!(PLACEHOLDER.len(), REAL.len(), "offsets must not move");
 
-    let second = br#"{"nodes":{"evil":{"component":"a.b@1.0.0","position":{"x":0,"y":0}}},"edges":[]}"#;
+    let second =
+        br#"{"nodes":{"evil":{"component":"a.b@1.0.0","position":{"x":0,"y":0}}},"edges":[]}"#;
     let mut parts: Vec<(String, Vec<u8>)> = valid_parts();
     parts.push((
         String::from_utf8(PLACEHOLDER.to_vec()).unwrap(),

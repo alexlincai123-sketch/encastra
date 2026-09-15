@@ -127,7 +127,13 @@ impl GrantSet {
             .filter(move |g| g.kind == kind)
     }
 
-    fn has(&self, node: &NodeId, kind: &str) -> bool {
+    /// Whether this node holds that capability at all.
+    ///
+    /// A read, not an authority: it answers a question about the set, and grants nothing. Public
+    /// so that whatever assembles a `GrantSet` can be tested on what it actually produced rather
+    /// than on what it was asked for — the difference between those two is where the grant that
+    /// nobody made used to live.
+    pub fn has(&self, node: &NodeId, kind: &str) -> bool {
         self.grants_for(node, kind).next().is_some()
     }
 }
@@ -455,9 +461,7 @@ impl Broker {
         // files arrive from elsewhere, which is the entire reason to grant one.
         //
         // `symlink_metadata` does not follow the link, which is what makes the question askable.
-        if std::fs::symlink_metadata(&destination)
-            .is_ok_and(|meta| meta.file_type().is_symlink())
-        {
+        if std::fs::symlink_metadata(&destination).is_ok_and(|meta| meta.file_type().is_symlink()) {
             return Err(self
                 .deny(
                     node,
@@ -1379,7 +1383,12 @@ mod tests {
         }
 
         // And an ordinary name that merely looks similar is left alone.
-        for ordinary in ["console.log", "communication.txt", "nullable.json", "com.txt"] {
+        for ordinary in [
+            "console.log",
+            "communication.txt",
+            "nullable.json",
+            "com.txt",
+        ] {
             assert_eq!(sanitise_filename(ordinary), ordinary);
         }
     }
@@ -1408,7 +1417,10 @@ mod tests {
             "net.http",
             GrantScope::HttpHosts(vec!["example.com".into()]),
         );
-        assert!(!admitted, "a capability never declared must not be grantable");
+        assert!(
+            !admitted,
+            "a capability never declared must not be grantable"
+        );
         assert!(!grants.has(&node, "net.http"));
 
         // The same call for something the manifest does declare is admitted in full.
@@ -1442,7 +1454,10 @@ mod tests {
 
         let err = broker.save_to(&node, out, &target, "x.txt").unwrap_err();
         assert_eq!(err.code, "denied");
-        assert!(!target.join("x.txt").exists(), "nothing may have been written");
+        assert!(
+            !target.join("x.txt").exists(),
+            "nothing may have been written"
+        );
     }
 
     #[test]
@@ -1473,8 +1488,7 @@ mod tests {
             eprintln!("skipped: no APPDATA on this platform");
             return;
         };
-        let startup = PathBuf::from(appdata)
-            .join(r"Microsoft\Windows\Start Menu\Programs\Startup");
+        let startup = PathBuf::from(appdata).join(r"Microsoft\Windows\Start Menu\Programs\Startup");
         if !startup.is_dir() {
             eprintln!("skipped: no startup folder on this machine");
             return;
@@ -1587,7 +1601,10 @@ mod tests {
         let err = read_bounded_to(&path, 1024).unwrap_err();
         assert_eq!(err.code, "too-large");
         assert!(err.message.contains("2048"), "{}", err.message);
-        assert!(err.hint.is_some(), "a refusal should say what to do about it");
+        assert!(
+            err.hint.is_some(),
+            "a refusal should say what to do about it"
+        );
 
         // Exactly at the ceiling is allowed: the limit is a maximum, not a strict bound.
         assert_eq!(read_bounded_to(&path, 2048).unwrap().len(), 2048);
@@ -1685,9 +1702,15 @@ mod tests {
         assert!(err.message.contains("not been allowed"), "{}", err.message);
 
         // A folder that is not there is a different refusal, not the same one.
-        let absent = broker.list_dir(&node, &dir.path().join("nope")).unwrap_err();
+        let absent = broker
+            .list_dir(&node, &dir.path().join("nope"))
+            .unwrap_err();
         assert_eq!(absent.code, "denied");
-        assert!(absent.message.contains("does not exist"), "{}", absent.message);
+        assert!(
+            absent.message.contains("does not exist"),
+            "{}",
+            absent.message
+        );
 
         // Both refusals are in the journal, which is the other half of the guarantee.
         let calls = broker.take_calls(&node);
@@ -1739,7 +1762,9 @@ mod tests {
             .unwrap();
         assert!(broker.write_output(&mine, handle, b"ok").is_ok());
 
-        let err = broker.write_output(&theirs, handle, b"hijacked").unwrap_err();
+        let err = broker
+            .write_output(&theirs, handle, b"hijacked")
+            .unwrap_err();
         assert_eq!(err.code, "denied");
         assert!(err.message.contains("does not own"), "{}", err.message);
 
@@ -1783,7 +1808,11 @@ mod tests {
             .import_guarded(&node, &watched.join("subfolder"), HandleKind::File)
             .unwrap_err();
         assert_eq!(err.code, "denied");
-        assert!(err.message.contains("not one this can open"), "{}", err.message);
+        assert!(
+            err.message.contains("not one this can open"),
+            "{}",
+            err.message
+        );
 
         let err = broker
             .import_guarded(&node, &watched.join("absent.txt"), HandleKind::File)
@@ -1826,7 +1855,11 @@ mod tests {
         // break the feature.
         let real = watched.join("real.txt");
         std::fs::write(&real, b"fine").unwrap();
-        assert!(broker.import_guarded(&node, &real, HandleKind::File).is_ok());
+        assert!(
+            broker
+                .import_guarded(&node, &real, HandleKind::File)
+                .is_ok()
+        );
     }
 
     #[test]

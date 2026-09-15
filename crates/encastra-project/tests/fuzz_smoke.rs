@@ -169,7 +169,8 @@ fn nothing_makes_the_graph_parser_panic() {
     // mutations reach different code than byte mutations on a container.
     let corpus: Vec<Vec<u8>> = vec![
         br#"{"nodes":{},"edges":[]}"#.to_vec(),
-        br#"{"nodes":{"a":{"component":"x.y@1.0.0","position":{"x":0,"y":0}}},"edges":[]}"#.to_vec(),
+        br#"{"nodes":{"a":{"component":"x.y@1.0.0","position":{"x":0,"y":0}}},"edges":[]}"#
+            .to_vec(),
         br#"{"nodes":{},"edges":[{"from":{"node":"a","port":"o"},"to":{"node":"b","port":"i"}}]}"#
             .to_vec(),
         b"{".to_vec(),

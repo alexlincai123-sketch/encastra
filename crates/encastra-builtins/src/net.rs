@@ -292,9 +292,7 @@ fn url_parts(url: &str) -> Result<UrlParts, NodeError> {
 
     // A trailing dot is the same name to DNS. Removing it here keeps this parser and the
     // editor's agreeing on one spelling, which is what makes comparing them meaningful.
-    let host = host_text
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
+    let host = host_text.trim_end_matches('.').to_ascii_lowercase();
 
     if host.is_empty() {
         return Err(bad("it has no host"));
@@ -363,11 +361,15 @@ mod tests {
             "internal.example"
         );
         assert_eq!(
-            url_parts("https://internal.example:6379/").unwrap().authority(),
+            url_parts("https://internal.example:6379/")
+                .unwrap()
+                .authority(),
             "internal.example:6379"
         );
         assert_eq!(
-            url_parts("https://internal.example:22/").unwrap().authority(),
+            url_parts("https://internal.example:22/")
+                .unwrap()
+                .authority(),
             "internal.example:22"
         );
 
@@ -482,7 +484,10 @@ mod tests {
 
         // A size refusal says the size, which is not a secret, and still not the address.
         let too_big = describe_read(&ureq::Error::BodyExceedsLimit(MAX_RESPONSE_BYTES));
-        assert!(too_big.contains(&MAX_RESPONSE_BYTES.to_string()), "{too_big}");
+        assert!(
+            too_big.contains(&MAX_RESPONSE_BYTES.to_string()),
+            "{too_big}"
+        );
     }
 
     #[test]

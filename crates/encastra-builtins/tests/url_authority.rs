@@ -20,8 +20,12 @@ use encastra_builtins::permission_authority;
 fn cases() -> serde_json::Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../packages/protocol/data/url-authority-cases.json");
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("the shared table must be readable at {}: {e}", path.display()));
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "the shared table must be readable at {}: {e}",
+            path.display()
+        )
+    });
     serde_json::from_str(&text).expect("the shared table must be valid JSON")
 }
 
@@ -51,9 +55,9 @@ fn the_runtime_reads_every_case_the_way_the_table_says() {
                 granted += 1;
             }
             (None, None) => refused += 1,
-            (actual, want) => panic!(
-                "{url:?} ({why}): the runtime read {actual:?}, the table says {want:?}"
-            ),
+            (actual, want) => {
+                panic!("{url:?} ({why}): the runtime read {actual:?}, the table says {want:?}")
+            }
         }
     }
 
@@ -95,7 +99,10 @@ fn no_address_makes_the_parser_panic_or_produce_something_unusable() {
         // The assertion is that this returns at all. Anything it does return has to be usable as
         // an allowlist key, so the invariants that make comparison meaningful are checked too.
         if let Some(authority) = permission_authority(&address) {
-            assert!(!authority.is_empty(), "{address:?} produced an empty authority");
+            assert!(
+                !authority.is_empty(),
+                "{address:?} produced an empty authority"
+            );
             assert_eq!(
                 authority,
                 authority.to_ascii_lowercase(),
