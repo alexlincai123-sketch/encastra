@@ -167,7 +167,8 @@ def check_dependencies(skip: bool) -> list[Check]:
         return [Check("deps.cargo_deny", NOT_VERIFIED, "skipped"), Check("deps.npm_audit", NOT_VERIFIED, "skipped")]
     out = []
     deny = run(["cargo", "deny", "check", "advisories", "bans", "licenses", "sources"])
-    out.append(Check("deps.cargo_deny", PASS if deny.returncode == 0 else FAIL, tail(deny.stdout + deny.stderr, 2)))
+    summary = [line.strip() for line in (deny.stdout + deny.stderr).splitlines() if " ok" in line or "FAILED" in line or "error" in line.lower()]
+    out.append(Check("deps.cargo_deny", PASS if deny.returncode == 0 else FAIL, " | ".join(summary[-4:]) or tail(deny.stdout + deny.stderr, 2)))
     audit = run(["npm", "audit", "--audit-level=high"])
     out.append(Check("deps.npm_audit", PASS if audit.returncode == 0 else FAIL, tail(audit.stdout + audit.stderr, 2)))
     notices = HERE / "third_party.py"
@@ -179,17 +180,47 @@ def check_dependencies(skip: bool) -> list[Check]:
     return out
 
 
-def expected_build_commit(version: str) -> str | None:
-    """The commit the artefacts must state: HEAD, or — on a publication commit — the build commit
-    the manifest names, since the publication is one commit after the build by construction and
-    `manifest.verify` checks that nothing but the publication files changed between the two."""
+def publication_of(version: str) -> tuple[dict | None, bool]:
+    """The manifest on disk if it describes this version from an ancestor of HEAD, and whether
+    HEAD is that build commit or its publication (nothing but the publication files changed)."""
     head = release_identity.head_commit()
     claim = release_manifest.read_block()
-    if claim and claim["version"] == version and claim["commit"] != head:
-        ancestor = run(["git", "merge-base", "--is-ancestor", claim["commit"], "HEAD"])
-        if ancestor.returncode == 0:
-            return claim["commit"]
-    return head
+    if not claim or claim["version"] != version:
+        return None, False
+    if claim["commit"] == head:
+        return claim, True
+    ancestor = run(["git", "merge-base", "--is-ancestor", claim["commit"], "HEAD"])
+    if ancestor.returncode != 0:
+        return claim, False
+    changed = set((git("diff", "--name-only", claim["commit"], "HEAD") or "").split())
+    return claim, not (changed - release_manifest.PUBLICATION_FILES)
+
+
+def check_version_unique(version: str) -> Check:
+    """One version, one build. A manifest that already names this version from another tree
+    means the version was published and the code moved on under the same number — the one
+    state a release identity must never be in. The way out is a new version, never a new
+    binary under the old one."""
+    claim, publication = publication_of(version)
+    if claim is None:
+        return Check("version.unique", PASS, f"{version} has not been published from an ancestor of this tree")
+    if publication:
+        return Check("version.unique", PASS, f"{version} is published from {claim['commit'][:12]}, and this tree is that build or its publication")
+    return Check(
+        "version.unique",
+        FAIL,
+        f"{version} was published from build commit {claim['commit'][:12]} and this tree is a different program under the same number",
+        "bump the version (python scripts/version.py --set <next>); a published version never gets a second binary",
+    )
+
+
+def expected_build_commit(version: str) -> str | None:
+    """The commit the artefacts must state: HEAD, or — on a publication commit — the build commit
+    the manifest names, since the publication is one commit after the build by construction."""
+    claim, publication = publication_of(version)
+    if claim and publication:
+        return claim["commit"]
+    return release_identity.head_commit()
 
 
 def check_artefacts() -> tuple[Check, list[dict]]:
@@ -376,6 +407,7 @@ def main() -> int:
     mode, mode_check = derive_mode(args.mode, dirty, version)
     checks.append(mode_check)
     checks.append(check_version())
+    checks.append(check_version_unique(version))
     checks += check_gate(args.skip_gate)
     checks += check_dependencies(args.skip_deps)
     artefact_check, entries = check_artefacts()

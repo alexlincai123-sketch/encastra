@@ -174,6 +174,29 @@ class ReleaseCheckTests(unittest.TestCase):
         _, report, _ = tree.check("--evidence-vm", str(log))
         self.assertEqual(status_of(report, "clean_vm"), "FAIL")
 
+    def test_a_published_version_cannot_get_a_second_binary(self) -> None:
+        # Release immutability: version + commit + hashes are one identity. The code moves on
+        # under the same number, a new binary appears — and the check blocks until the version
+        # changes, whatever else is green.
+        tree = self.fixture("0.6.0-beta.1")
+        tree.binary("0.6.0-beta.1")
+        tree.installer("0.6.0-beta.1")
+        tree.publish()
+        _, report, _ = tree.check()
+        self.assertEqual(status_of(report, "version.unique"), "PASS")
+        (tree.root / "src.rs").write_text("fn main() { moved_on(); }\n", "utf-8")
+        subprocess.run([*GIT, "add", "-A"], cwd=tree.root, check=True)
+        subprocess.run([*GIT, "commit", "-q", "-m", "more code, same version"], cwd=tree.root, check=True)
+        head = subprocess.run([*GIT, "rev-parse", "HEAD"], cwd=tree.root, capture_output=True, text=True, check=True).stdout.strip()
+        tree.binary("0.6.0-beta.1", stamp=head)  # rebuilt from the new HEAD: correct stamp, same version
+        tree.installer("0.6.0-beta.1")
+        _, report, _ = tree.check()
+        self.assertEqual(status_of(report, "version.unique"), "FAIL")
+        self.assertIn("bump the version", next(c["action"] for c in report["checks"] if c["id"] == "version.unique"))
+        self.assertEqual(status_of(report, "artefacts.identity"), "PASS", "the artefacts are HEAD's; the version is the problem")
+        self.assertEqual(report["verdict"], "BLOCKED")
+        self.assertIn("version.unique", report["reason"])
+
     def test_the_report_uses_only_the_five_words(self) -> None:
         tree = self.fixture("0.6.0-beta.1")
         _, report, _ = tree.check()
