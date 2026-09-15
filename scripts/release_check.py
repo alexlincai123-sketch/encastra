@@ -136,6 +136,10 @@ def check_gate(skip: bool) -> list[Check]:
         ("gate.typecheck", ["npm", "run", "typecheck"]),
         ("gate.vitest", ["npm", "run", "test"]),
         ("gate.web_build", ["npm", "run", "build", "--workspace", "@encastra/web"]),
+        # Generated artefacts that are committed: each command regenerates one and fails when
+        # the committed copy differs. A candidate once reached its CI with a stale fuzz corpus
+        # because the local gate that checks it was not run; the verdict now runs it.
+        ("gate.generated", [sys.executable, "scripts/generated_check.py"]),
     ]
     if skip:
         return [Check(id, NOT_VERIFIED, "skipped by --skip-gate", "run without --skip-gate") for id, _ in steps]
