@@ -140,8 +140,8 @@ runner's own build and builds the frontend with Node 24.
   change the difference from the developer machine's `a30a56ea…`: code 199 608 and data
   3 154 612 bytes — the MSVC toolset: Rich headers name tool builds 35721/36256 on the runner
   against 35207/35228 here) · the runner's two installers differ from each other again
-  (`f21668e1…`, `442cdb9a…`; inside the LZMA payload, same script header — the file-date hook
-  not being applied there is the suspect) · **install on a clean Windows runner ✓ in both**:
+  (`f21668e1…`, `442cdb9a…`; inside the LZMA payload, same script header — reproduced on the
+  developer machine by bundling without the file-date hook: the runner packages without it) · **install on a clean Windows runner ✓ in both**:
   `NotSigned` as documented, silent install exit 0 in 4 s, per-user directory, ProductVersion
   `0.5.0-rc.3`, build stamp `3264e07` in the installed binary, HKCU entry and nothing under
   HKLM, Start Menu shortcut, the application launches and stays up, uninstall exit 0 with
