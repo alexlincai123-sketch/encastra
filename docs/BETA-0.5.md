@@ -18,7 +18,7 @@ local library remembers what was created, imported and prepared.
 | A local library | **Done.** `crates/encastra-library`; atomic index; status by content hash; a created project's file is never deleted |
 | Publish → import → library → open → reuse, end to end | **Done in code and tests.** The chooser-driven journeys were **not** driven at runtime in this session — see `docs/audits/2026-09-15-runtime-qa.md` for why and what was |
 | Security hardening | **Done**, from two independent audits merged: folder grants resolved and bounded, a native folder chooser on the Rust side, per-file and per-run byte ceilings, duplicate archive entries refused, a run deadline, a panicking node no longer wedges the runtime, the same URL grammar in both parsers, fuzz targets — `docs/audits/2026-09-15-*.md` |
-| Memory and time under scale | **Done and measured.** A 20 000-step chain: 3.9 GB → 67 MB peak, 58 s → 17 s; a live-byte budget bounds width as well |
+| Memory and time under scale | **Done and measured.** A 10 000-step chain: 1.97 GB → 38 MB peak, 19.7 s → 5.2 s; 20 000 steps are refused by the node ceiling; a live-byte budget bounds width as well |
 | Unsaved work never discarded silently | **Done.** New, open, sample, restore, library open and the window's close button ask first |
 | Keyboard-only editing | **Done.** Connections can be drawn and removed from the keyboard; the tour can be completed without a mouse |
 | Dialogs that trap focus as they claim | **Done** |
@@ -64,10 +64,16 @@ Measured with the CLI on a chain of steps each handing a 45 KB document to the n
 
 | Steps | Before (peak) | After (peak) | Before (time) | After (time) |
 |---|---|---|---|---|
-| 1 000 | 199 MB | 11 MB | 0.9 s | 0.9 s |
-| 5 000 | 986 MB | 25 MB | 5.8 s | 2.8 s |
-| 10 000 | 1.97 GB | 38 MB | 19.7 s | 7.9 s |
-| 20 000 | 3.94 GB | 67 MB | 57.9 s | 16.6 s |
+| 1 000 | 199 MB | 11 MB | 0.9 s | 0.8 s |
+| 5 000 | 986 MB | 24 MB | 5.8 s | 2.6 s |
+| 10 000 | 1.97 GB | 38 MB | 19.7 s | 5.2 s |
+| 20 000 | 3.94 GB | refused | 57.9 s | 0.1 s |
+
+"After" is the release CLI at this commit. The 20 000-step row is refused before anything
+runs: the security branch put a ceiling of 10 000 nodes and 40 000 edges on a graph, and the
+message says so ("this graph has 20000 nodes, and this build works on at most 10000"). On the
+branch before that ceiling landed, the same chain ran in 16.6 s at 67 MB, which is the number
+that shows the memory fix working at scale; the ceiling is what a person now meets first.
 
 Two changes. A value is released the moment its last consumer has finished, whatever happened
 to that consumer, so memory follows the graph's width rather than its length. The edges into
