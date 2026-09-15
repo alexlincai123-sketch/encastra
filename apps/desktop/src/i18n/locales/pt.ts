@@ -922,6 +922,19 @@ const pt: Messages = {
     noWindow: 'Não há nenhuma janela para fechar.',
     windowWouldNotClose: 'A janela não fechou. O teu trabalho continua aqui.',
     io: 'Algo neste computador recusou a operação ({reason}).',
+    status: {
+      triggerError: '{node} deixou de vigiar as alterações ({reason}).',
+      eventsDropped: {
+        one: 'Foi descartado {count} evento: chegou mais depressa do que era possível tratar.',
+        other:
+          'Foram descartados {count} eventos: chegaram mais depressa do que era possível tratar.',
+      },
+      workflowStopped: 'Este fluxo parou de forma inesperada. Podes voltar a iniciá-lo.',
+      runningFor: {
+        one: 'A correr há {seconds} segundo.',
+        other: 'A correr há {seconds} segundos.',
+      },
+    },
     grant: {
       folderUnusable: '{node}: essa pasta não pode ser usada ({reason}).',
       folderNotChosen:

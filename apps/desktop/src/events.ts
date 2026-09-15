@@ -10,7 +10,7 @@
  * That is the honest behaviour: the preview does not simulate a run.
  */
 
-import type { NodeRecord, RunJournal } from './types';
+import type { NodeRecord, RunJournal, StatusMessage } from './types';
 
 export interface RunStarted {
   run_id: string;
@@ -30,7 +30,14 @@ export interface WorkflowStatus {
   runs: number;
   pending: number;
   dropped: number;
-  message?: string;
+  /**
+   * What to say about it, as a tag rather than a sentence.
+   *
+   * The runtime used to build an English sentence here and the status bar printed it, so the one
+   * line somebody watches while a workflow runs was the one line that was never translated.
+   * `describeStatusMessage` in `errors.ts` is where this becomes words.
+   */
+  message?: StatusMessage;
 }
 
 export interface RuntimeEvents {

@@ -985,6 +985,20 @@ const en: Messages = {
     noWindow: 'There is no window to close.',
     windowWouldNotClose: 'The window would not close. Your work is still here.',
     io: 'Something on this computer refused the operation ({reason}).',
+    // What the status bar is told while a workflow runs. `nothing-ran` is not here: it reuses
+    // `messages.nothingRanProblems`, which said exactly this before the tag existed.
+    status: {
+      triggerError: '{node} stopped watching for changes ({reason}).',
+      eventsDropped: {
+        one: '{count} event was dropped — they arrived faster than they could be handled.',
+        other: '{count} events were dropped — they arrived faster than they could be handled.',
+      },
+      workflowStopped: 'This workflow stopped unexpectedly. You can start it again.',
+      runningFor: {
+        one: 'Running for {seconds} second.',
+        other: 'Running for {seconds} seconds.',
+      },
+    },
     grant: {
       folderUnusable: '{node}: that folder cannot be used ({reason}).',
       folderNotChosen:

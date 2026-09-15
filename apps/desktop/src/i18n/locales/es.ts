@@ -926,6 +926,18 @@ const es: Messages = {
     noWindow: 'No hay ninguna ventana que cerrar.',
     windowWouldNotClose: 'La ventana no se ha cerrado. Tu trabajo sigue aquí.',
     io: 'Algo en este equipo rechazó la operación ({reason}).',
+    status: {
+      triggerError: '{node} dejó de vigilar los cambios ({reason}).',
+      eventsDropped: {
+        one: 'Se descartó {count} evento: llegó más rápido de lo que se podía atender.',
+        other: 'Se descartaron {count} eventos: llegaron más rápido de lo que se podían atender.',
+      },
+      workflowStopped: 'Este flujo se detuvo de forma inesperada. Puedes volver a iniciarlo.',
+      runningFor: {
+        one: 'En marcha desde hace {seconds} segundo.',
+        other: 'En marcha desde hace {seconds} segundos.',
+      },
+    },
     grant: {
       folderUnusable: '{node}: esa carpeta no se puede usar ({reason}).',
       folderNotChosen:

@@ -85,18 +85,46 @@ crate that raised it, so the sentence a reader gets is as specific as the refusa
 | | `window-would-not-close` | `errors.windowWouldNotClose` |
 | `about` | — | — |
 
+## The status bar
+
+`Status::message` is the other half of the same problem, and it is not an error: a dropped event
+or a watcher that stopped is not a failed command. It reached the interface the same way, though
+— as an English sentence the runtime had built, printed verbatim — which made the one line
+somebody watches while a workflow runs the one line that was never translated.
+
+It is now `Option<StatusMessage>`, tagged exactly as `AppError` is, pinned in the same fixture,
+and rendered by `describeStatusMessage` in `errors.ts`.
+
+| Where it is emitted | Kind | i18n key |
+|---|---|---|
+| a watcher failed (`session.tick`) | `trigger-error` `{node, error}` | `errors.status.triggerError` |
+| events arrived faster than they could be handled | `events-dropped` `{count}` | `errors.status.eventsDropped.{one,other}` |
+| a one-shot run was refused by validation | `nothing-ran` `{problems}` | `messages.nothingRanProblems.{one,other}` |
+| a node panicked and the run unwound | `workflow-stopped` | `errors.status.workflowStopped` |
+| `workflow_status` (tooling; the editor listens to the events instead) | `running-for` `{seconds}` | `errors.status.runningFor.{one,other}` |
+
+Three of those name a plural tree rather than a leaf, because the count is part of the sentence.
+`statusMessageKey` picks the leaf through `Intl.PluralRules`, never an `n === 1` check — CLDR
+counts zero and one together in French, and a hand-written check gets that wrong.
+
+`trigger-error` carries the whole `NodeError`, not just its sentence, because it holds a stable
+`code`. Today the interface quotes `message` verbatim inside a translated sentence — the rule free
+text follows everywhere else here — and the `code` travels so a later build can translate the
+reason itself without changing this payload again.
+
 ### The vocabularies, by size
 
 | Enum | Tags | Where the sentences live |
 |---|---|---|
 | `AppError` | 29 | `errors.*` |
 | `GrantRefusal` | 3 | `errors.grant.*` |
+| `StatusMessage` | 5 | `errors.status.*`, `messages.nothingRanProblems` |
 | `ProjectError` | 10 | `errors.project.*` |
 | `LibraryError` | 5 | `errors.library.*` |
 | `BundleError` | 9 | `errors.bundle.*` |
 | `ImportError` | 27 | `import.errors.*` |
 
-83 tags, each with a sentence in six languages.
+88 tags, each with a sentence in six languages.
 
 ## Rules worth keeping
 

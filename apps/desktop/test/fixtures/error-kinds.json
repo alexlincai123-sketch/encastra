@@ -90,5 +90,6 @@
     "file-too-large",
     "ambiguous-archive",
     "io"
-  ]
+  ],
+  "status": ["trigger-error", "events-dropped", "nothing-ran", "workflow-stopped", "running-for"]
 }

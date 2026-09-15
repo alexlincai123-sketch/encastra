@@ -18,7 +18,7 @@ import {
 } from '@xyflow/react';
 import { create } from 'zustand';
 import type { Demo } from './demos';
-import { describeAppError, importErrorIn } from './errors';
+import { describeAppError, describeStatusMessage, importErrorIn } from './errors';
 import { subscribe, type WorkflowStatus } from './events';
 import {
   cut,
@@ -953,8 +953,11 @@ export const useEditor = create<EditorState>((set, get) => ({
           watching: status.watching,
           runs: status.runs,
           pending: status.pending,
+          // A tag, not a sentence: the runtime says what happened and this says it in whatever
+          // language the person reads. It used to be printed verbatim, which made the one line
+          // somebody watches while a workflow runs the one line that was always in English.
           message: status.message
-            ? { tone: 'error', text: status.message }
+            ? { tone: 'error', text: describeStatusMessage(status.message) }
             : status.running
               ? s.message
               : null,

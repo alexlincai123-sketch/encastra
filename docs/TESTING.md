@@ -137,10 +137,11 @@ the fixture to move. [ADR-0003](adr/0003-one-runtime-shared-type-table.md) recor
 
 ### The error-vocabulary gate
 
-The same arrangement, for the refusals a command can return. The runtime owns the vocabulary
-(`AppError`, `GrantRefusal`, and the four nested crate errors), and the editor has to have a
-sentence for every word in it in all six languages — otherwise a refusal reaches a Spanish reader
-in English, or as a raw tag.
+The same arrangement, for the refusals a command can return and for what the status bar is told
+while a workflow runs. The runtime owns the vocabulary (`AppError`, `GrantRefusal`,
+`StatusMessage`, and the four nested crate errors), and the editor has to have a sentence for
+every word in it in all six languages — otherwise a refusal reaches a Spanish reader in English,
+or as a raw tag.
 
 - `error::tests::the_committed_list_of_kinds_matches_this_build` writes every tag to
   `apps/desktop/test/fixtures/error-kinds.json` and fails when the committed file no longer
@@ -152,6 +153,9 @@ in English, or as a raw tag.
   English and would report a missing Spanish sentence as a pass), and every non-English sentence
   has to differ from the English one — a key copied across with the English text still in it is
   not a translation. It also asserts no described refusal leaves a `{placeholder}` unfilled.
+- The same three checks cover `StatusMessage`. Three of those kinds name a plural tree, so both
+  leaves are checked in every language — the category comes from `Intl.PluralRules`, and French
+  counts zero and one together, which a hand-written `n === 1` check gets wrong.
 - The `Record<Kind, string>` maps in `apps/desktop/src/errors.ts` are total over their unions, so
   TypeScript refuses a missing tag as well.
 

@@ -24,11 +24,65 @@
 //!   `eprintln!`, and in tests that were written against them. The contract added a name; it did
 //!   not take a sentence away.
 
+use encastra_core::journal::NodeError;
 use encastra_library::LibraryError;
 use encastra_project::ProjectError;
 use encastra_publish::ImportError;
 use encastra_publish::bundle::BundleError;
 use serde::Serialize;
+
+/// What the status bar is being told while a workflow runs.
+///
+/// Not an error — a workflow that drops an event or stops unexpectedly has not failed a command —
+/// but the same problem and the same answer. These reached the status bar as English sentences
+/// the runtime had built, through `Status::message`, which meant the one line somebody watches
+/// while a workflow runs was the one line that never got translated.
+///
+/// Tagged exactly as [`AppError`] is, and pinned in the same fixture. `errors.ts` maps it and
+/// `store.ts` renders it through that mapping rather than printing it.
+#[derive(Debug, Clone, thiserror::Error, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum StatusMessage {
+    /// A watcher stopped. Reported rather than fatal: a folder that disappears should stop that
+    /// watcher, not tear down a workflow that may have other sources.
+    ///
+    /// The whole [`NodeError`] travels, not just its sentence, because it carries a stable `code`
+    /// — so a later build can translate the reason itself without changing this payload again.
+    /// Until then the interface quotes `message` verbatim under a translated label, which is the
+    /// rule the rest of this module already follows for free text.
+    #[error("{node}: {}", error.message)]
+    TriggerError { node: String, error: NodeError },
+    #[error("{count} event(s) dropped — too many at once.")]
+    EventsDropped { count: usize },
+    #[error("Nothing ran: {problems} problem(s) to fix first.")]
+    NothingRan { problems: usize },
+    #[error("This workflow stopped unexpectedly. You can start it again.")]
+    WorkflowStopped,
+    #[error("Running for {seconds} seconds.")]
+    RunningFor { seconds: u64 },
+}
+
+impl StatusMessage {
+    /// The tag this serialises under. Exhaustive for the reason [`AppError::kind`] is.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            StatusMessage::TriggerError { .. } => "trigger-error",
+            StatusMessage::EventsDropped { .. } => "events-dropped",
+            StatusMessage::NothingRan { .. } => "nothing-ran",
+            StatusMessage::WorkflowStopped => "workflow-stopped",
+            StatusMessage::RunningFor { .. } => "running-for",
+        }
+    }
+}
+
+/// Every tag [`StatusMessage`] can serialise under, in the order the variants are declared.
+pub const STATUS_KINDS: &[&str] = &[
+    "trigger-error",
+    "events-dropped",
+    "nothing-ran",
+    "workflow-stopped",
+    "running-for",
+];
 
 /// Why one grant in a run was not given.
 ///
@@ -415,6 +469,24 @@ mod tests {
         for refusal in grant_samples() {
             assert_eq!(serialised_kind(&refusal), refusal.kind(), "{refusal:?}");
         }
+        for status in status_samples() {
+            assert_eq!(serialised_kind(&status), status.kind(), "{status:?}");
+        }
+    }
+
+    #[test]
+    fn a_stopped_watcher_carries_the_whole_node_error() {
+        // The `code` is the part a later build can translate; the `message` is what the interface
+        // quotes verbatim until then. Flattening this to a sentence would throw the code away.
+        let value = serde_json::to_value(StatusMessage::TriggerError {
+            node: "watch".into(),
+            error: NodeError::new("missing-config", "no folder is set"),
+        })
+        .expect("serialises");
+        assert_eq!(value["kind"], "trigger-error");
+        assert_eq!(value["node"], "watch");
+        assert_eq!(value["error"]["code"], "missing-config");
+        assert_eq!(value["error"]["message"], "no folder is set");
     }
 
     #[test]
@@ -432,6 +504,23 @@ mod tests {
 
         let grants: Vec<&str> = grant_samples().iter().map(GrantRefusal::kind).collect();
         assert_eq!(grants, GRANT_KINDS);
+
+        let statuses: Vec<&str> = status_samples().iter().map(StatusMessage::kind).collect();
+        assert_eq!(statuses, STATUS_KINDS);
+    }
+
+    /// One of every `StatusMessage`, in declared order.
+    fn status_samples() -> Vec<StatusMessage> {
+        vec![
+            StatusMessage::TriggerError {
+                node: "watch".into(),
+                error: NodeError::new("missing-config", "no folder is set"),
+            },
+            StatusMessage::EventsDropped { count: 3 },
+            StatusMessage::NothingRan { problems: 2 },
+            StatusMessage::WorkflowStopped,
+            StatusMessage::RunningFor { seconds: 12 },
+        ]
     }
 
     #[test]
@@ -508,6 +597,7 @@ mod tests {
                         Regenerate with UPDATE_ERROR_KINDS=1 cargo test -p encastra-desktop.",
             "app": KINDS,
             "grant": GRANT_KINDS,
+            "status": STATUS_KINDS,
             "project": project_kinds(),
             "library": library_kinds(),
             "bundle": bundle_kinds(),
