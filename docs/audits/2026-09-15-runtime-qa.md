@@ -105,6 +105,15 @@ The same two scripts, unchanged, against `target/release/encastra-desktop.exe` a
   Import dialog's rendering of an inspection (`ImportError` → sentence mapping covered
   exhaustively over all variants).
 
+## Build from `9d1ec13` (the final audit's fixes), 0.5.0-beta.1
+
+Rebuilt after the fixes for the false unsaved-work prompt and the disabled Publish button. The
+same two scripts: **19 of 19** through the bridge and **7 of 7** non-dialog interface steps,
+with the Library view rendering (which is the view the fixes touched) and the save step again
+stopping at the native dialog. This binary's hashes are not the release's: the release build is
+produced once more from the final commit, with reproducible-build flags, and recorded in
+`docs/RELEASE.md`.
+
 ## Environment limitation, stated once
 
 Runtime QA that needs a native dialog cannot be automated safely on a machine somebody is using.
