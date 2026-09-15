@@ -31,6 +31,14 @@ The gates, in order, all blocking:
 | npm advisories | `npm audit --audit-level=high` |
 | Rust advisories, bans, licences, sources | `cargo deny check` |
 | Secrets, full history | `gitleaks` |
+| The tag names the declared version | compare `v<tag>` with `tauri.conf.json` |
+| The published manifest is consistent | `python scripts/release_manifest.py --verify` |
+| The release scripts themselves | `python -m unittest discover -s scripts/tests` |
+
+And after the build, on the Windows runner, the gate that the *bytes* are the published bytes:
+the workflow checks out the build commit the manifest names, builds it, restores the published
+manifest beside the result and runs `--verify` again — which now compares hashes. An unsigned
+build that does not reproduce the published hashes does not pass.
 
 ### Why a skip is a failure
 
@@ -66,10 +74,19 @@ Verified against the real 0.4.0-beta.1 installer on 2026-09-15: it correctly ref
    `WINDOWS_CERTIFICATE_PASSWORD`. The release workflow already reads them. With them absent it
    skips the import step, the build comes out unsigned, and the manifest step refuses — which is
    the current state and is correct.
-3. Nothing else. The workflow imports the certificate into the runner's store, writes the
-   thumbprint into `tauri.conf.json` for that build only, and restores the file afterwards. The
-   `.pfx` is written outside the working directory and deleted immediately; the thumbprint is
-   never committed.
+3. Nothing else. The workflow imports the certificate into the runner's store and hands Tauri
+   the thumbprint as a `--config` overlay file outside the tree; `tauri.conf.json` is never
+   edited, because an edited tracked file makes the binary record itself as built from a dirty
+   tree and the manifest refuses it. The `.pfx` is written outside the working directory and
+   deleted immediately; the thumbprint is never committed.
+
+### A production release is signed or it does not happen
+
+`release_manifest.py --allow-unsigned` accepts only a pre-release version (`x.y.z-something`).
+For `1.0.0` it exits 3 and there is no flag, environment variable or workflow input that changes
+that; the workflow's `allow_unsigned` input records a decision, it does not widen the guard.
+Tested against a synthetic build in `scripts/tests/test_release_manifest.py`. Shipping a beta
+unsigned is an accepted, recorded risk; shipping a release unsigned is not available.
 
 **The key never goes in the repository, in an environment variable printed to a log, or in a
 build artefact.** If a certificate is ever exposed, it is revoked, not rotated quietly.
@@ -96,6 +113,40 @@ defend against a compromised release.
 **One gotcha, already documented in `docs/RELEASE.md`:** the installed binary's hash differs from
 the raw build output by three bytes, because Tauri patches a bundle-type marker into the
 executable. Only the installer hash is worth comparing.
+
+## Provenance: the binary names its commit
+
+`apps/desktop/src-tauri/build.rs` embeds the commit the tree was at as
+`encastra-build-commit=<40-hex>;` — `<hash>-dirty` if any tracked file differed from the
+commit, `unknown` if git was not available. `release_manifest.py` reads that string out of
+`encastra-desktop.exe` and refuses to write a manifest for anything but a clean build of the
+commit the tree is at (exit 4). Settings → About shows the same value.
+
+This replaced `git rev-parse HEAD` at manifest time, which was wrong by construction: the
+manifest is committed *after* the build, so the commit it named was always the one before the
+publication (ENC-NEW-17, 2026-09-15). The vocabulary now is **build commit** (what the bytes came
+from) and **publication commit** (build commit plus `docs/RELEASE.md` and `site.ts`, one later),
+and `--verify` checks that the two differ in nothing else while the version is the same.
+
+## Reproducible builds
+
+Two builds of one commit differed in exactly 24 bytes — the COFF `TimeDateStamp`, the three
+`IMAGE_DEBUG_DIRECTORY` timestamps and the PDB GUID in the `RSDS` record — and in nothing else
+(ENC-NEW-18, established with `scripts/pe_diff.py` rather than assumed). `build.rs` now passes
+`/Brepro` to the MSVC linker for the application binary, which derives those fields from the
+image contents instead of the clock. Passed as a link argument from the build script rather than
+through `RUSTFLAGS` or `.cargo/config.toml`, because an environment variable set by CI overrides
+both silently and the release build is the one place the flag must not be lost.
+
+What "reproducible" means here, exactly: the same build commit, `rust-toolchain.toml`'s pinned
+`1.98.1` for `x86_64-pc-windows-msvc`, the same `package-lock.json` and `Cargo.lock`, built from
+any directory, produce a byte-identical `encastra-desktop.exe` and a byte-identical NSIS
+installer. It is verified on every release by the workflow's rebuild-and-compare gate, and it
+was first verified by two builds from two paths on 2026-09-15 (see
+`docs/audits/2026-09-15-final-release-readiness.md` for the hashes). It is **not** verified
+across linker versions: MSVC `link.exe` 14.44 built the release; another version may lay the
+image out differently and that is a different build, not a tampered one — `pe_diff.py` is how
+to tell which.
 
 ## Licence decisions on record
 
@@ -124,10 +175,11 @@ the list cannot go stale silently.
   `docs/adr/0008` designs signing and revocation for the future registry and updater; none of it
   is built. When one is added it needs signature verification from its first commit, because an
   unsigned update channel is a remote code execution primitive with a distribution list.
-* **No SBOM, no build provenance, no attestation.** `Cargo.lock` and `package-lock.json` pin
-  everything and `cargo deny` restricts sources to crates.io, which is most of the value; a
-  generated SBOM would make it legible to somebody outside the project.
-* **No reproducible build.** The `.encastra` *format* is byte-deterministic; the binary is not.
+* **No SBOM, no attestation.** `Cargo.lock` and `package-lock.json` pin everything and
+  `cargo deny` restricts sources to crates.io, which is most of the value; a generated SBOM
+  would make it legible to somebody outside the project. Provenance in the narrow sense — which
+  commit the bytes came from — is in the binary (above); a signed attestation of *who* built it
+  is the certificate that does not exist yet.
 
 ## Clean-install verification
 

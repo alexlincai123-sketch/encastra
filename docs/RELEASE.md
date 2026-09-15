@@ -39,7 +39,9 @@ the artefact that actually travels.
 
 ## Producing a build
 
-Everything runs from the repository root.
+Everything runs from the repository root, on a **clean, committed tree**. The binary records the
+commit it was built from (`build.rs` embeds it; Settings → About shows it as the build commit),
+and the manifest refuses to describe a build whose tree had uncommitted changes.
 
 ```bash
 # 1. The gate. A release is not made from a tree that does not pass.
@@ -47,18 +49,59 @@ npm ci
 npm run lint
 npm run typecheck
 npm test
+python scripts/version.py --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+python -m unittest discover -s scripts/tests
 
-# 2. The build. Compiles the frontend, then the Rust binary in release, then packages it.
+# 2. The build, from the commit that will be the BUILD COMMIT. Compiles the frontend, then the
+#    Rust binary in release, then packages it.
 npm run tauri:build
 
-# 3. Record what came out.
-python scripts/release_manifest.py
+# 3. Record what came out: hashes, signature state, and the build commit read out of the binary.
+#    Writes the block above and the RELEASE constant in apps/web/src/config/site.ts.
+python scripts/release_manifest.py --allow-unsigned     # a pre-release; refused for a production version
+
+# 4. Commit those two files, and nothing else. This is the PUBLICATION COMMIT.
+git commit -m "release: <version>" docs/RELEASE.md apps/web/src/config/site.ts
+
+# 5. Prove the publication describes the build: hashes, the binary's own stamp, the website's
+#    copy, and that only those two files changed since the build commit.
+python scripts/release_manifest.py --verify
+
+# 6. Tag the publication commit. The release workflow checks out the build commit it names,
+#    builds it again on a clean machine, and fails unless the bytes are the published bytes.
+git tag v<version>
 ```
 
 `npm run tauri:build` invokes `vite build` first, through Tauri's `beforeBuildCommand`, so there
 is no separate frontend step to forget.
+
+### Build commit and publication commit
+
+A manifest cannot live in the commit it describes: the hashes of a build are known only after
+the build, and the commit that records them comes after the commit that was built. Every release
+therefore has two commits, one apart:
+
+| | What it is | Where it is named |
+|---|---|---|
+| **Build commit** | The tree that produced the bytes | Inside `encastra-desktop.exe` (`encastra-build-commit=<hash>;`), Settings → About, the block above, `site.ts` |
+| **Publication commit** | Build commit + `docs/RELEASE.md` + `site.ts` | The `v<version>` tag |
+
+`release_manifest.py --verify` is the check that the two are one publication apart and nothing
+else; it runs in CI on every release. Before this was written down the block above named the
+commit *before* the publication, read from `git rev-parse HEAD` at manifest time — one behind by
+construction, and nothing noticed.
+
+### Reproducible
+
+Two builds of the build commit with the pinned toolchain (`rust-toolchain.toml`, Node 22 or later,
+`package-lock.json`) produce byte-identical `encastra-desktop.exe` and byte-identical installers.
+The MSVC linker is passed `/Brepro` from `build.rs`, which replaces the image timestamps and the
+PDB GUID — the only bytes that used to differ — with hashes of the content, and the NSIS
+installer carries no clock of its own. `scripts/pe_diff.py A.exe B.exe` names every differing
+byte by PE structure if two builds ever disagree; an independent rebuild is compared by hash, and
+by that tool when the hash differs.
 
 ### What comes out
 

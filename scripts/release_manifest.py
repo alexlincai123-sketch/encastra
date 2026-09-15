@@ -56,6 +56,9 @@ BUNDLE = ROOT / "target" / "release" / "bundle"
 # meant the binary was silently left out of the manifest while the installer still appeared.
 BINARY = ROOT / "target" / "release" / "encastra-desktop.exe"
 RELEASE_DOC = ROOT / "docs" / "RELEASE.md"
+# The website's copy of the same facts (download page). Written here too, so the two cannot
+# disagree by hand; `--verify` checks that they do not.
+SITE_CONFIG = ROOT / "apps/web/src/config/site.ts"
 TAURI_CONFIG = ROOT / "apps/desktop/src-tauri/tauri.conf.json"
 
 MARKER_START = "<!-- BUILD:START -->"
@@ -322,6 +325,70 @@ def write_block(block: str) -> bool:
     return True
 
 
+SITE_FIELDS = (
+    "installerFilename", "installerVersion", "installerSize", "installerSha256",
+    "binaryFilename", "binarySize", "binarySha256", "builtOn", "builtFor", "commit", "signed",
+)
+
+
+def site_field(name: str) -> re.Pattern[str]:
+    """`  name: 'value',` or `  name: true,` inside `export const RELEASE`; only the value is replaced."""
+    return re.compile(rf"(^\s*{name}:\s*)('[^']*'|true|false)(,)", re.M)
+
+
+def site_values(files: list[pathlib.Path], states: dict, commit: str) -> dict[str, str]:
+    installers = [path for path in files if path != BINARY]
+    installer = installers[0] if installers else None
+    values = {
+        "builtOn": repr(datetime.date.today().isoformat()),
+        "builtFor": repr(f"{platform.system()} {platform.machine()}"),
+        "commit": repr(commit),
+        "signed": "true" if all(state == SIGNED for state, _ in states.values()) else "false",
+    }
+    if installer is not None:
+        values |= {
+            "installerFilename": repr(installer.name),
+            "installerVersion": repr(version()),
+            "installerSize": repr(human(installer.stat().st_size)),
+            "installerSha256": repr(sha256(installer)),
+        }
+    if BINARY in files:
+        values |= {
+            "binaryFilename": repr(BINARY.name),
+            "binarySize": repr(human(BINARY.stat().st_size)),
+            "binarySha256": repr(sha256(BINARY)),
+        }
+    return values
+
+
+def write_site(values: dict[str, str]) -> bool:
+    """Updates the RELEASE constant in site.ts. False if the file or a field is not there."""
+    if not SITE_CONFIG.exists():
+        return False
+    text = SITE_CONFIG.read_text("utf-8")
+    for name, value in values.items():
+        text, count = site_field(name).subn(
+            lambda m, v=value: f"{m.group(1)}{v}{m.group(3)}", text, count=1
+        )
+        if count != 1:
+            return False
+    SITE_CONFIG.write_text(text, encoding="utf-8", newline="\n")
+    return True
+
+
+def read_site() -> dict[str, str] | None:
+    if not SITE_CONFIG.exists():
+        return None
+    text = SITE_CONFIG.read_text("utf-8")
+    found = {}
+    for name in SITE_FIELDS:
+        match = site_field(name).search(text)
+        if not match:
+            return None
+        found[name] = match.group(2).strip("'")
+    return found
+
+
 def read_block() -> dict | None:
     """What the manifest on disk claims: version, build commit, and a hash per artefact name."""
     if not RELEASE_DOC.exists():
@@ -392,6 +459,22 @@ def verify() -> list[str]:
         stamp = stamp_in(BINARY)
         if stamp != commit:
             problems.append(f"{BINARY.name} states build commit {stamp!r}; the manifest names {commit}.")
+
+    # The website says the same things in its own file, and a download page that shows one
+    # build's hash under another build's version is the lie this whole script exists to prevent.
+    site = read_site()
+    if site is not None:
+        if site["commit"] != commit:
+            problems.append(f"site.ts names commit {site['commit']!r}; the manifest names {commit}.")
+        if site["installerVersion"] != claim["version"]:
+            problems.append(
+                f"site.ts says version {site['installerVersion']!r}; the manifest says {claim['version']!r}."
+            )
+        for field, name in (("installerSha256", site["installerFilename"]), ("binarySha256", site["binaryFilename"])):
+            if name in claim["hashes"] and site[field] != claim["hashes"][name]:
+                problems.append(
+                    f"site.ts {field} is {site[field]}; the manifest says {claim['hashes'][name]} for {name}."
+                )
     return problems
 
 
@@ -408,6 +491,11 @@ def main() -> int:
         help="publish a pre-release unsigned on purpose, and say so in the manifest",
     )
     parser.add_argument(
+        "--build-commit",
+        action="store_true",
+        help="print the build commit the manifest on disk names, and nothing else",
+    )
+    parser.add_argument(
         "--verify",
         action="store_true",
         help="check the manifest on disk against the artefacts and the history instead of writing it",
@@ -417,6 +505,14 @@ def main() -> int:
     if args.require_signature and args.allow_unsigned:
         print("--require-signature and --allow-unsigned contradict each other.", file=sys.stderr)
         return EXIT_USAGE
+
+    if args.build_commit:
+        claim = read_block()
+        if claim is None:
+            print("docs/RELEASE.md has no readable BUILD block.", file=sys.stderr)
+            return EXIT_VERIFY
+        print(claim["commit"])
+        return EXIT_OK
 
     if args.verify:
         problems = verify()
@@ -475,6 +571,13 @@ def main() -> int:
 
     if write_block(block):
         print(f"Updated {RELEASE_DOC.relative_to(ROOT)} for build commit {commit}")
+        if write_site(site_values(files, states, commit)):
+            print(f"Updated {SITE_CONFIG.relative_to(ROOT)}")
+        else:
+            print(
+                f"{SITE_CONFIG.relative_to(ROOT)} not updated: file or a RELEASE field missing",
+                file=sys.stderr,
+            )
         for path in files:
             state, detail = states[path]
             print(f"  {path.relative_to(ROOT)}  {human(path.stat().st_size)}  [{state}]")

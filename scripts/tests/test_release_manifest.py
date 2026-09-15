@@ -21,6 +21,21 @@ sys.path.insert(0, str(HERE))
 import pe_fixture  # noqa: E402
 
 SCRIPT = HERE.parent / "release_manifest.py"
+SITE_TS = """export const VERSION = '0.5.0-beta.1';
+export const RELEASE = {
+  installerFilename: 'old.exe',
+  installerVersion: '0.4.0-beta.1',
+  installerSize: '0.0 MB',
+  installerSha256: 'old',
+  binaryFilename: 'old.exe',
+  binarySize: '0.0 MB',
+  binarySha256: 'old',
+  builtOn: '2000-01-01',
+  builtFor: 'nowhere',
+  commit: 'old',
+  signed: true,
+} as const;
+"""
 GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false"]
 
 
@@ -34,6 +49,8 @@ class Repo:
         (root / "docs/RELEASE.md").write_text(
             "# Release\n\n<!-- BUILD:START -->\nnothing yet\n<!-- BUILD:END -->\n\ntail\n", "utf-8"
         )
+        (root / "apps/web/src/config").mkdir(parents=True)
+        (root / "apps/web/src/config/site.ts").write_text(SITE_TS, "utf-8")
         (root / "src.rs").write_text("fn main() {}\n", "utf-8")
         (root / ".gitignore").write_text("target/\n", "utf-8")
         self.git("init", "-q")
@@ -95,6 +112,36 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("encastra-desktop.exe", block)
         self.assertEqual(len(re.findall(r"`[0-9a-f]{64}`", block)), 2)
         self.assertNotIn("nothing yet", block)
+        site = (self.repo.root / "apps/web/src/config/site.ts").read_text("utf-8")
+        self.assertIn(f"commit: '{self.head}'", site)
+        self.assertIn("installerFilename: 'Encastra_x64-setup.exe'", site)
+        self.assertIn("installerVersion: '0.5.0-beta.1'", site)
+        self.assertIn("signed: false", site)
+        installer_hash = re.search(
+            r"Encastra_x64-setup.exe` \| [^|]+ \| [^|]+ \| `([0-9a-f]{64})`", block
+        ).group(1)
+        self.assertIn(f"installerSha256: '{installer_hash}'", site)
+
+    def test_build_commit_prints_what_the_manifest_names(self) -> None:
+        self.repo.build(self.head)
+        self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
+        result = self.repo.manifest("--build-commit")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), self.head)
+
+    def test_verify_notices_the_website_disagreeing(self) -> None:
+        self.repo.build(self.head)
+        self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
+        site = self.repo.root / "apps/web/src/config/site.ts"
+        text = site.read_text("utf-8")
+        site.write_text(
+            re.sub(r"installerSha256: '[0-9a-f]{64}'", "installerSha256: '" + "1" * 64 + "'", text),
+            "utf-8",
+        )
+        self.repo.commit("publication with a stale site")
+        result = self.repo.manifest("--verify")
+        self.assertEqual(result.returncode, 5, result.stderr)
+        self.assertIn("site.ts installerSha256", result.stderr)
 
     def test_a_binary_from_another_commit_is_refused(self) -> None:
         # The bug this exists for: the manifest used to name whatever HEAD was when it ran.
