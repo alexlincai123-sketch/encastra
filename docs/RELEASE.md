@@ -8,20 +8,23 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.4.0-beta.1** · built 2026-09-11 on Windows AMD64 · commit `a8d790d`
+**Version 0.5.0-beta.1** · built 2026-09-15 on Windows AMD64 · commit `f6e7c29`
 
-| Artefact | Size | SHA-256 |
-|---|---|---|
-| `Encastra_0.4.0-beta.1_x64-setup.exe` | 3.2 MB | `35cf2974541f3cecb9afda77319e22d2198d42d6d185e1534c747b113864ff26` |
-| `encastra-desktop.exe` | 8.7 MB | `72e69fb6f0687a3b4b67629a6e748df4f267996d4ea008956dc124a35ee52d85` |
+| Artefact | Size | Signature | SHA-256 |
+|---|---|---|---|
+| `Encastra_0.5.0-beta.1_x64-setup.exe` | 3.4 MB | **not signed** | `6d12bab6b90cd04f743e38167ad8a92d2492270c72bc9b342ab4e43bbb102994` |
+| `encastra-desktop.exe` | 9.2 MB | **not signed** | `dbbbff757e4a0b6db215638c545f3ac40ab4fa1776397500e410985d0efc44be` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.4.0-beta.1_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Encastra_0.5.0-beta.1_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Encastra_0.5.0-beta.1_x64-setup.exe
 ```
 
-These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking.
+These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking — with the caveat that a hash published beside the download is only as trustworthy as the site serving both.
+
+This build was published unsigned deliberately (`--allow-unsigned`). See docs/SIGNING.md for what is needed to stop doing that.
 
 <!-- BUILD:END -->
 

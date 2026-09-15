@@ -8,7 +8,7 @@
  */
 
 /** The release this website documents. Single module, imported everywhere. */
-export const VERSION = '0.4.0-beta.1';
+export const VERSION = '0.5.0-beta.1';
 
 export const SITE = {
   name: 'Encastra',
@@ -103,16 +103,16 @@ export const RELEASE: {
   installerFormat: string;
 } = {
   /** Exactly as published in docs/RELEASE.md. */
-  installerFilename: 'Encastra_0.4.0-beta.1_x64-setup.exe',
-  installerVersion: '0.4.0-beta.1',
-  installerSize: '3.2 MB',
-  installerSha256: '35cf2974541f3cecb9afda77319e22d2198d42d6d185e1534c747b113864ff26',
+  installerFilename: 'Encastra_0.5.0-beta.1_x64-setup.exe',
+  installerVersion: '0.5.0-beta.1',
+  installerSize: '3.4 MB',
+  installerSha256: '6d12bab6b90cd04f743e38167ad8a92d2492270c72bc9b342ab4e43bbb102994',
   binaryFilename: 'encastra-desktop.exe',
-  binarySize: '8.7 MB',
-  binarySha256: '72e69fb6f0687a3b4b67629a6e748df4f267996d4ea008956dc124a35ee52d85',
-  builtOn: '2026-09-11',
+  binarySize: '9.2 MB',
+  binarySha256: 'dbbbff757e4a0b6db215638c545f3ac40ab4fa1776397500e410985d0efc44be',
+  builtOn: '2026-09-15',
   builtFor: 'Windows AMD64',
-  commit: 'a8d790d',
+  commit: 'f6e7c29',
   signed: false,
   /** Installer format. Per user, no administrator required. See docs/RELEASE.md. */
   installerFormat: 'NSIS',

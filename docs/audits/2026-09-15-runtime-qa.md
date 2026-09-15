@@ -84,6 +84,26 @@ and from the real filesystem. Nothing here was inferred from unit tests.
 
 ---
 
+## Build `0.5.0-beta.1` (the release build; tree at `f6e7c29` plus the version bump, lockfiles, the Home→Builder fix and these documents)
+
+The same two scripts, unchanged, against `target/release/encastra-desktop.exe` as produced by
+`npm run tauri:build` for the release. `about` reports `version 0.5.0-beta.1`,
+`runtime 0.5.0-beta.1`, schemas 1/1.
+
+- **Through the bridge: 19 of 19 passed**, the same nineteen rows as above, with the same
+  refusals word for word and the same on-disk evidence (2 071-byte project, one snapshot,
+  `library.json` with no `.tmp`, `library/imports` never created by a refused import, both nodes
+  `ok` in the two-step run).
+- **Through the interface: 7 of 7 non-dialog steps passed** (shell, welcome, six sidebar items
+  with the library, no dev hook, library empty state, sample loaded, three nodes rendered), and
+  the save step stopped at the native dialog for the reason in Method — it was not driven.
+- Added on this branch and **not runtime-verified** in this session, because each needs either a
+  dialog or a keyboard at the real window: the unsaved-changes prompt (store logic covered by 14
+  vitest cases and the Rust `should_prevent_close` cases), the keyboard connect mode and
+  connection focus (pure logic covered by `connect-mode.test.ts` / `edge-focus.test.ts`), the
+  Import dialog's rendering of an inspection (`ImportError` → sentence mapping covered
+  exhaustively over all variants).
+
 ## Environment limitation, stated once
 
 Runtime QA that needs a native dialog cannot be automated safely on a machine somebody is using.

@@ -1067,6 +1067,10 @@ async function doOpenProject(set: SetEditor, get: GetEditor): Promise<void> {
     if (!path) return;
     applyProject(set, await ipc.openProject(path));
     rememberProject(path);
+    // Opening from Home used to leave the person on Home, with the project loaded somewhere
+    // behind it. Opening from the library already went to the Builder; the two ways of opening
+    // the same thing should end in the same place.
+    set({ view: 'builder' });
     // The runtime has just recorded this in the library. Re-listing is how this side finds
     // out, rather than editing its own copy and hoping the two agree.
     await get().loadLibrary();
