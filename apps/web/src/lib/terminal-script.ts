@@ -21,6 +21,14 @@
  *
  * `step` ties a line to a node in the diagram beside the terminal. When the line prints, that
  * node lights up. The terminal teaches the idea; the diagram shows where it lands.
+ *
+ * **This file is English in every language, deliberately.** It is not copy: it is a recording of
+ * what the CLI prints, and the CLI prints English. A Spanish visitor gets the chrome around it
+ * translated — the caption, the controls, the transcript's introduction for assistive technology
+ * (`components/terminal/Terminal.tsx`, via `dictionaries/*.ts`'s `terminal` section) — and the
+ * transcript itself exactly as the binary would emit it. Translating a command or an output line
+ * would put words in the product's mouth that it never says, directly under a caption promising
+ * this is a recording and not a live terminal.
  */
 
 export type LineKind =

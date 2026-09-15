@@ -6,16 +6,18 @@ import { PermissionMock } from '@/components/ui/PermissionMock';
 import { StepSection } from '@/components/ui/StepSection';
 import { ButtonRow, CTA, PageHeader, SourceRef } from '@/components/ui/Ui';
 import { componentNode, findComponent } from '@/lib/graph-nodes';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'howItWorks.hero.eyebrow'),
     description: t(locale, 'howItWorks.meta.description'),
-  };
+    path: '/how-it-works',
+  });
 }
 
 const READ = componentNode('encastra.file.read');

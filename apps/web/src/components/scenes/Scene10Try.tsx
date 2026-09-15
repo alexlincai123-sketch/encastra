@@ -74,7 +74,7 @@ export function Scene10Try({ locale }: { locale: Locale }): ReactNode {
   });
 
   return (
-    <section ref={ref} className={styles.scene} aria-label="Try it" data-scene="try">
+    <section ref={ref} className={styles.scene} aria-label={COPY.label} data-scene="try">
       <div className={`${styles.pin} u-stage`} data-pin>
         {/* `u-depth` here, not only where `index` itself sits, so the opening HANDON's Z motion
             survives the trip through this intermediate layer — see the equivalent note in
@@ -100,9 +100,9 @@ export function Scene10Try({ locale }: { locale: Locale }): ReactNode {
           </p>
 
           <div className={styles.tryActions} data-animate>
-            <CTA href="/download">Download the beta</CTA>
+            <CTA href="/download">{COPY.downloadCta}</CTA>
             <CTA href="/docs" variant="secondary">
-              Read the documentation
+              {COPY.docsCta}
             </CTA>
           </div>
 

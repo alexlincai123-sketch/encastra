@@ -3,16 +3,18 @@ import type { ReactNode } from 'react';
 
 import { Card, CTA, PageHeader, SectionHeading, SourceRef } from '@/components/ui/Ui';
 import { DOCS } from '@/config/site';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'docs.hero.eyebrow'),
     description: t(locale, 'docs.meta.description'),
-  };
+    path: '/docs',
+  });
 }
 
 /** Maps each `config/site.ts` `DOCS` slug to its `docs.items.*` translation key — the slug itself

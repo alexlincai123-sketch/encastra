@@ -7,16 +7,18 @@ import { StepSection } from '@/components/ui/StepSection';
 import { ButtonRow, Callout, Card, CTA, PageHeader, SectionHeading } from '@/components/ui/Ui';
 import type { ConfigRecord } from '@/lib/components.types';
 import { componentNode, findComponent } from '@/lib/graph-nodes';
-import { getLocale, type Locale, t } from '@/lib/i18n';
+import { getLocale, type Locale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'tutorials.meta.title'),
     description: t(locale, 'tutorials.meta.description'),
-  };
+    path: '/tutorials',
+  });
 }
 
 const WATCH = componentNode('encastra.file.watch');

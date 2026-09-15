@@ -3,17 +3,19 @@ import type { ReactNode } from 'react';
 
 import { Callout, Card, PageHeader, SectionHeading, StatusBadge } from '@/components/ui/Ui';
 import { RELEASE, RELEASE_MATCHES_VERSION, REQUIREMENTS, STATUS, VERSION } from '@/config/site';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import { DownloadTarget } from './DownloadTarget';
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'download.hero.eyebrow'),
     description: t(locale, 'download.meta.description', { version: RELEASE.installerVersion }),
-  };
+    path: '/download',
+  });
 }
 
 export default async function DownloadPage(): Promise<ReactNode> {

@@ -4,16 +4,18 @@ import type { FlowStep, GraphNodeSpec } from '@/components/graph/Graph';
 import { GraphBranch, GraphFlow } from '@/components/graph/Graph';
 import { PageHeader, SectionHeading, StatusBadge } from '@/components/ui/Ui';
 import { componentNode } from '@/lib/graph-nodes';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'nav.primary.templates'),
     description: t(locale, 'templates.meta.description'),
-  };
+    path: '/templates',
+  });
 }
 
 const WATCH = componentNode('encastra.file.watch');

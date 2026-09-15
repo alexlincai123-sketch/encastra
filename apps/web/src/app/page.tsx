@@ -4,13 +4,19 @@ import type { ReactNode } from 'react';
 import { HomeExperience } from '@/components/scenes/HomeExperience';
 import { Card, CTA, SectionHeading, StatusBadge } from '@/components/ui/Ui';
 import { RELEASE, STATUS } from '@/config/site';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './home.module.css';
 
+/**
+ * No `title` is passed: the home page's `<title>` is the layout's `title.default` — the site name
+ * and the tagline — and handing `pageMetadata` a title would put the site name through the
+ * layout's `%s — Encastra` template a second time. `pageMetadata` reads the omission and gives
+ * the social card that same default title.
+ */
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return { description: t(locale, 'site.description') };
+  return pageMetadata({ locale, description: t(locale, 'site.description'), path: '' });
 }
 
 export default async function HomePage(): Promise<ReactNode> {

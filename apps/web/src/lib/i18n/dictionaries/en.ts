@@ -170,12 +170,45 @@ const en: Messages = {
   graph: {
     needsPermission: 'needs your permission',
     routesTo: 'routes to',
+    /** Read out beside a required port, where a sighted reader sees an asterisk. */
+    required: 'required',
     state: {
       running: 'running',
       ok: 'ok',
       failed: 'failed',
       skipped: 'skipped',
     },
+  },
+
+  /**
+   * The chrome around the home page's terminal (`components/terminal/Terminal.tsx`) — the
+   * caption, the playback controls and the note a visitor with reduced motion gets instead of
+   * them.
+   *
+   * The transcript itself (`lib/terminal-script.ts`) is **not** here and is not translated: it
+   * reproduces what the real CLI prints, and a command or an output line rewritten in Spanish
+   * would be a line the product never emits. The frame around it is this site's own voice and
+   * does translate.
+   */
+  terminal: {
+    caption: 'Recorded demonstration, not a live terminal',
+    transcriptIntro: 'Recorded terminal transcript, shown here in full for assistive technology:',
+    controlsLegend: 'Playback controls',
+    play: 'Play',
+    pause: 'Pause',
+    restart: 'Restart',
+    speed: 'Playback speed, currently {speed}×. Press to change.',
+    reducedNote:
+      'Reduced motion is on, so this shows the finished transcript rather than typing it out.',
+  },
+
+  /** The 404 page (`app/not-found.tsx`). */
+  notFound: {
+    eyebrow: '404',
+    title: 'This page does not exist',
+    lead: 'The address you followed does not match any page on this site. It may be mistyped, or it may point at something that was never built.',
+    home: 'Go to the home page',
+    docs: 'Read the documentation',
   },
 
   /** The permission-request mock (`components/ui/PermissionMock.tsx`). */

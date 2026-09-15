@@ -81,7 +81,7 @@ export function Scene09Terminal({ locale }: { locale: Locale }): ReactNode {
     <section
       ref={ref}
       className={styles.terminalSection}
-      aria-label="Terminal"
+      aria-label={COPY.label}
       data-scene="terminal"
     >
       <div className={`${styles.stage} u-stage`}>
@@ -102,7 +102,7 @@ export function Scene09Terminal({ locale }: { locale: Locale }): ReactNode {
             <span className={scene.bridgeLine} />
             <span className={scene.bridgeDot} />
           </div>
-          <TerminalDemo />
+          <TerminalDemo locale={locale} />
         </div>
       </div>
     </section>

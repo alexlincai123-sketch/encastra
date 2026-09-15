@@ -123,7 +123,7 @@ export function Scene05Run({ locale }: { locale: Locale }): ReactNode {
   });
 
   return (
-    <section ref={ref} className={styles.scene} aria-label="Run" data-scene="run">
+    <section ref={ref} className={styles.scene} aria-label={COPY.label} data-scene="run">
       <div className={styles.pin} data-pin>
         <div className={`${styles.stage} ${styles.centerCol}`}>
           <span className={styles.index} data-animate>
@@ -162,7 +162,7 @@ export function Scene05Run({ locale }: { locale: Locale }): ReactNode {
                           </div>
                         ) : null}
                         <div className={local.chainNode}>
-                          <GraphNode node={step} />
+                          <GraphNode node={step} locale={locale} />
                         </div>
                       </div>
                     );
@@ -183,7 +183,7 @@ export function Scene05Run({ locale }: { locale: Locale }): ReactNode {
                         <Wire type={wire.type} label={wire.label} active />
                       ) : null}
                       <div className={local.chainNode}>
-                        <GraphNode node={step} state="ok" highlighted />
+                        <GraphNode node={step} state="ok" highlighted locale={locale} />
                       </div>
                     </div>
                   );

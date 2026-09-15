@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { Callout, PageHeader } from '@/components/ui/Ui';
 import { findLegalDoc, LEGAL_DOCS } from '@/config/legal';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
@@ -25,10 +25,15 @@ export async function generateMetadata({
   const doc = findLegalDoc(slug);
   if (doc === undefined) return {};
   const locale = await getLocale();
-  return {
+  // `doc.title` is not run through `t()`: `config/legal.ts` holds these documents in English
+  // only, and titling a card in a language the document behind it is not written in would be a
+  // worse promise than an English title.
+  return pageMetadata({
+    locale,
     title: doc.title,
     description: t(locale, 'legal.doc.metaDescription', { summary: doc.summary }),
-  };
+    path: `/legal/${doc.slug}`,
+  });
 }
 
 export default async function LegalDocPage({

@@ -4,16 +4,18 @@ import type { ReactNode } from 'react';
 import { Card, CTA, NotBuilt, PageHeader, SectionHeading, StatusBadge } from '@/components/ui/Ui';
 import { STATUS } from '@/config/site';
 import { COMPONENT_COUNT, TRIGGER_COUNT } from '@/lib/components.data';
-import { getLocale, t } from '@/lib/i18n';
+import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return {
+  return pageMetadata({
+    locale,
     title: t(locale, 'nav.primary.features'),
     description: t(locale, 'features.meta.description'),
-  };
+    path: '/features',
+  });
 }
 
 const BUILT_KEYS = [

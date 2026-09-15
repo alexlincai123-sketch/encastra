@@ -18,6 +18,16 @@ const HOVER_SELECTOR = 'a, button, [role="button"], input, [data-cursor-hover]';
  * setup, because the component returns `null` before its effect subscribes to anything. Also off
  * under reduced motion: a cursor that is only ever exactly where the pointer already is adds
  * nothing, and this skips deciding whether "following" itself counts as motion to reduce.
+ *
+ * And off for anybody who has asked their system for a stronger contrast or for its own colours.
+ * This component does not merely draw a cursor, it *removes the native one* (`body.style.cursor =
+ * 'none'` below) and replaces it with two small shapes drawn in this site's palette. Under
+ * Windows High Contrast / `forced-colors`, a page's colours are overridden but these elements
+ * still are not the operating system's pointer, which a visitor using forced colours may have
+ * deliberately enlarged, recoloured or themed; under `prefers-contrast: more` the request is
+ * explicitly for more legible chrome, and a thin dot with a faint trailing ring is less legible
+ * than the arrow it replaced. In both cases the honest answer is to leave the pointer the
+ * visitor already chose alone — nothing else on the page depends on this component existing.
  */
 export function Cursor(): ReactNode {
   const [enabled, setEnabled] = useState(false);
@@ -29,16 +39,23 @@ export function Cursor(): ReactNode {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
     const fine = window.matchMedia('(pointer: fine) and (hover: hover)');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    // Two separate queries rather than one comma-joined list: a browser that does not know
+    // `prefers-contrast` would fail to parse a list containing it and take the whole query with
+    // it, silently disabling the escape hatch *and* the forced-colors one. Queried apart, an
+    // unknown feature is simply a query that never matches, and the rest still work.
+    const forcedColours = window.matchMedia('(forced-colors: active)');
+    const moreContrast = window.matchMedia('(prefers-contrast: more)');
+    const queries = [fine, reduced, forcedColours, moreContrast];
 
     function apply(): void {
-      setEnabled(fine.matches && !reduced.matches);
+      setEnabled(
+        fine.matches && !reduced.matches && !forcedColours.matches && !moreContrast.matches,
+      );
     }
     apply();
-    fine.addEventListener('change', apply);
-    reduced.addEventListener('change', apply);
+    for (const query of queries) query.addEventListener('change', apply);
     return () => {
-      fine.removeEventListener('change', apply);
-      reduced.removeEventListener('change', apply);
+      for (const query of queries) query.removeEventListener('change', apply);
     };
   }, []);
 

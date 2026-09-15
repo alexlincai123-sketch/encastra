@@ -164,12 +164,34 @@ const es: Messages = {
   graph: {
     needsPermission: 'necesita tu permiso',
     routesTo: 'enruta a',
+    required: 'obligatorio',
     state: {
       running: 'ejecutando',
       ok: 'ok',
       failed: 'fallido',
       skipped: 'omitido',
     },
+  },
+
+  terminal: {
+    caption: 'Demostración grabada, no es una terminal en directo',
+    transcriptIntro:
+      'Transcripción grabada de la terminal, aquí completa para tecnologías de asistencia:',
+    controlsLegend: 'Controles de reproducción',
+    play: 'Reproducir',
+    pause: 'Pausar',
+    restart: 'Reiniciar',
+    speed: 'Velocidad de reproducción, ahora {speed}×. Púlsalo para cambiarla.',
+    reducedNote:
+      'Tienes activado el movimiento reducido, así que se muestra la transcripción terminada en lugar de escribirla letra a letra.',
+  },
+
+  notFound: {
+    eyebrow: '404',
+    title: 'Esta página no existe',
+    lead: 'La dirección que has seguido no corresponde a ninguna página de este sitio. Puede estar mal escrita, o apuntar a algo que nunca se construyó.',
+    home: 'Ir a la página de inicio',
+    docs: 'Leer la documentación',
   },
 
   permissionMock: {
