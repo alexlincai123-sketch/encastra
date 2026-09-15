@@ -156,6 +156,7 @@ const es: Messages = {
     // the keyboard; this is where somebody finds out that it is.
     menu: {
       label: 'Acciones del lienzo',
+      connect: 'Conectar desde aquí…',
       duplicate: 'Duplicar',
       disable: 'Desactivar',
       enable: 'Activar',
@@ -163,14 +164,61 @@ const es: Messages = {
       deleteConnection: 'Eliminar la conexión',
       paste: 'Pegar',
       selectAll: 'Seleccionar todo',
+      undo: 'Deshacer',
+      redo: 'Rehacer',
+      many: {
+        duplicate: {
+          one: 'Duplicar {count} paso',
+          other: 'Duplicar {count} pasos',
+        },
+        disable: {
+          one: 'Desactivar {count} paso',
+          other: 'Desactivar {count} pasos',
+        },
+        enable: {
+          one: 'Activar {count} paso',
+          other: 'Activar {count} pasos',
+        },
+        delete: {
+          one: 'Eliminar {count} paso',
+          other: 'Eliminar {count} pasos',
+        },
+      },
     },
     keysHint:
-      'Usa las flechas para moverte entre pasos, Intro para abrir un paso en el inspector, Escape para deseleccionar y Suprimir para eliminar el paso seleccionado.',
+      'Usa las flechas para moverte entre pasos, Intro para abrir un paso en el inspector, C para empezar una conexión desde el paso seleccionado, E para recorrer las conexiones que ya tiene, Suprimir para eliminar lo que esté seleccionado y Escape para deseleccionar.',
+    connect: {
+      started:
+        'Conectando desde {from}. {targets}. Usa las flechas para elegir, Intro para conectar y Escape para cancelar.',
+      targets: {
+        one: '{count} destino posible',
+        other: '{count} destinos posibles',
+      },
+      connected: 'Conectado.',
+      cancelled: 'Cancelado.',
+      noTargets: 'Nada en este lienzo puede recibir lo que produce {step}.',
+      noOutputs: '{step} no produce nada desde lo que conectar.',
+    },
+    connection: {
+      focused: 'Conexión de {from} a {to}.',
+      removed: 'Conexión eliminada.',
+      none: '{step} todavía no tiene conexiones.',
+    },
     a11y: {
       selected: '{name}, paso {index} de {total}, seleccionado.',
+      port: '{step} · {port}',
     },
     node: {
       notInstalled: 'No instalado.',
+      glyphs: {
+        pending: '·',
+        running: '…',
+        ok: '✓',
+        failed: '✕',
+        skipped: '–',
+        cancelled: '⊘',
+        disabled: '–',
+      },
     },
     wire: {
       ops: {
@@ -1085,6 +1133,9 @@ const es: Messages = {
           duplicateSelection: 'Duplicar la selección',
           selectAll: 'Seleccionar todo',
           deleteSelection: 'Eliminar la selección',
+          connectFromStep: 'Empezar una conexión desde el paso seleccionado, en el lienzo',
+          cycleConnections: 'Recorrer las conexiones del paso seleccionado, en el lienzo',
+          deleteConnection: 'Eliminar la conexión seleccionada, en el lienzo',
         },
         note: 'Fijos por ahora, no reasignables. Ninguno se activa mientras escribes en un campo de texto.',
       },

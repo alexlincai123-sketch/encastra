@@ -157,6 +157,7 @@ const de: Messages = {
     // the keyboard; this is where somebody finds out that it is.
     menu: {
       label: 'Aktionen der Arbeitsfläche',
+      connect: 'Von hier aus verbinden…',
       duplicate: 'Duplizieren',
       disable: 'Ausschalten',
       enable: 'Einschalten',
@@ -164,14 +165,61 @@ const de: Messages = {
       deleteConnection: 'Verbindung löschen',
       paste: 'Einfügen',
       selectAll: 'Alles auswählen',
+      undo: 'Rückgängig',
+      redo: 'Wiederholen',
+      many: {
+        duplicate: {
+          one: '{count} Schritt duplizieren',
+          other: '{count} Schritte duplizieren',
+        },
+        disable: {
+          one: '{count} Schritt ausschalten',
+          other: '{count} Schritte ausschalten',
+        },
+        enable: {
+          one: '{count} Schritt einschalten',
+          other: '{count} Schritte einschalten',
+        },
+        delete: {
+          one: '{count} Schritt löschen',
+          other: '{count} Schritte löschen',
+        },
+      },
     },
     keysHint:
-      'Mit den Pfeiltasten zwischen Schritten bewegen, mit Eingabe einen Schritt im Inspektor öffnen, mit Escape die Auswahl aufheben und mit Entf den ausgewählten Schritt entfernen.',
+      'Mit den Pfeiltasten zwischen Schritten bewegen, mit Eingabe einen Schritt im Inspektor öffnen, mit C eine Verbindung vom ausgewählten Schritt aus beginnen, mit E durch dessen bestehende Verbindungen gehen, mit Entf das Ausgewählte entfernen und mit Escape loslassen.',
+    connect: {
+      started:
+        'Verbindung von {from}. {targets}. Pfeiltasten zum Auswählen, Eingabe zum Verbinden, Escape zum Abbrechen.',
+      targets: {
+        one: '{count} mögliches Ziel',
+        other: '{count} mögliche Ziele',
+      },
+      connected: 'Verbunden.',
+      cancelled: 'Abgebrochen.',
+      noTargets: 'Nichts auf dieser Arbeitsfläche kann aufnehmen, was {step} erzeugt.',
+      noOutputs: '{step} erzeugt nichts, von dem aus verbunden werden könnte.',
+    },
+    connection: {
+      focused: 'Verbindung von {from} nach {to}.',
+      removed: 'Verbindung entfernt.',
+      none: '{step} hat noch keine Verbindungen.',
+    },
     a11y: {
       selected: '{name}, Schritt {index} von {total}, ausgewählt.',
+      port: '{step} · {port}',
     },
     node: {
       notInstalled: 'Nicht installiert.',
+      glyphs: {
+        pending: '·',
+        running: '…',
+        ok: '✓',
+        failed: '✕',
+        skipped: '–',
+        cancelled: '⊘',
+        disabled: '–',
+      },
     },
     wire: {
       ops: {
@@ -1095,6 +1143,11 @@ const de: Messages = {
           duplicateSelection: 'Auswahl duplizieren',
           selectAll: 'Alles auswählen',
           deleteSelection: 'Auswahl löschen',
+          connectFromStep:
+            'Eine Verbindung vom ausgewählten Schritt aus beginnen, auf der Arbeitsfläche',
+          cycleConnections:
+            'Durch die Verbindungen des ausgewählten Schritts gehen, auf der Arbeitsfläche',
+          deleteConnection: 'Die ausgewählte Verbindung löschen, auf der Arbeitsfläche',
         },
         note: 'Derzeit fest, nicht neu zuweisbar. Keines davon löst aus, während Sie in ein Textfeld tippen.',
       },

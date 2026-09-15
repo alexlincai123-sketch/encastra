@@ -7,11 +7,16 @@
  *
  * The badge shows what the runtime will do, taken from the plan validation produced — not
  * recomputed here, so the editor and the engine cannot describe the same edge differently.
+ *
+ * It also has to be able to look held. A connection is not part of the selection — React Flow's
+ * own edge focus is switched off in `Canvas.tsx`, and for the reason given there — so when `E`
+ * walks somebody onto this wire, `is-focused` is the only thing that says which one they are on.
  */
 
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps, getBezierPath } from '@xyflow/react';
 import { useTranslation } from '../i18n';
 import { useEditor } from '../store';
+import { useCanvasFocus } from './connect-mode';
 
 /** The `canvas.wire.ops.*` key for a conversion op id, so a locale can phrase the operation
  * however it reads best rather than being tied to the runtime's own kebab-case identifier. */
@@ -49,6 +54,7 @@ export function Wire({
   selected,
 }: EdgeProps) {
   const conversions = useEditor((s) => s.validation?.conversions);
+  const focused = useCanvasFocus().edgeId === id;
   const { t } = useTranslation();
 
   const [path, labelX, labelY] = getBezierPath({
@@ -77,7 +83,7 @@ export function Wire({
 
   return (
     <>
-      <BaseEdge id={id} path={path} />
+      <BaseEdge id={id} path={path} className={focused ? 'is-focused' : undefined} />
       {label ? (
         <EdgeLabelRenderer>
           <div
@@ -85,8 +91,9 @@ export function Wire({
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             }}
-            // Selection is the moment somebody is asking "what does this do?".
-            data-selected={selected ? 'true' : undefined}
+            // Selection — or the keyboard landing on this wire — is the moment somebody is
+            // asking "what does this do?".
+            data-selected={selected || focused ? 'true' : undefined}
           >
             {label}
           </div>

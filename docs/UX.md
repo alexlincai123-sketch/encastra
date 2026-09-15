@@ -170,10 +170,15 @@ It was named the first item of work in 0.2 for that reason — ahead of the webs
 anything that would be more visible — and [BETA-0.2](BETA-0.2.md) is where its status is
 recorded.
 
-**What it means in practice.** Nodes can be reached, selected and moved between by keyboard. The
-canvas carries the roles and labels that let assistive software describe it. Icon-only controls
-have accessible names. Focus is always visible, never trapped in a region with no way out, and the
-shortcuts that exist are discoverable rather than folklore.
+**What it means in practice.** Nodes can be reached, selected and moved between by keyboard, and
+so can the wires between them: `C` starts a connection from the selected step and the arrow keys
+offer only the ports the type rules would actually accept, while `E` steps through the connections
+a step already has so that one can be deleted — a canvas that could be walked but never wired was
+a keyboard path that stopped one step short of the product. The canvas carries the roles and labels
+that let assistive software describe it, and says what it is holding as that changes. Icon-only
+controls have accessible names, and a step's run state is told by a shape as well as a colour.
+Focus is always visible, never trapped in a region with no way out, and the shortcuts that exist
+are discoverable rather than folklore.
 
 **How to check it.** Unplug the mouse. Build the first tutorial. Anywhere you get stuck is a
 defect, and it is worth more than whatever else was planned that week.

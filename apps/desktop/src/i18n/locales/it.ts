@@ -155,6 +155,7 @@ const it: Messages = {
     // the keyboard; this is where somebody finds out that it is.
     menu: {
       label: 'Azioni della tela',
+      connect: 'Connetti da qui…',
       duplicate: 'Duplica',
       disable: 'Disattiva',
       enable: 'Attiva',
@@ -162,14 +163,61 @@ const it: Messages = {
       deleteConnection: 'Elimina la connessione',
       paste: 'Incolla',
       selectAll: 'Seleziona tutto',
+      undo: 'Annulla',
+      redo: 'Ripeti',
+      many: {
+        duplicate: {
+          one: 'Duplica {count} passaggio',
+          other: 'Duplica {count} passaggi',
+        },
+        disable: {
+          one: 'Disattiva {count} passaggio',
+          other: 'Disattiva {count} passaggi',
+        },
+        enable: {
+          one: 'Attiva {count} passaggio',
+          other: 'Attiva {count} passaggi',
+        },
+        delete: {
+          one: 'Elimina {count} passaggio',
+          other: 'Elimina {count} passaggi',
+        },
+      },
     },
     keysHint:
-      'Usa le frecce per spostarti tra i passaggi, Invio per aprire un passaggio nell’ispettore, Esc per deselezionare e Canc per rimuovere il passaggio selezionato.',
+      'Usa le frecce per spostarti tra i passaggi, Invio per aprire un passaggio nell’ispettore, C per iniziare una connessione dal passaggio selezionato, E per scorrere le connessioni che ha già, Canc per rimuovere ciò che è selezionato ed Esc per lasciarlo.',
+    connect: {
+      started:
+        'Connessione da {from}. {targets}. Frecce per scegliere, Invio per connettere, Esc per annullare.',
+      targets: {
+        one: '{count} destinazione possibile',
+        other: '{count} destinazioni possibili',
+      },
+      connected: 'Connesso.',
+      cancelled: 'Annullato.',
+      noTargets: 'Nulla su questa tela può ricevere ciò che produce {step}.',
+      noOutputs: '{step} non produce nulla da cui connettere.',
+    },
+    connection: {
+      focused: 'Connessione da {from} a {to}.',
+      removed: 'Connessione rimossa.',
+      none: '{step} non ha ancora connessioni.',
+    },
     a11y: {
       selected: '{name}, passaggio {index} di {total}, selezionato.',
+      port: '{step} · {port}',
     },
     node: {
       notInstalled: 'Non installato.',
+      glyphs: {
+        pending: '·',
+        running: '…',
+        ok: '✓',
+        failed: '✕',
+        skipped: '–',
+        cancelled: '⊘',
+        disabled: '–',
+      },
     },
     wire: {
       ops: {
@@ -1083,6 +1131,9 @@ const it: Messages = {
           duplicateSelection: 'Duplica la selezione',
           selectAll: 'Seleziona tutto',
           deleteSelection: 'Elimina la selezione',
+          connectFromStep: 'Inizia una connessione dal passaggio selezionato, sulla tela',
+          cycleConnections: 'Scorre le connessioni del passaggio selezionato, sulla tela',
+          deleteConnection: 'Elimina la connessione selezionata, sulla tela',
         },
         note: 'Fisse per ora, non riassegnabili. Nessuna di queste si attiva mentre digiti in un campo di testo.',
       },

@@ -156,6 +156,15 @@ interface EditorState {
   deleteSelected: () => void;
   /** Removes one step by id, whichever step is selected — what a right-click acts on. */
   deleteStep: (nodeId: string) => void;
+  /**
+   * The same two actions over several steps at once, as one entry in the history.
+   *
+   * A right-click inside a selection acts on the whole selection, and doing that by calling the
+   * singular action once per step would leave a selection of six needing six presses of undo to
+   * put back — which is not what anybody means by "undo that".
+   */
+  deleteSteps: (nodeIds: readonly string[]) => void;
+  toggleDisabledMany: (nodeIds: readonly string[]) => void;
   /** Removes one connection by id, leaving both steps where they are. */
   deleteConnection: (edgeId: string) => void;
   onNodesChange: (changes: NodeChange<EditorNode>[]) => void;
@@ -371,6 +380,41 @@ export const useEditor = create<EditorState>((set, get) => ({
         // Connections that pointed at it go too, rather than dangling.
         edges: s.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
         selectedNodeId: s.selectedNodeId === nodeId ? null : s.selectedNodeId,
+        validation: null,
+        dirty: true,
+      };
+    });
+  },
+
+  deleteSteps(nodeIds) {
+    const doomed = new Set(nodeIds);
+    set((s) => {
+      if (!s.nodes.some((n) => doomed.has(n.id))) return {};
+      return {
+        history: record(s.history, { nodes: s.nodes, edges: s.edges }),
+        nodes: s.nodes.filter((n) => !doomed.has(n.id)),
+        // Connections that pointed at any of them go too, rather than dangling.
+        edges: s.edges.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)),
+        selectedNodeId:
+          s.selectedNodeId !== null && doomed.has(s.selectedNodeId) ? null : s.selectedNodeId,
+        validation: null,
+        dirty: true,
+      };
+    });
+  },
+
+  toggleDisabledMany(nodeIds) {
+    const chosen = new Set(nodeIds);
+    set((s) => {
+      const affected = s.nodes.filter((n) => chosen.has(n.id));
+      if (affected.length === 0) return {};
+      // One verb for the whole selection. A switch that turned some on and others off would
+      // leave nobody able to say what the menu item is about to do: everything goes off unless
+      // everything is already off, in which case everything comes back on. The label the menu
+      // shows is chosen from the same rule, so the word and the effect cannot disagree.
+      const disabled = !affected.every((n) => n.data.disabled === true);
+      return {
+        nodes: s.nodes.map((n) => (chosen.has(n.id) ? { ...n, data: { ...n.data, disabled } } : n)),
         validation: null,
         dirty: true,
       };

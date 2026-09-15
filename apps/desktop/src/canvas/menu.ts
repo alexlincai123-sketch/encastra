@@ -29,9 +29,19 @@ export function clampToViewport(at: Point, size: Size, viewport: Size): Point {
   };
 }
 
-/** The items a right-click on a step offers, in order. */
-export const STEP_MENU_IDS = ['duplicate', 'disabled', 'delete'] as const;
+/** The items a right-click on a single step offers, in order. */
+export const STEP_MENU_IDS = ['connect', 'duplicate', 'disabled', 'delete'] as const;
 export type StepMenuId = (typeof STEP_MENU_IDS)[number];
+
+/**
+ * The items a right-click *inside a selection of several steps* offers, in order.
+ *
+ * Connecting is not among them, and cannot be: a connection has one source port, so "connect
+ * from these six" is not something anybody could mean. Offering it would have to narrow the
+ * selection to the step under the pointer first, which is the very behaviour this list exists
+ * to stop.
+ */
+export const SELECTION_MENU_IDS = ['duplicate', 'disabled', 'delete'] as const;
 
 /**
  * One item, two words. A step that is switched off offers to switch it on, and the other way
@@ -42,15 +52,39 @@ export function stepToggleKey(disabled: boolean): 'canvas.menu.enable' | 'canvas
 }
 
 /**
+ * The same choice for a whole selection, from the same rule the store applies: everything goes
+ * off unless everything is already off. A mixed selection therefore offers to switch off, which
+ * is exactly what the one press does — label and effect come from one fact, so they cannot
+ * drift apart.
+ */
+export function selectionToggleKey(
+  allDisabled: boolean,
+): 'canvas.menu.many.enable' | 'canvas.menu.many.disable' {
+  return allDisabled ? 'canvas.menu.many.enable' : 'canvas.menu.many.disable';
+}
+
+/**
  * The items a right-click on empty canvas offers.
  *
- * Both of them act on something that may not be there: pasting needs something copied, and
- * selecting all needs something to select. An item that would do nothing is not shown, and when
- * that leaves nothing at all the menu does not open — the browser's menu stays refused either
- * way, so a right-click on an empty canvas is simply quiet.
+ * Every one of them acts on something that may not be there: undo needs an edit behind it, redo
+ * needs an undo behind that, pasting needs something copied, and selecting all needs something
+ * to select. An item that would do nothing is not shown, and when that leaves nothing at all the
+ * menu does not open — the browser's menu stays refused either way, so a right-click on an empty
+ * canvas is simply quiet.
+ *
+ * Undo and redo come first because they are about what just happened rather than about what is
+ * on the canvas — and because on a canvas something has just been deleted from, they are the
+ * only way back, which until now was reachable from the keyboard alone.
  */
-export function canvasMenuIds(has: { clipboard: boolean; nodes: boolean }): string[] {
+export function canvasMenuIds(has: {
+  clipboard: boolean;
+  nodes: boolean;
+  undo: boolean;
+  redo: boolean;
+}): string[] {
   const ids: string[] = [];
+  if (has.undo) ids.push('undo');
+  if (has.redo) ids.push('redo');
   if (has.clipboard) ids.push('paste');
   if (has.nodes) ids.push('selectAll');
   return ids;

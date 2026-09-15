@@ -155,6 +155,7 @@ const fr: Messages = {
     // the keyboard; this is where somebody finds out that it is.
     menu: {
       label: 'Actions du canevas',
+      connect: 'Connecter depuis ici…',
       duplicate: 'Dupliquer',
       disable: 'Désactiver',
       enable: 'Activer',
@@ -162,14 +163,61 @@ const fr: Messages = {
       deleteConnection: 'Supprimer la connexion',
       paste: 'Coller',
       selectAll: 'Tout sélectionner',
+      undo: 'Annuler',
+      redo: 'Rétablir',
+      many: {
+        duplicate: {
+          one: 'Dupliquer {count} étape',
+          other: 'Dupliquer {count} étapes',
+        },
+        disable: {
+          one: 'Désactiver {count} étape',
+          other: 'Désactiver {count} étapes',
+        },
+        enable: {
+          one: 'Activer {count} étape',
+          other: 'Activer {count} étapes',
+        },
+        delete: {
+          one: 'Supprimer {count} étape',
+          other: 'Supprimer {count} étapes',
+        },
+      },
     },
     keysHint:
-      'Utilisez les flèches pour vous déplacer entre les étapes, Entrée pour ouvrir une étape dans l’inspecteur, Échap pour désélectionner, et Suppr pour retirer l’étape sélectionnée.',
+      'Utilisez les flèches pour vous déplacer entre les étapes, Entrée pour ouvrir une étape dans l’inspecteur, C pour commencer une connexion depuis l’étape sélectionnée, E pour parcourir les connexions qu’elle a déjà, Suppr pour retirer ce qui est sélectionné, et Échap pour lâcher.',
+    connect: {
+      started:
+        'Connexion depuis {from}. {targets}. Flèches pour choisir, Entrée pour connecter, Échap pour annuler.',
+      targets: {
+        one: '{count} cible possible',
+        other: '{count} cibles possibles',
+      },
+      connected: 'Connecté.',
+      cancelled: 'Annulé.',
+      noTargets: 'Rien sur ce canevas ne peut recevoir ce que produit {step}.',
+      noOutputs: '{step} ne produit rien d’où connecter.',
+    },
+    connection: {
+      focused: 'Connexion de {from} vers {to}.',
+      removed: 'Connexion supprimée.',
+      none: '{step} n’a encore aucune connexion.',
+    },
     a11y: {
       selected: '{name}, étape {index} sur {total}, sélectionnée.',
+      port: '{step} · {port}',
     },
     node: {
       notInstalled: 'Non installé.',
+      glyphs: {
+        pending: '·',
+        running: '…',
+        ok: '✓',
+        failed: '✕',
+        skipped: '–',
+        cancelled: '⊘',
+        disabled: '–',
+      },
     },
     wire: {
       ops: {
@@ -1093,6 +1141,9 @@ const fr: Messages = {
           duplicateSelection: 'Dupliquer la sélection',
           selectAll: 'Tout sélectionner',
           deleteSelection: 'Supprimer la sélection',
+          connectFromStep: 'Commencer une connexion depuis l’étape sélectionnée, sur le canevas',
+          cycleConnections: 'Parcourir les connexions de l’étape sélectionnée, sur le canevas',
+          deleteConnection: 'Supprimer la connexion sélectionnée, sur le canevas',
         },
         note: 'Fixes pour l’instant plutôt que réassignables. Aucun ne se déclenche pendant que vous tapez dans un champ de texte.',
       },

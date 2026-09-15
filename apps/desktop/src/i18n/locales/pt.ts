@@ -156,6 +156,7 @@ const pt: Messages = {
     // the keyboard; this is where somebody finds out that it is.
     menu: {
       label: 'Ações da tela',
+      connect: 'Ligar a partir daqui…',
       duplicate: 'Duplicar',
       disable: 'Desligar',
       enable: 'Ligar',
@@ -163,14 +164,61 @@ const pt: Messages = {
       deleteConnection: 'Eliminar a ligação',
       paste: 'Colar',
       selectAll: 'Seleccionar tudo',
+      undo: 'Desfazer',
+      redo: 'Refazer',
+      many: {
+        duplicate: {
+          one: 'Duplicar {count} passo',
+          other: 'Duplicar {count} passos',
+        },
+        disable: {
+          one: 'Desligar {count} passo',
+          other: 'Desligar {count} passos',
+        },
+        enable: {
+          one: 'Ligar {count} passo',
+          other: 'Ligar {count} passos',
+        },
+        delete: {
+          one: 'Eliminar {count} passo',
+          other: 'Eliminar {count} passos',
+        },
+      },
     },
     keysHint:
-      'Use as setas para se mover entre passos, Enter para abrir um passo no inspector, Escape para desmarcar e Delete para remover o passo seleccionado.',
+      'Use as setas para se mover entre passos, Enter para abrir um passo no inspector, C para começar uma ligação a partir do passo seleccionado, E para percorrer as ligações que já tem, Delete para remover o que estiver seleccionado e Escape para largar.',
+    connect: {
+      started:
+        'A ligar a partir de {from}. {targets}. Setas para escolher, Enter para ligar, Escape para cancelar.',
+      targets: {
+        one: '{count} destino possível',
+        other: '{count} destinos possíveis',
+      },
+      connected: 'Ligado.',
+      cancelled: 'Cancelado.',
+      noTargets: 'Nada nesta tela pode receber o que {step} produz.',
+      noOutputs: '{step} não produz nada a partir do qual ligar.',
+    },
+    connection: {
+      focused: 'Ligação de {from} para {to}.',
+      removed: 'Ligação removida.',
+      none: '{step} ainda não tem ligações.',
+    },
     a11y: {
       selected: '{name}, passo {index} de {total}, seleccionado.',
+      port: '{step} · {port}',
     },
     node: {
       notInstalled: 'Não instalado.',
+      glyphs: {
+        pending: '·',
+        running: '…',
+        ok: '✓',
+        failed: '✕',
+        skipped: '–',
+        cancelled: '⊘',
+        disabled: '–',
+      },
     },
     wire: {
       ops: {
@@ -1083,6 +1131,9 @@ const pt: Messages = {
           duplicateSelection: 'Duplicar a selecção',
           selectAll: 'Seleccionar tudo',
           deleteSelection: 'Eliminar a selecção',
+          connectFromStep: 'Começar uma ligação a partir do passo seleccionado, na tela',
+          cycleConnections: 'Percorrer as ligações do passo seleccionado, na tela',
+          deleteConnection: 'Eliminar a ligação seleccionada, na tela',
         },
         note: 'Fixos por agora, não reatribuíveis. Nenhum destes é activado enquanto escreve num campo de texto.',
       },

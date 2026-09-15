@@ -169,6 +169,7 @@ const en: Messages = {
     // the keyboard; this is where somebody finds out that it is.
     menu: {
       label: 'Canvas actions',
+      connect: 'Connect from here…',
       duplicate: 'Duplicate',
       disable: 'Switch off',
       enable: 'Switch on',
@@ -176,16 +177,74 @@ const en: Messages = {
       deleteConnection: 'Delete connection',
       paste: 'Paste',
       selectAll: 'Select all',
+      undo: 'Undo',
+      redo: 'Redo',
+      // The same items when the right-click landed inside a selection of several steps, which
+      // keeps that selection rather than narrowing to the one under the pointer. Counted
+      // through the locale's own plural rules, never by gluing an "s" onto a word.
+      many: {
+        duplicate: {
+          one: 'Duplicate {count} step',
+          other: 'Duplicate {count} steps',
+        },
+        disable: {
+          one: 'Switch off {count} step',
+          other: 'Switch off {count} steps',
+        },
+        enable: {
+          one: 'Switch on {count} step',
+          other: 'Switch on {count} steps',
+        },
+        delete: {
+          one: 'Delete {count} step',
+          other: 'Delete {count} steps',
+        },
+      },
     },
     keysHint:
-      'Use the arrow keys to move between steps, Enter to open a step in the inspector, Escape to deselect, and Delete to remove the selected step.',
+      'Use the arrow keys to move between steps, Enter to open a step in the inspector, C to start a connection from the selected step, E to move through the connections it already has, Delete to remove whichever of the two is held, and Escape to let go.',
+    // Making a connection without a mouse. Every one of these is read out rather than seen, so
+    // they are whole sentences: a screen reader has no canvas to glance at.
+    connect: {
+      started:
+        'Connecting from {from}. {targets}. Arrow keys to choose, Enter to connect, Escape to cancel.',
+      targets: {
+        one: '{count} possible target',
+        other: '{count} possible targets',
+      },
+      connected: 'Connected.',
+      cancelled: 'Cancelled.',
+      noTargets: 'Nothing on this canvas can take what {step} produces.',
+      noOutputs: '{step} produces nothing to connect from.',
+    },
+    // Holding a connection that already exists, so it can be heard and removed.
+    connection: {
+      focused: 'Connection from {from} to {to}.',
+      removed: 'Connection removed.',
+      none: '{step} has no connections yet.',
+    },
     a11y: {
       selected: '{name}, step {index} of {total}, selected.',
+      /** One end of a connection, said as one unit: a step and one of its ports. */
+      port: '{step} · {port}',
     },
     node: {
       /** Shown on a node whose `componentRef` this build has no manifest for — the graph
        * references something that is not part of it. */
       notInstalled: 'Not installed.',
+      // The state of a step said in a shape as well as a colour, keyed exactly as
+      // `runPanel.status.*` is. Here rather than in the component because everything a person
+      // reads belongs in this tree — and because a locale that would rather not use a tick has
+      // somewhere to say so.
+      glyphs: {
+        pending: '·',
+        running: '…',
+        ok: '✓',
+        failed: '✕',
+        skipped: '–',
+        cancelled: '⊘',
+        disabled: '–',
+      },
     },
     // The badge a wire shows when the type system inserted a conversion on it. Keyed by the
     // runtime's own operation id (`Wire.tsx`'s `OP_LABELS`), not by the English phrase, so a
@@ -1136,6 +1195,9 @@ const en: Messages = {
           duplicateSelection: 'Duplicate the selection',
           selectAll: 'Select all',
           deleteSelection: 'Delete the selection',
+          connectFromStep: 'Start a connection from the selected step, on the canvas',
+          cycleConnections: 'Move through the connections of the selected step, on the canvas',
+          deleteConnection: 'Delete the connection being held, on the canvas',
         },
         note: 'Fixed today rather than remappable. None of these fire while you are typing into a text field.',
       },

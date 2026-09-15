@@ -423,6 +423,14 @@ button {
   stroke-width: 2;
 }
 
+/* The connection the keyboard is holding. Stronger than selection, because it is the only mark
+   on screen saying which of several wires a Delete is about to remove — and it is drawn in the
+   focus colour rather than the edge colour for the same reason every other focus ring is. */
+.react-flow__edge-path.is-focused {
+  stroke: var(--focus);
+  stroke-width: 3;
+}
+
 /* Conversion badge on an edge: small, quiet, and readable at a glance. */
 .wire__badge {
   position: absolute;
@@ -569,6 +577,30 @@ button {
   }
 }
 
+/* The same state again, in a shape rather than a colour. Sits before the name so the eye meets
+   it first when scanning a column of nodes for the one that failed. */
+.node__glyph {
+  flex: none;
+  width: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1;
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+.node[data-state="ok"] .node__glyph {
+  color: var(--ok);
+}
+
+.node[data-state="failed"] .node__glyph {
+  color: var(--danger);
+}
+
+.node[data-state="running"] .node__glyph {
+  color: var(--accent);
+}
+
 .node__ports {
   padding: var(--space-2) 0;
 }
@@ -606,6 +638,20 @@ button {
 .port--out .port__tab {
   right: -5px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* A connection being made from the keyboard. The tab keeps its type colour — which is the whole
+   point of it — and gains a ring, so what is highlighted reads as "this port, right now" rather
+   than as a port that has changed type. The target pulses because it is the one that moves. */
+.port__tab.is-connect-source,
+.port__tab.is-connect-target {
+  box-shadow:
+    0 0 0 2px var(--ground-2),
+    0 0 0 4px var(--focus);
+}
+
+.port__tab.is-connect-target {
+  animation: pulse 1.2s var(--ease-in-out) infinite;
 }
 
 .port__required {
