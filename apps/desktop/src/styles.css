@@ -1359,6 +1359,65 @@ select.input {
   box-shadow: var(--shadow-lg);
 }
 
+/* The menu a right-click opens on the canvas. Fixed rather than absolute: it is positioned from
+   viewport coordinates, and the canvas it sits over pans underneath it. */
+.canvas-menu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.canvas-menu {
+  position: fixed;
+  z-index: 41;
+  min-width: 180px;
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  background: var(--ground-2);
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.canvas-menu__item {
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+/* One highlight, driven by the active index, so the pointer and the arrow keys agree about
+   which item is next rather than lighting two at once. */
+.canvas-menu__item.is-active {
+  background: var(--ground-3);
+}
+
+.canvas-menu__item--danger {
+  color: var(--danger);
+}
+
+.canvas-menu__item--danger.is-active {
+  background: var(--danger-dim);
+  color: var(--ink);
+}
+
+/* Focus stays on the menu itself — the items are not in the tab order, because a menu is one
+   widget the arrow keys move within. The ring therefore belongs to the menu, not to an item. */
+.canvas-menu:focus-visible {
+  box-shadow: var(--ring-focus), var(--shadow-lg);
+  outline: none;
+}
+
 .refusal__body {
   display: flex;
   flex-direction: column;
@@ -1381,4 +1440,161 @@ select.input {
 .refusal__bridge code {
   font-family: var(--font-mono);
   color: var(--ink);
+}
+
+/* Preparing a publication. Covers the editor it is about, because what it reports is about the
+   whole project rather than any one panel of it. */
+.publish {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 55%);
+}
+
+.publish__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: 100%;
+  background: var(--ground-1);
+  border: var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.publish__header {
+  padding: var(--space-4);
+  border-bottom: var(--border);
+}
+
+.publish__header h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+}
+
+.publish__header p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--ink-muted);
+}
+
+.publish__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.publish__section h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.publish__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.publish__field label {
+  font-weight: var(--weight-medium);
+}
+
+.publish__hint,
+.publish__note,
+.publish__derived {
+  margin: 0;
+  max-width: 68ch;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.publish__note {
+  margin-top: var(--space-3);
+}
+
+.publish__problem {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--danger);
+}
+
+.publish__blocked {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--warn-dim);
+  color: var(--ink);
+}
+
+.publish__capabilities,
+.publish__clean {
+  margin: 0 0 var(--space-3);
+  max-width: 68ch;
+}
+
+.publish__findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each finding says three things in order: what was found, why it matters, and what would
+   change the answer. The last one is the reason this is a list and not a paragraph. */
+.publish__finding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  background: var(--ground-2);
+  border-inline-start: 3px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.publish__finding--blocking {
+  border-inline-start-color: var(--danger);
+}
+
+.publish__finding--warning {
+  border-inline-start-color: var(--warn);
+}
+
+.publish__finding--note {
+  border-inline-start-color: var(--accent);
+}
+
+.publish__remedy {
+  color: var(--ink-muted);
+}
+
+.publish__folder {
+  display: block;
+  padding: var(--space-2);
+  background: var(--ground-2);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+}
+
+.publish__error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.publish__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--border);
 }

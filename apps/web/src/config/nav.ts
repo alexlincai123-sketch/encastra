@@ -51,6 +51,12 @@ export const PRIMARY_NAV: readonly NavItem[] = [
     summary: 'Workflows that ship with the app.',
   },
   { href: '/tutorials', id: 'learn', label: 'Learn', summary: 'Build your first workflow.' },
+  {
+    href: '/ecosystem',
+    id: 'ecosystem',
+    label: 'Ecosystem',
+    summary: 'Build, publish, discover, reuse — and which of those exist.',
+  },
   { href: '/security', id: 'security', label: 'Security', summary: 'The model, and its limits.' },
 ];
 
@@ -110,6 +116,12 @@ export const FOOTER_NAV: readonly NavGroup[] = [
     id: 'ecosystem',
     title: 'Ecosystem',
     items: [
+      {
+        href: '/ecosystem',
+        id: 'ecosystem',
+        label: 'Ecosystem',
+        summary: 'The loop, and what of it is built.',
+      },
       { href: '/marketplace', id: 'marketplace', label: 'Marketplace', summary: 'Not built yet.' },
       { href: '/community', id: 'community', label: 'Community', summary: 'Not built yet.' },
       {

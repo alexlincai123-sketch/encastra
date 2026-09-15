@@ -22,6 +22,10 @@ import type {
   GrantSpec,
   InputSpec,
   OpenProject,
+  Prepared,
+  PublicationDraft,
+  PublicationReview,
+  Publisher,
   RunJournal,
   RunResult,
   Validation,
@@ -52,6 +56,20 @@ export interface Ipc {
     grants: GrantSpec[],
   ): Promise<WorkflowStatus>;
   stopWorkflow(): Promise<void>;
+  /** Reads a saved project as somebody receiving it would, and reports what it finds. */
+  reviewPublication(path: string, license: PublicationDraft['license']): Promise<PublicationReview>;
+  /**
+   * Writes a publication into a folder, or refuses with the reason.
+   *
+   * The runtime reviews the project again inside this command. What the interface showed is
+   * not what authorises it.
+   */
+  preparePublication(
+    path: string,
+    draft: PublicationDraft,
+    publisher: Publisher,
+    into: string,
+  ): Promise<Prepared>;
   about(): Promise<About>;
 }
 
@@ -154,6 +172,22 @@ class TauriIpc implements Ipc {
     return this.invoke<void>('stop_workflow');
   }
 
+  reviewPublication(
+    path: string,
+    license: PublicationDraft['license'],
+  ): Promise<PublicationReview> {
+    return this.invoke<PublicationReview>('review_publication', { path, license });
+  }
+
+  preparePublication(
+    path: string,
+    draft: PublicationDraft,
+    publisher: Publisher,
+    into: string,
+  ): Promise<Prepared> {
+    return this.invoke<Prepared>('prepare_publication', { path, draft, publisher, into });
+  }
+
   about(): Promise<About> {
     return this.invoke<About>('about');
   }
@@ -223,6 +257,14 @@ class PreviewIpc implements Ipc {
 
   async stopWorkflow(): Promise<void> {
     throw new PreviewOnlyError('Stopping a workflow');
+  }
+
+  async reviewPublication(): Promise<PublicationReview> {
+    throw new PreviewOnlyError('Reviewing a project for publication');
+  }
+
+  async preparePublication(): Promise<Prepared> {
+    throw new PreviewOnlyError('Preparing a publication');
   }
 
   async about(): Promise<About> {

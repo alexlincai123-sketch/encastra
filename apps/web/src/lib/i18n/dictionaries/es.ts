@@ -30,6 +30,7 @@ const es: Messages = {
       templates: 'Plantillas',
       learn: 'Aprender',
       security: 'Seguridad',
+      ecosystem: 'Ecosistema',
     },
     footer: {
       groups: {
@@ -48,6 +49,7 @@ const es: Messages = {
         tutorials: 'Tutoriales',
         docs: 'Documentación',
         security: 'Seguridad',
+        ecosystem: 'Ecosistema',
         marketplace: 'Marketplace',
         community: 'Comunidad',
         about: 'Acerca de',
@@ -974,6 +976,7 @@ const es: Messages = {
   },
 
   community: {
+    ctaEcosystem: 'De qué formaría parte',
     meta: {
       description:
         'Todavía no está construido. No hay ninguna función de comunidad en esta build — sin cuentas, sin perfiles, sin foro.',
@@ -1026,7 +1029,111 @@ const es: Messages = {
     },
   },
 
+  ecosystem: {
+    meta: {
+      description:
+        'En qué quiere convertirse Encastra: construir, publicar, descubrir, reutilizar. Qué existe hoy, qué solo está diseñado y en qué orden tiene que ocurrir lo demás.',
+    },
+    hero: {
+      eyebrow: 'Ecosistema',
+      title: 'Constrúyelo, publícalo y algún día dáselo a alguien',
+      lead: 'Encastra construye software con componentes. Todo lo que se deriva de eso — publicar lo que has hecho, encontrar lo que han hecho otros, instalarlo sin fiarte de nadie — está casi todo diseñado y sin construir. Esta página dice qué es cada cosa.',
+    },
+    loop: {
+      eyebrow: 'El ciclo',
+      title: 'Cinco momentos, de los cuales funcionan dos',
+      lead: 'Cada uno lleva el estado en el que está de verdad, leído de la misma tabla que lee el resto del sitio.',
+      build: {
+        title: 'Construir',
+        body: 'Coloca componentes, conéctalos y ejecútalos. El editor rechaza una conexión que el motor rechazaría, así que un flujo de trabajo que se dibuja es un flujo de trabajo que se ejecuta.',
+      },
+      publish: {
+        title: 'Publicar',
+        body: 'La aplicación lee tu proyecto guardado como lo leería quien lo recibe, lo rechaza si lleva un secreto o nombra tu carpeta personal, y lo escribe en una carpeta junto al documento que lo acompañaría. No se sube nada: no hay adónde subirlo.',
+      },
+      discover: {
+        title: 'Descubrir',
+        body: 'No hay registro, así que no hay nada que buscar, nada que ordenar y nadie a quien seguir. Esta página no va a mostrar un catálogo de cosas que no existen.',
+      },
+      install: {
+        title: 'Instalar',
+        body: 'No se puede instalar nada desde fuera de la aplicación. Un componente de otra persona necesitaría el sandbox que está diseñado y sin construir; un proyecto de otra persona necesita un registro del que venir y una firma contra la que comprobarse.',
+      },
+      reuse: {
+        title: 'Reutilizar',
+        body: 'Un archivo de proyecto ya es portátil, ya lleva su propio historial de versiones y ya fija por contenido cada componente que usa. Quien te pase uno, por el medio que sea, te pasa algo que puedes abrir y cambiar.',
+      },
+    },
+    today: {
+      eyebrow: 'Lo que existe',
+      title: 'La parte de publicar que no necesita servidor',
+      lead: 'Preparar una publicación ocurre entera en tu equipo, y casi todo lo que hace es rechazar.',
+      body: 'Un proyecto que era privado se revisa antes de poder entregárselo a un desconocido. La publicación se rechaza cuando:',
+      refuses: {
+        secret:
+          'Un ajuste contiene algo que parece una clave, un token o una clave privada: todo lo que se escribe en un ajuste se guarda en el archivo, y el archivo es lo que se entrega.',
+        path: 'Un ajuste apunta dentro de una carpeta personal, lo que nombra a quien lo hizo y no existe en ningún otro equipo.',
+        unknown:
+          'Usa un componente que esta versión no sabe leer, así que lo que pediría no se puede declarar — y un permiso que nadie puede leer es uno que nadie puede conceder.',
+        changed: 'Un componente ya no coincide con el contenido por el que el proyecto lo fijó.',
+        licence:
+          'Lleva una parte con una licencia que entra en conflicto con aquella bajo la que se publica.',
+      },
+      folder:
+        'Lo que sale es una carpeta con el proyecto y un documento que lo describe: quién lo ofrece, bajo qué nombre y licencia, su hash de contenido y su tamaño, y todos los permisos que pedirá — recogidos de los componentes y no escritos por el autor, porque nadie declara sus propios permisos de memoria con exactitud.',
+      notAnAudit: {
+        title: 'Esto no es una auditoría',
+        body: 'Encuentra los errores lo bastante mecánicos como para encontrarlos. No se ha hecho ninguna revisión de seguridad externa, y que una comprobación pase no es afirmar que algo sea seguro.',
+      },
+    },
+    registry: {
+      eyebrow: 'Lo que está diseñado',
+      title: 'Qué tendría que garantizar un registro',
+      lead: 'Nada de esto está construido. Está escrito para que quien lo construya tenga contra qué construir, y para que los atajos se vean como atajos.',
+      guarantees: {
+        immutable:
+          'Una versión, una vez publicada, no cambia nunca. Se puede retirar; no se puede reescribir por debajo de quien ya la instaló.',
+        disclosure:
+          'Todos los permisos que pide una publicación se muestran antes de instalar, nunca después.',
+        namespace:
+          'Un nombre vive dentro del espacio de nombres del propio editor, y la identidad de un editor la comprueba alguien en lugar de afirmarla quien la escribió.',
+        noScripts:
+          'No se ejecuta nada al instalar. Sin scripts de post-instalación, nunca: es la característica más explotada de todos los ecosistemas de paquetes que la tienen.',
+        verified:
+          'El contenido se verifica contra su hash y su firma al instalarlo y otra vez cada vez que se carga, y una versión revocada se rechaza en lugar de advertirse.',
+      },
+    },
+    order: {
+      eyebrow: 'El orden',
+      title: 'Siete cosas, en esta secuencia',
+      lead: 'Este orden no es una preferencia. Cada paso es lo que hace que el siguiente signifique algo.',
+      steps: {
+        review: 'Una revisión de seguridad externa del broker de capacidades.',
+        sandbox:
+          'El sandbox para código de terceros, con sus límites de tiempo, memoria y combustible realmente aplicados.',
+        signing: 'Firma, tanto de la aplicación como de lo que se publique.',
+        licence: 'Una decisión de licencia para el código fuente, que hoy no tiene ninguna.',
+        registry: 'El registro, con versiones inmutables y permisos declarados antes de instalar.',
+        legal: 'Una revisión legal de los términos que aceptarían un marketplace y sus creadores.',
+        money: 'El dinero, al final.',
+      },
+      why: 'Llegar antes al último saltándose cualquiera de los dos primeros haría falsas, de golpe, todas las afirmaciones de seguridad de este producto.',
+    },
+    money: {
+      eyebrow: 'Dinero',
+      title: 'Modelado, y sin moverse',
+      lead: 'No hay proveedor de pagos, ni cuenta a la que cobrar, ni saldo que liquidar.',
+      body: 'Lo que existe es la aritmética y los estados: unidades menores enteras sin ningún decimal en coma flotante cerca, un reparto cuyas dos partes suman lo pagado en cualquier importe, compras que no resucitan tras un reembolso, y derechos de uso que un cliente nunca puede afirmar sobre sí mismo. No hay ninguna comisión escrita, porque nadie ha decidido una y un número en un archivo de código tiende a convertirse en una promesa.',
+      rule: 'Una regla se mantiene pase lo que pase: el dinero compra distribución, no permisos. Una publicación de pago la revisa exactamente el mismo código que revisa una gratuita, y la petición de permiso se ve igual tanto si algo fue gratis como si fue caro.',
+    },
+    cta: {
+      download: 'Descargar Encastra',
+      components: 'Ver con qué viene',
+    },
+  },
+
   marketplace: {
+    ctaEcosystem: 'De qué formaría parte',
     meta: {
       description:
         'Todavía no está construido. No hay forma de instalar un componente más allá de los diecinueve que trae la app.',

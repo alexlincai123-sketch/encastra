@@ -21,6 +21,7 @@ encastra-builtins = { path = "../../../crates/encastra-builtins" }
 encastra-core = { path = "../../../crates/encastra-core" }
 encastra-project = { path = "../../../crates/encastra-project" }
 encastra-protocol = { path = "../../../crates/encastra-protocol" }
+encastra-publish = { path = "../../../crates/encastra-publish" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }

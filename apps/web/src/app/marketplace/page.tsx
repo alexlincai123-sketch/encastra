@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { CTA, NotBuilt, PageHeader } from '@/components/ui/Ui';
+import { ButtonRow, CTA, NotBuilt, PageHeader } from '@/components/ui/Ui';
 import { STATUS } from '@/config/site';
 import { getLocale, t } from '@/lib/i18n';
 
@@ -41,9 +41,12 @@ export default async function MarketplacePage(): Promise<ReactNode> {
           </p>
           <p>{t(locale, 'marketplace.notBuilt.body2')}</p>
         </NotBuilt>
-        <CTA href="/components" variant="secondary">
-          {t(locale, 'marketplace.cta')}
-        </CTA>
+        <ButtonRow>
+          <CTA href="/ecosystem">{t(locale, 'marketplace.ctaEcosystem')}</CTA>
+          <CTA href="/components" variant="secondary">
+            {t(locale, 'marketplace.cta')}
+          </CTA>
+        </ButtonRow>
       </div>
     </div>
   );
