@@ -21,6 +21,9 @@ import type {
   EncastraGraph,
   GrantSpec,
   InputSpec,
+  Inspected,
+  LibraryEntry,
+  LibraryListing,
   OpenProject,
   Prepared,
   PublicationDraft,
@@ -70,6 +73,30 @@ export interface Ipc {
     publisher: Publisher,
     into: string,
   ): Promise<Prepared>;
+  /**
+   * Reads a publication folder and reports what is in it. Writes nothing and runs nothing.
+   *
+   * Rejects with a serialised `ImportError` rather than an `Error` — the refusals are matched
+   * on, not read, so improving a sentence on the Rust side cannot change which explanation the
+   * interface shows. `isImportError` in `library.ts` is how a caller tells the two apart.
+   */
+  inspectPublication(folder: string): Promise<Inspected>;
+  /**
+   * Takes a publication in: copies the bytes that were verified into the library and records it.
+   *
+   * It does not open the project and it does not run it. What comes back is the entry, so the
+   * interface can decide whether to offer to open it — which is a separate thing to press.
+   */
+  importPublication(folder: string): Promise<LibraryEntry>;
+  /** Everything in the library, each with the answer to whether it is still where it was. */
+  libraryList(): Promise<LibraryListing>;
+  /**
+   * Forgets an entry, and — only when it is a copy Encastra made — deletes it too.
+   *
+   * The runtime refuses `deleteCopy` for anything it did not put there itself. A project
+   * somebody made is theirs; taking it off a list and deleting it are never the same act.
+   */
+  libraryRemove(id: string, deleteCopy: boolean): Promise<void>;
   about(): Promise<About>;
 }
 
@@ -176,6 +203,22 @@ class TauriIpc implements Ipc {
     return this.invoke<Prepared>('prepare_publication', { path, draft, publisher, into });
   }
 
+  inspectPublication(folder: string): Promise<Inspected> {
+    return this.invoke<Inspected>('inspect_publication', { folder });
+  }
+
+  importPublication(folder: string): Promise<LibraryEntry> {
+    return this.invoke<LibraryEntry>('import_publication', { folder });
+  }
+
+  libraryList(): Promise<LibraryListing> {
+    return this.invoke<LibraryListing>('library_list');
+  }
+
+  libraryRemove(id: string, deleteCopy: boolean): Promise<void> {
+    return this.invoke<void>('library_remove', { id, deleteCopy });
+  }
+
   about(): Promise<About> {
     return this.invoke<About>('about');
   }
@@ -253,6 +296,30 @@ class PreviewIpc implements Ipc {
 
   async preparePublication(): Promise<Prepared> {
     throw new PreviewOnlyError('Preparing a publication');
+  }
+
+  async inspectPublication(): Promise<Inspected> {
+    throw new PreviewOnlyError('Reading a publication');
+  }
+
+  async importPublication(): Promise<LibraryEntry> {
+    throw new PreviewOnlyError('Importing a publication');
+  }
+
+  /**
+   * An empty library, rather than a refusal.
+   *
+   * The Library screen is worth looking at in a browser, and what somebody sees there is its
+   * empty state — which is the screen that teaches. Inventing entries would be a fixture
+   * pretending to be somebody's own work, which is a different thing from a recorded journal
+   * labelled as one.
+   */
+  async libraryList(): Promise<LibraryListing> {
+    return { entries: [], quarantined: null };
+  }
+
+  async libraryRemove(): Promise<void> {
+    throw new PreviewOnlyError('Removing something from the library');
   }
 
   async about(): Promise<About> {

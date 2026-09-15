@@ -76,6 +76,11 @@ export function Home() {
           </span>
         </button>
 
+        <button type="button" className="action" onClick={() => setView('library')}>
+          <span className="action__title">{t('home.actions.library.title')}</span>
+          <span className="action__detail">{t('home.actions.library.detail')}</span>
+        </button>
+
         <button type="button" className="action" onClick={() => setView('components')}>
           <span className="action__title">{t('home.actions.browse.title')}</span>
           <span className="action__detail">

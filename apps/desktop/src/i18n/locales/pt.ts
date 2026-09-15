@@ -21,6 +21,7 @@ const pt: Messages = {
     items: {
       home: 'Início',
       builder: 'Construtor',
+      library: 'Biblioteca',
       components: 'Componentes',
       security: 'Segurança',
       settings: 'Definições',
@@ -41,6 +42,10 @@ const pt: Messages = {
         title: 'Abrir',
         detailReady: 'Um ficheiro .encastra guardado anteriormente',
         detailUnavailable: 'Requer a aplicação de ambiente de trabalho',
+      },
+      library: {
+        title: 'Abrir da sua biblioteca',
+        detail: 'O que fez, recebeu ou preparou',
       },
       browse: {
         title: 'Explorar componentes',
@@ -208,6 +213,218 @@ const pt: Messages = {
       versionShape: 'Uma versão numera-se como 1.0.0.',
     },
   },
+  library: {
+    heading: 'A sua biblioteca',
+    intro:
+      'Tudo o que tem: os projetos que criou, o que recebeu de outra pessoa e as pastas que preparou para entregar. Está tudo nesta máquina. Nada é sincronizado, enviado ou partilhado.',
+    import: 'Importar…',
+    importTitle: 'Ler uma pasta de publicação que lhe deram',
+    importUnavailable: 'Precisa da aplicação de ambiente de trabalho',
+    search: {
+      placeholder: 'Pesquisar',
+      ariaLabel: 'Pesquisar na sua biblioteca',
+    },
+    sort: {
+      label: 'Ordem',
+      name: 'Por nome',
+      recent: 'Mais recente',
+      origin: 'Por proveniência',
+    },
+    noMatches: 'Nada aqui corresponde a isso.',
+    quarantined:
+      'A lista anterior não pôde ser lida, por isso foi posta de lado com o nome {name} e começou-se uma nova. Não se apagou nada e nenhum dos seus projetos foi tocado.',
+    origin: {
+      created: 'Feito aqui',
+      imported: 'Importado',
+      prepared: 'Preparado',
+    },
+    status: {
+      missing: {
+        label: 'Não está',
+        detail:
+          'Já não há nada no sítio para onde isto aponta. Foi movido ou apagado fora do Encastra, o que é seu direito: esta linha está desatualizada, não errada.',
+      },
+      changed: {
+        label: 'Alterado',
+        detail:
+          'O ficheiro está lá, mas o conteúdo é diferente do que o Encastra viu da última vez. Algo o editou noutro sítio.',
+      },
+    },
+    facts: {
+      version: 'Versão',
+      publisher: 'Editor',
+      steps: 'Passos',
+      when: 'Última vez',
+    },
+    row: {
+      opened: 'Aberto a {when}',
+      added: 'Adicionado a {when}',
+      publisherClaim:
+        '{publisher} — é o que diz ser, não está verificado. Não há contas, por isso ninguém o confirmou.',
+      steps: {
+        one: '{count} passo',
+        other: '{count} passos',
+      },
+    },
+    reach: {
+      none: 'Não pede nada fora de si mesmo.',
+      someLabel: 'Vai pedir para alcançar:',
+      asksEveryRun: 'Tê-lo aqui não concede nada disto. Cada execução pergunta.',
+    },
+    actions: {
+      open: 'Abrir',
+      remove: 'Remover…',
+    },
+    remove: {
+      cancel: 'Manter',
+      keepsFile: 'Isto só o tira da lista. O seu ficheiro fica exatamente onde o pôs.',
+      forget: 'Tirar da lista',
+      importedNote:
+        'Esta cópia foi feita pelo Encastra, por isso pode apagá-la. A escolha é sua: a cópia vai-se embora ou fica onde está.',
+      andDeleteCopy: 'Remover e apagar a cópia',
+      keepCopy: 'Remover, manter a cópia',
+      refused:
+        'Esse ficheiro é seu e fica onde está. O Encastra só apaga cópias que fez ele próprio.',
+    },
+    empty: {
+      heading: 'Ainda não há nada aqui',
+      body: 'Três coisas acabam nesta lista, e cada uma começa com algo que faz.',
+      ways: {
+        created: 'Um projeto que guarda é adicionado.',
+        imported:
+          'Uma pasta de publicação que lhe deram é adicionada quando a importa, depois de o Encastra a ler e de o utilizador dizer que sim.',
+        prepared: 'Uma pasta que prepara para entregar é adicionada quando a prepara.',
+      },
+      build: 'Construir algo',
+      buildTitle: 'Abrir o construtor e começar com uma tela vazia',
+    },
+  },
+
+  import: {
+    heading: 'Receber uma publicação',
+    intro:
+      'O Encastra leu a pasta que escolheu como deve lê-la quem a recebe: comparou o ficheiro com o documento ao lado e voltou a correr aqui a verificação do editor. Não se escreveu nada e não se executou nada.',
+    reading: 'A ler a pasta…',
+    confirm: 'Importar',
+    nothing: 'nada',
+    copiesNothingRuns:
+      'Importar copia os ficheiros para a sua biblioteca. Nada é executado até o abrir e carregar em Executar.',
+    nothingWasTakenIn: 'Não se recebeu nada e nada foi alterado nesta máquina.',
+    sections: {
+      what: 'O que diz ser',
+      integrity: 'Se o ficheiro é o que está descrito',
+      inside: 'O que está lá dentro',
+      asks: 'O que iria pedir',
+      check: 'O que o Encastra encontrou',
+    },
+    facts: {
+      publisher: 'Editor',
+      name: 'Conhecida como',
+      version: 'Versão',
+      kind: 'Tipo',
+      licence: 'Licença',
+      size: 'Tamanho',
+      kilobytes: '{size} kB',
+      runtime: 'Corre em',
+      projectName: 'Projeto',
+      steps: 'Passos',
+      stepCount: {
+        one: '{count} passo',
+        other: '{count} passos',
+      },
+      switchedOff: ' ({count} desligados)',
+      versions: 'Versões guardadas',
+      versionCount: {
+        one: '{count} versão',
+        other: '{count} versões',
+      },
+    },
+    kinds: {
+      project: 'Projeto',
+      template: 'Modelo',
+      component: 'Componente',
+    },
+    notVerified:
+      'Ninguém verificou que este editor é quem o nome diz. Não há contas, por isso não há ninguém que o pudesse ter feito.',
+    checksumMatches: 'O ficheiro corresponde à soma de verificação do documento que o acompanha.',
+    checksumIsNotProvenance:
+      'Isso prova que o ficheiro não foi alterado desde que foi preparado. Não diz nada sobre quem o preparou.',
+    capabilities: {
+      none: 'Não pede nada fora de si mesmo.',
+      some: 'Ao executar, vai pedir para usar:',
+      grantsNothing:
+        'Importar não concede nada disto. Cada execução pergunta antes de alcançar o que quer que seja.',
+    },
+    nothingFound: 'Não há aqui nada que impeça recebê-lo.',
+    notAnAudit:
+      'Isto encontra os erros suficientemente mecânicos para serem encontrados. Não é uma auditoria de segurança, e ninguém fez nenhuma.',
+    disagreement: {
+      declared: 'O documento diz',
+      actual: 'O projeto pede',
+    },
+    tokens: {
+      title: 'título',
+      summary: 'resumo',
+      changelog: 'lista de alterações',
+      publisher: 'editor',
+      categories: 'categorias',
+      tags: 'etiquetas',
+      runtime: 'motor de execução',
+    },
+    errors: {
+      notAFolder:
+        'Isso não é uma pasta. Uma publicação é uma pasta com um projeto e o documento que o descreve.',
+      folderIsALink:
+        'Essa pasta é uma ligação para outro sítio. O Encastra não a segue, porque então o que lesse e o que escolheu não seriam a mesma coisa. Escolha a própria pasta.',
+      noDocument:
+        'Não há publication.json nessa pasta, por isso nada diz o que é. Isso é uma pasta de ficheiros, não uma publicação.',
+      documentIsALink:
+        'publication.json é uma ligação para outro ficheiro, não um ficheiro. O Encastra lê o que está na pasta que escolheu e nada fora dela.',
+      documentTooLarge:
+        'publication.json ocupa cerca de {size} kB e esta versão lê no máximo {max} kB. Um documento de publicação é uma página de texto; um deste tamanho não é.',
+      documentUnreadable:
+        'Não foi possível ler publication.json: {reason}. Peça a quem o preparou que o prepare outra vez.',
+      noProject:
+        'Não há nenhum ficheiro .encastra nessa pasta. Uma publicação é um projeto e o documento que o descreve.',
+      moreThanOneProject:
+        'Uma publicação é um só projeto, e essa pasta tem {count}: {names}. Quem a preparou devia enviar uma pasta por projeto.',
+      projectIsALink:
+        'O ficheiro do projeto é uma ligação para outro ficheiro, não um ficheiro. O Encastra instala o que está na pasta que escolheu e nada fora dela.',
+      unexpectedEntries:
+        'Uma pasta de publicação tem um documento e um projeto, e mais nada. Esta também tem {names}. O Encastra não recebe uma pasta de que não consiga dar conta.',
+      projectTooLarge:
+        'O projeto ocupa cerca de {size} kB e esta versão instala no máximo {max} kB.',
+      checksumMismatch:
+        'O ficheiro do projeto não é o que esta publicação descreve. Ou o documento descreve outro ficheiro, ou o ficheiro mudou pelo caminho. Peça-o outra vez.',
+      projectUnreadable:
+        'Não foi possível ler o ficheiro do projeto: {reason}. Pode ter sido feito por uma versão mais recente do Encastra, ou ter-se danificado pelo caminho.',
+      notInstallable:
+        'Esta versão não consegue instalar um {publicationKind}, e não vai fingir que consegue.',
+      notAListingId:
+        '«{id}» não é um nome de publicação, por isso não há um nome seguro sob o qual arquivá-lo.',
+      notAVersion: '«{version}» não é uma versão. As publicações são numeradas como 1.2.0.',
+      notPublishersNamespace:
+        '«{listing}» não está dentro do espaço de nomes de {publisher}. O documento nomeia um editor e uma publicação que pertence a outro, e o Encastra não consegue saber qual dos dois é o erro.',
+      textTooLong:
+        'O campo {field} é mais longo do que esta versão lê (no máximo {max} caracteres).',
+      textHasControlCharacters:
+        'O campo {field} tem caracteres que podem esconder o que realmente diz — do género que faz um nome parecer outro. O Encastra recusa-o em vez de reescrever em silêncio o que alguém escreveu.',
+      documentDisagreesWithProject:
+        'O documento e o projeto não concordam quanto ao {about}. A página que descreve isto está a descrever algo diferente do ficheiro ao lado.',
+      runtimeIncompatible:
+        'Esta publicação é para um motor {requires} e este é {have}. Não se instala nada para uma versão para a qual não foi construído.',
+      reviewRefused:
+        'A mesma verificação que o editor correu recusa-o aqui. Isto teria de mudar antes de alguém o poder receber:',
+      capabilitiesDisagree:
+        'O documento e o projeto não concordam sobre o que isto pede. Declarar permissões a menos é o problema óbvio; declarar a mais ensina as pessoas a passar os olhos pela lista, que é o mais subtil. Ambos são recusados.',
+      alreadyImported:
+        '{listing} {version} já está na sua biblioteca. Uma versão publicada nunca muda, por isso não há aqui nada de novo para receber.',
+      io: 'Algo neste computador recusou a operação ({reason}). Não se recebeu nada.',
+      unknown:
+        'O Encastra recusou esta pasta por um motivo para o qual esta versão não tem palavras. Não foi recebida.',
+    },
+  },
+
   toolbar: {
     publish: 'Publicar',
     publishTitle: 'Preparar este projecto para que outra pessoa o instale',
@@ -526,6 +743,11 @@ const pt: Messages = {
     restored: 'Restaurado. A versão de onde veio continua no histórico.',
     missingComponents: 'Este projecto precisa de {missing}, que não está instalado.',
     runtimeSilent: 'Algo no motor de execução não respondeu.',
+    libraryMissing:
+      '{name} não está onde estava. Volte a pô-lo lá, ou abra-o de onde estiver agora.',
+    imported: '{name} recebido. Não se executou nada.',
+    removedFromLibrary: '{name} já não está na lista. O ficheiro continua onde estava.',
+    removedAndDeleted: '{name} já não está na lista, e a cópia que o Encastra fez foi apagada.',
   },
 
   demos: {

@@ -34,13 +34,17 @@ import {
 // `canvas/Canvas.tsx` does inside `isConnectionLegal` — see `i18n/index.ts`'s own note on why.
 import { selectPlural, translate, useI18n } from './i18n';
 import { ipc } from './ipc';
+import { decideRemoval, isImportError } from './library';
 import { usePreferences } from './preferences';
 import type {
   About,
   ComponentManifest,
   EncastraGraph,
+  EntryWithStatus,
   GrantSpec,
+  ImportError,
   InputSpec,
+  Inspected,
   NodeStatus,
   OpenProject,
   Snapshot as ProjectSnapshot,
@@ -49,7 +53,7 @@ import type {
 } from './types';
 
 /** Where the person is in the application. */
-export type View = 'home' | 'builder' | 'components' | 'security' | 'settings';
+export type View = 'home' | 'builder' | 'library' | 'components' | 'security' | 'settings';
 
 export interface NodeData extends Record<string, unknown> {
   componentRef: string;
@@ -97,6 +101,27 @@ interface EditorState {
   /** True when the canvas differs from what was last written to disk. */
   dirty: boolean;
 
+  /** What this person has: what they made, what they took in, what they prepared. */
+  library: EntryWithStatus[];
+  /**
+   * The name an unreadable index was moved to, if there was one. The runtime reports it once;
+   * this holds it until somebody has read it and dismissed it.
+   */
+  libraryQuarantined: string | null;
+  /** False until the list has been asked for once, so an empty library and an unread one differ. */
+  libraryLoaded: boolean;
+  /** Whether the import dialog is open. One flag, because there is one of it. */
+  importOpen: boolean;
+  /**
+   * What was read out of a chosen folder, and the folder it was read from.
+   *
+   * Holding one of these means nothing has been written: inspecting is a read. Importing is a
+   * second, separate thing somebody presses, and it never happens on its own.
+   */
+  importInspected: { folder: string; inspected: Inspected } | null;
+  /** Why the folder was refused. A structured refusal where there is one, a sentence otherwise. */
+  importError: ImportError | string | null;
+
   loadComponents: () => Promise<void>;
   addNode: (componentRef: string, position: { x: number; y: number }) => void;
   select: (id: string | null) => void;
@@ -129,6 +154,17 @@ interface EditorState {
   /** Whether the publication panel is open. One flag, because there is one of it. */
   publishOpen: boolean;
   setPublishOpen: (open: boolean) => void;
+
+  /** Puts away the note about an index that could not be read. It is news once. */
+  dismissLibraryNote: () => void;
+  loadLibrary: () => Promise<void>;
+  /** Opens something already in the library, without asking where it is. */
+  openFromLibrary: (row: EntryWithStatus) => Promise<void>;
+  removeFromLibrary: (row: EntryWithStatus, deleteCopy: boolean) => Promise<void>;
+  setImportOpen: (open: boolean) => void;
+  /** Asks for a folder and reads it. Nothing is imported: that is `confirmImport`. */
+  beginImport: () => Promise<void>;
+  confirmImport: () => Promise<void>;
   attachRuntime: () => Promise<() => void>;
   startWorkflow: () => Promise<void>;
   stopWorkflow: () => Promise<void>;
@@ -186,6 +222,12 @@ export const useEditor = create<EditorState>((set, get) => ({
   about: null,
   history: emptyHistory,
   clipboard: null,
+  library: [],
+  libraryQuarantined: null,
+  libraryLoaded: false,
+  importOpen: false,
+  importInspected: null,
+  importError: null,
 
   async loadComponents() {
     try {
@@ -500,6 +542,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       if (!path) return;
       applyProject(set, await ipc.openProject(path));
       rememberProject(path);
+      // The runtime has just recorded this in the library. Re-listing is how this side finds
+      // out, rather than editing its own copy and hoping the two agree.
+      await get().loadLibrary();
     } catch (error) {
       set({ message: { tone: 'error', text: describe(error) } });
     } finally {
@@ -548,6 +593,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           text: translate(`messages.saved.${selectPlural(locale, kept)}`, { count: kept }),
         },
       });
+      await get().loadLibrary();
     } catch (error) {
       set({ message: { tone: 'error', text: describe(error) } });
     } finally {
@@ -559,6 +605,141 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   setPublishOpen(open) {
     set({ publishOpen: open });
+  },
+
+  dismissLibraryNote() {
+    set({ libraryQuarantined: null });
+  },
+
+  /**
+   * Reads the whole list, every time.
+   *
+   * Each row carries whether the file it names is still there, which is a question about the
+   * filesystem and cannot be cached: somebody moving a project in Explorer does not tell this
+   * application about it. The list is short by construction, and a stale "Present" on something
+   * that has gone would be worse than asking again.
+   */
+  async loadLibrary() {
+    try {
+      const listing = await ipc.libraryList();
+      set((s) => ({
+        library: listing.entries,
+        libraryLoaded: true,
+        // The runtime reports a quarantined index once. Keeping what is already here means a
+        // second listing does not silently clear a note nobody has read yet.
+        libraryQuarantined: listing.quarantined ?? s.libraryQuarantined,
+      }));
+    } catch (error) {
+      set({ libraryLoaded: true, message: { tone: 'error', text: describe(error) } });
+    }
+  },
+
+  async openFromLibrary(row) {
+    // Nothing destructive is offered here: the file is somewhere else or gone, and this
+    // software has no business guessing where, nor tidying away somebody's record of it.
+    if (row.status === 'missing') {
+      set({
+        message: {
+          tone: 'error',
+          text: translate('messages.libraryMissing', { name: row.entry.name }),
+        },
+      });
+      return;
+    }
+
+    set({ busy: true, message: null });
+    try {
+      applyProject(set, await ipc.openProject(row.entry.path));
+      rememberProject(row.entry.path);
+      set({ view: 'builder' });
+      // Opening is what makes this the most recent thing, and the runtime is where that is
+      // recorded. Re-listing is how this side finds out, rather than editing its own copy and
+      // hoping the two agree.
+      await get().loadLibrary();
+    } catch (error) {
+      set({ message: { tone: 'error', text: describe(error) } });
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  async removeFromLibrary(row, deleteCopy) {
+    const decision = decideRemoval(row.entry, deleteCopy);
+    if (!decision.allowed) {
+      set({ message: { tone: 'error', text: translate('library.remove.refused') } });
+      return;
+    }
+
+    set({ busy: true, message: null });
+    try {
+      await ipc.libraryRemove(decision.id, decision.deleteCopy);
+      await get().loadLibrary();
+      set({
+        message: {
+          tone: 'info',
+          text: translate(
+            decision.deleteCopy ? 'messages.removedAndDeleted' : 'messages.removedFromLibrary',
+            { name: row.entry.name },
+          ),
+        },
+      });
+    } catch (error) {
+      set({ message: { tone: 'error', text: describe(error) } });
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  setImportOpen(open) {
+    // Closing throws away what was read, so reopening reads the folder again rather than
+    // showing an answer about a folder somebody may have changed in between.
+    set(
+      open ? { importOpen: true } : { importOpen: false, importInspected: null, importError: null },
+    );
+  },
+
+  /**
+   * Asks for a folder and reads it. Nothing is taken in here, ever.
+   *
+   * Inspecting writes nothing, opens nothing and runs nothing; what it produces is something to
+   * read. Importing is a second thing somebody presses, having read it.
+   */
+  async beginImport() {
+    set({ importInspected: null, importError: null });
+    try {
+      const folder = await ipc.pickFolder();
+      if (!folder) return;
+      set({ importOpen: true, busy: true });
+      set({ importInspected: { folder, inspected: await ipc.inspectPublication(folder) } });
+    } catch (error) {
+      set({ importOpen: true, importError: asImportFailure(error) });
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  async confirmImport() {
+    const pending = get().importInspected;
+    if (!pending) return;
+
+    set({ busy: true, importError: null, message: null });
+    try {
+      const entry = await ipc.importPublication(pending.folder);
+      await get().loadLibrary();
+      set({
+        importOpen: false,
+        importInspected: null,
+        view: 'library',
+        message: {
+          tone: 'info',
+          text: translate('messages.imported', { name: entry.name }),
+        },
+      });
+    } catch (error) {
+      set({ importError: asImportFailure(error) });
+    } finally {
+      set({ busy: false });
+    }
   },
 
   setView(view) {
@@ -872,6 +1053,18 @@ function summarise(journal: RunJournal): string {
     default:
       return translate('runPanel.outcome.running');
   }
+}
+
+/**
+ * A rejection from a command that refuses in a shape, kept in that shape.
+ *
+ * `inspect_publication` and `import_publication` reject with a serialised `ImportError`, and
+ * everything else rejects with an `Error` or a string. Telling them apart here is the
+ * difference between the interface showing a sentence somebody can act on and showing them the
+ * JSON the runtime happened to send.
+ */
+function asImportFailure(error: unknown): ImportError | string {
+  return isImportError(error) ? error : describe(error);
 }
 
 function describe(error: unknown): string {

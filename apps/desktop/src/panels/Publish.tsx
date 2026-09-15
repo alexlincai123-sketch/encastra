@@ -127,6 +127,9 @@ export function Publish() {
         verified: false,
       };
       setPrepared(await ipc.preparePublication(projectPath, draft, publisher, into));
+      // The runtime has just recorded the folder in the library. Re-listing is how this side
+      // finds out, rather than editing its own copy and hoping the two agree.
+      await useEditor.getState().loadLibrary();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

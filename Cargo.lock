@@ -887,6 +887,7 @@ version = "0.4.0-beta.1"
 dependencies = [
  "encastra-builtins",
  "encastra-core",
+ "encastra-library",
  "encastra-project",
  "encastra-protocol",
  "encastra-publish",

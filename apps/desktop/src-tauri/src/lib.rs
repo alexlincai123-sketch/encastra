@@ -7,7 +7,7 @@
 //! decision belongs in the runtime.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -23,8 +23,12 @@ use encastra_core::runner::{
 use encastra_core::session::{Session, TriggerSet};
 use encastra_core::validate::{Validation, validate_with_supplied};
 use encastra_core::value::{HandleKind, Value};
+// `Status` under another name: this crate already has one, and it answers a different question
+// (whether a workflow is running, not whether a file is still where it was).
+use encastra_library::{Entry, Library, Origin, Recovered, Status as LibraryStatus};
 use encastra_project::{History, LockedComponent, Lockfile, Project, SnapshotId};
 use encastra_protocol::manifest::ComponentManifest;
+use encastra_publish::import::{ImportError, Inspected};
 use encastra_publish::{License, PublicationBundle, PublicationDraft, Publisher, Review};
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
@@ -38,6 +42,9 @@ struct Runtime {
     /// The workflow currently running, if any. One at a time: two workflows writing into the
     /// same folders at once is a surprise nobody asked for, and the editor shows one graph.
     running: Mutex<Option<Running>>,
+    /// What this person has, and where it is. Read once at start-up for the same reason the
+    /// registry is: two calls that each read the file would disagree about what is in it.
+    library: LibraryHandle,
 }
 
 struct Running {
@@ -179,9 +186,34 @@ fn run_graph(
     Ok(result)
 }
 
+/// Whether a path names an Encastra project — something whose name ends in `.encastra`.
+///
+/// Case-insensitively, because a person who typed `Thumbnails.Encastra` into a save box meant a
+/// project, and every filesystem this ships on agrees with them.
+///
+/// This is not a security check and cannot be one: a path arrives from a dialog the person drove,
+/// and the file behind it is read by `Project::open`, which is where a file that is not a project
+/// is actually found out. What it buys is that every command taking a project takes the same
+/// thing, so a path this application will write is a path it will later agree to read.
+fn is_project_path(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("encastra"))
+}
+
+const NOT_A_PROJECT: &str = "That is not an Encastra project. A project's name ends in .encastra.";
+
+/// The one place a project path is turned from a string into something to act on.
+fn project_path(path: &str) -> Result<PathBuf, String> {
+    let target = PathBuf::from(path);
+    if !is_project_path(&target) {
+        return Err(NOT_A_PROJECT.to_owned());
+    }
+    Ok(target)
+}
+
 /// A hint from the file extension. The runtime verifies content when a component actually
 /// decodes it, so a wrong guess fails there rather than being trusted.
-fn kind_for(path: &std::path::Path) -> HandleKind {
+fn kind_for(path: &Path) -> HandleKind {
     match path
         .extension()
         .and_then(|e| e.to_str())
@@ -239,7 +271,7 @@ fn save_project(
     graph: Graph,
     label: Option<String>,
 ) -> Result<OpenProject, String> {
-    let target = PathBuf::from(&path);
+    let target = project_path(&path)?;
     let now = encastra_core::journal::now_ms();
 
     // Saving over an existing project keeps its identity and its history. Only its content
@@ -255,13 +287,33 @@ fn save_project(
     project.history.record(&project.graph, label, None, now);
 
     project.save(&target).map_err(|e| e.to_string())?;
+    remember_project(&state, &project, &target, now);
     Ok(describe(project, &path, &state.registry))
 }
 
 #[tauri::command]
 fn open_project(state: tauri::State<'_, Runtime>, path: String) -> Result<OpenProject, String> {
-    let project = Project::open(&PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    let target = project_path(&path)?;
+    let project = Project::open(&target).map_err(|e| e.to_string())?;
+    remember_project(&state, &project, &target, encastra_core::journal::now_ms());
     Ok(describe(project, &path, &state.registry))
+}
+
+/// Puts a project somebody just saved or opened into their library, and never fails the thing
+/// they actually asked for.
+///
+/// The file is read back rather than re-serialised from the project in memory: what the entry's
+/// checksum has to describe is the bytes on disk, which is the only thing "has this changed
+/// since you last opened it" can sensibly mean. A file that cannot be read back is simply not
+/// recorded — there is nothing to say about it, and inventing a hash would make the library
+/// report a change the next time somebody looked.
+fn remember_project(state: &Runtime, project: &Project, target: &Path, now: u64) {
+    let Ok(bytes) = std::fs::read(target) else {
+        return;
+    };
+    state.library.remember(encastra_library::entry_for_project(
+        project, target, &bytes, now,
+    ));
 }
 
 #[tauri::command]
@@ -270,7 +322,7 @@ fn restore_version(
     path: String,
     snapshot: String,
 ) -> Result<OpenProject, String> {
-    let target = PathBuf::from(&path);
+    let target = project_path(&path)?;
     let mut project = Project::open(&target).map_err(|e| e.to_string())?;
     let id = SnapshotId(snapshot);
 
@@ -288,7 +340,7 @@ fn restore_version(
 
 #[tauri::command]
 fn compare_versions(path: String, from: String, to: String) -> Result<Vec<String>, String> {
-    let project = Project::open(&PathBuf::from(path)).map_err(|e| e.to_string())?;
+    let project = Project::open(&project_path(&path)?).map_err(|e| e.to_string())?;
     let changes = project
         .history
         .compare(&SnapshotId(from), &SnapshotId(to))
@@ -671,7 +723,7 @@ fn review_publication(
     path: String,
     license: License,
 ) -> Result<Review, String> {
-    let project = Project::open(&PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    let project = Project::open(&project_path(&path)?).map_err(|e| e.to_string())?;
     Ok(encastra_publish::review(
         &project,
         &state.registry,
@@ -697,7 +749,25 @@ fn prepare_publication(
     publisher: Publisher,
     into: String,
 ) -> Result<Prepared, String> {
-    let source = PathBuf::from(&path);
+    let source = project_path(&path)?;
+    // The folder is looked at without following it. A junction on Windows reads as a directory
+    // while pointing anywhere at all, so a publication prepared "into" one would be written
+    // somewhere other than where the person was told it went.
+    match std::fs::symlink_metadata(&into) {
+        Err(_) => return Err("That folder is not there. Choose one that exists.".to_owned()),
+        Ok(meta) if meta.file_type().is_symlink() => {
+            return Err(
+                "That folder is a link to somewhere else, so what was written would land \
+                 somewhere other than where you chose. Pick the folder itself."
+                    .to_owned(),
+            );
+        }
+        Ok(meta) if !meta.is_dir() => {
+            return Err("That is a file, not a folder. A publication needs a folder.".to_owned());
+        }
+        Ok(_) => {}
+    }
+
     let project = Project::open(&source).map_err(|e| e.to_string())?;
     let bytes = std::fs::read(&source).map_err(|e| e.to_string())?;
 
@@ -742,10 +812,271 @@ fn prepare_publication(
     )
     .map_err(|e| e.to_string())?;
 
-    Ok(Prepared {
-        bundle,
-        folder: folder.to_string_lossy().to_string(),
+    let folder = folder.to_string_lossy().to_string();
+
+    // A prepared publication is a folder somebody chose, not a file this software owns, so the
+    // entry records where it is and nothing about deleting it. The checksum and size describe
+    // the project inside; `status` never reads either for a folder — being there is the whole of
+    // what can be said about one — but they are what this publication is, and worth keeping.
+    state.library.remember(Entry {
+        id: library_id(&folder),
+        origin: Origin::Prepared,
+        name: bundle.draft.title.clone(),
+        description: Some(bundle.draft.summary.clone()),
+        path: folder.clone(),
+        added_at_ms: bundle.prepared_at_ms,
+        last_opened_ms: None,
+        modified_at_ms: bundle.prepared_at_ms,
+        checksum: Some(bundle.checksum.clone()),
+        size_bytes: Some(bundle.size_bytes),
+        steps: project.graph.nodes.len(),
+        runtime: bundle.runtime.clone(),
+        listing_id: Some(bundle.draft.listing_id.clone()),
+        version: Some(bundle.draft.version.clone()),
+        publisher: Some(bundle.publisher.clone()),
+        capabilities: bundle.capabilities.clone(),
+    });
+
+    Ok(Prepared { bundle, folder })
+}
+
+// -- the library ---------------------------------------------------------------------------
+//
+// An index of what somebody has: the projects they made, the ones they took in, and the ones
+// they prepared to hand on. Three rules hold this end of it together.
+//
+// **Importing never opens or runs anything.** `import_publication` copies verified bytes into a
+// folder this software owns and adds a line to a list. What happens next is a separate decision
+// somebody makes by pressing Open, and then Run.
+//
+// **An index that could not be read is never written over.** A file this build cannot parse is
+// moved aside by the crate and said so once. A file from another version, or one larger than
+// this build holds, is left exactly as it is and every command that would write says why it
+// will not — those are somebody's record of their own work, and "start fresh" would destroy it.
+//
+// **Only the copies this software made may be deleted.** A created project's file belongs to
+// the person who made it. Removing it from the list is forgetting; it is not deleting, and the
+// two are never the same call.
+
+/// The index, and whether it may be written to.
+struct LibraryHandle {
+    /// Created on demand rather than at start-up: somebody who never imports anything should
+    /// not find an empty folder they did not ask for.
+    root: PathBuf,
+    /// `Err` holds the sentence to show instead of doing anything. See the note above.
+    index: Mutex<Result<Library, String>>,
+    /// The name the unreadable index was moved to, if there was one. Reported once and then
+    /// forgotten: it is news the first time the list is drawn and noise every time after.
+    quarantined: Mutex<Option<String>>,
+}
+
+/// One entry with the answer to "is it still there, and still what it was", computed now.
+///
+/// Computed rather than stored, because a stored answer is out of date the moment somebody
+/// touches the file in another program — which they will, since these are ordinary files.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EntryWithStatus {
+    entry: Entry,
+    status: LibraryStatus,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryListing {
+    entries: Vec<EntryWithStatus>,
+    /// Set once, on the first listing after an unreadable index was moved aside.
+    quarantined: Option<String>,
+}
+
+/// What to say when a lock is held by a thread that panicked while holding it.
+const LIBRARY_BUSY: &str = "The library is busy. Try that again.";
+
+impl LibraryHandle {
+    fn open(root: PathBuf) -> LibraryHandle {
+        match Library::load_or_quarantine(&root) {
+            Ok(Recovered {
+                library,
+                quarantined_as,
+            }) => LibraryHandle {
+                root,
+                index: Mutex::new(Ok(library)),
+                quarantined: Mutex::new(quarantined_as),
+            },
+            // Readable but not by this build, or too large to hold. Neither is a reason to
+            // replace it, so the handle carries the refusal instead of a library.
+            Err(reason) => LibraryHandle {
+                root,
+                index: Mutex::new(Err(reason.to_string())),
+                quarantined: Mutex::new(None),
+            },
+        }
+    }
+
+    fn read<T>(&self, of: impl FnOnce(&Library) -> T) -> Result<T, String> {
+        let guard = self.index.lock().map_err(|_| LIBRARY_BUSY.to_owned())?;
+        match guard.as_ref() {
+            Ok(library) => Ok(of(library)),
+            Err(reason) => Err(reason.clone()),
+        }
+    }
+
+    /// Changes the index and writes it, or changes nothing at all.
+    ///
+    /// The change is applied to a copy and the copy is saved first. Memory moves forward only
+    /// once the disk has: otherwise a failed save would leave the running application believing
+    /// in an entry that the next successful save would write out as fact.
+    fn edit<T>(&self, change: impl FnOnce(&mut Library) -> Result<T, String>) -> Result<T, String> {
+        let mut guard = self.index.lock().map_err(|_| LIBRARY_BUSY.to_owned())?;
+        let library = guard.as_mut().map_err(|reason| reason.clone())?;
+        let mut candidate = library.clone();
+        let outcome = change(&mut candidate)?;
+        candidate.save(&self.root).map_err(|e| e.to_string())?;
+        *library = candidate;
+        Ok(outcome)
+    }
+
+    /// Records something that was just saved, opened or prepared.
+    ///
+    /// Failure is reported to the log and swallowed: somebody who pressed Save wanted their
+    /// file written, and it was. An index that did not keep up is a worse session, not a lost
+    /// one, and turning it into a failed save would be the tail wagging the dog.
+    fn remember(&self, entry: Entry) {
+        if let Err(reason) = self.edit(|library| {
+            library.upsert(entry);
+            Ok(())
+        }) {
+            eprintln!("[library] the index was not updated: {reason}");
+        }
+    }
+}
+
+/// A short, stable name for something that has no listing and no version to be named after.
+///
+/// Sixteen hex characters of a sha256 of the path, which is exactly what
+/// `encastra_library::entry_for_project` derives its own identity from — the two have to agree,
+/// or the same thing saved and then prepared would appear twice under two names.
+fn library_id(text: &str) -> String {
+    encastra_project::hash(text.as_bytes())[..16].to_owned()
+}
+
+/// Reads a publication folder and reports what is in it. Writes nothing; runs nothing.
+///
+/// The folder is handed to the crate as it was chosen. Whether it is a folder at all, whether
+/// it is a link to somewhere else, and whether it holds what a publication holds are the
+/// crate's questions to answer, and it refuses each of them by name rather than by a message
+/// this file would have to keep in step.
+#[tauri::command]
+fn inspect_publication(
+    state: tauri::State<'_, Runtime>,
+    folder: String,
+) -> Result<Inspected, ImportError> {
+    encastra_publish::import::inspect(
+        Path::new(&folder),
+        &state.registry,
+        encastra_core::RUNTIME_VERSION,
+    )
+}
+
+/// Takes a publication in, and does nothing else with it.
+///
+/// Nothing is opened and nothing is run. The bytes that were checked are the bytes that are
+/// kept — the crate copies what it verified rather than reading the source a second time — and
+/// what comes back is the entry, so the interface can decide whether to offer to open it.
+#[tauri::command]
+fn import_publication(
+    state: tauri::State<'_, Runtime>,
+    folder: String,
+) -> Result<Entry, ImportError> {
+    let imported = encastra_publish::import::import(
+        Path::new(&folder),
+        &state.registry,
+        encastra_core::RUNTIME_VERSION,
+        &state.library.root,
+    )?;
+
+    let entry = encastra_library::entry_for_import(&imported, encastra_core::journal::now_ms());
+    if let Err(reason) = state.library.edit(|library| {
+        library.upsert(entry.clone());
+        Ok(())
+    }) {
+        // The copy landed and the index does not know about it. A folder nothing in the
+        // application can see, open or account for is worse than no import at all, so it goes
+        // back — through the crate's own check that it is inside `imports/`, never a bare
+        // delete of a path that came out of a file.
+        let _ = encastra_library::remove_imported_copy(&state.library.root, &entry);
+        return Err(ImportError::Io { reason });
+    }
+    Ok(entry)
+}
+
+/// Everything in the index, each with the answer to whether it is still there.
+#[tauri::command]
+fn library_list(state: tauri::State<'_, Runtime>) -> Result<LibraryListing, String> {
+    let entries = state.library.read(|library| {
+        library
+            .entries
+            .iter()
+            .map(|entry| EntryWithStatus {
+                status: encastra_library::status(entry),
+                entry: entry.clone(),
+            })
+            .collect::<Vec<_>>()
+    })?;
+
+    let quarantined = state
+        .library
+        .quarantined
+        .lock()
+        .map_err(|_| LIBRARY_BUSY.to_owned())?
+        .take();
+
+    Ok(LibraryListing {
+        entries,
+        quarantined,
     })
+}
+
+/// Forgets an entry, and — only for a copy this software made — deletes it too.
+///
+/// The two are separate decisions and the caller says which it means. A project somebody made
+/// is refused outright: this software did not put that file there and does not get to remove
+/// it, whatever an index that can be edited by hand happens to claim about it.
+#[tauri::command]
+fn library_remove(
+    state: tauri::State<'_, Runtime>,
+    id: String,
+    delete_copy: bool,
+) -> Result<(), String> {
+    let found = state.library.read(|library| library.find(&id).cloned())?;
+    let Some(entry) = found else {
+        // Already not there. That is the state that was asked for, so it is not a complaint.
+        return Ok(());
+    };
+
+    // Checked before anything is removed from the index, so a refusal leaves the library
+    // exactly as it was rather than half-done.
+    if delete_copy && entry.origin != Origin::Imported {
+        return Err(
+            "That file is yours, and it stays where it is. Encastra only deletes copies it \
+             made itself, which means things you imported."
+                .to_owned(),
+        );
+    }
+
+    state.library.edit(|library| {
+        library.remove(&id);
+        Ok(())
+    })?;
+
+    if delete_copy {
+        // The index is already saved. If the folder will not go, the entry is still forgotten —
+        // which is what was asked — and saying so is better than pretending the files are gone.
+        encastra_library::remove_imported_copy(&state.library.root, &entry).map_err(|e| {
+            format!("It is out of your library, but the copy could not be deleted: {e}")
+        })?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -759,15 +1090,26 @@ fn about() -> serde_json::Value {
 }
 
 pub fn run() {
-    let installed = encastra_builtins::install_all();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(Runtime {
-            registry: installed.registry,
-            components: installed.components,
-            triggers: installed.triggers,
-            running: Mutex::new(None),
+        // The managed state is built here rather than before the builder because the library
+        // needs to know where this application's own data lives, and only an app handle knows.
+        .setup(|app| {
+            let installed = encastra_builtins::install_all();
+
+            // Beside the application's data, not beside anybody's projects: this is an index
+            // this software owns and may rewrite, and the projects it names are not. The folder
+            // is not created here — nothing is written until there is something to write.
+            let library_root = app.path().app_data_dir()?.join("library");
+
+            app.manage(Runtime {
+                registry: installed.registry,
+                components: installed.components,
+                triggers: installed.triggers,
+                running: Mutex::new(None),
+                library: LibraryHandle::open(library_root),
+            });
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             list_components,
@@ -783,8 +1125,72 @@ pub fn run() {
             workflow_status,
             review_publication,
             prepare_publication,
+            inspect_publication,
+            import_publication,
+            library_list,
+            library_remove,
             about
         ])
         .run(tauri::generate_context!())
         .expect("the application window could not be created");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_project_is_recognised_by_its_extension_whatever_its_case() {
+        assert!(is_project_path(Path::new("thumbnails.encastra")));
+        assert!(is_project_path(Path::new("Thumbnails.ENCASTRA")));
+        assert!(is_project_path(Path::new(r"C:\work\my project.Encastra")));
+        assert!(is_project_path(Path::new("/home/alice/notes.encastra")));
+    }
+
+    #[test]
+    fn nothing_else_is_a_project() {
+        // A name that merely contains the word, a name with the extension in the middle, and a
+        // folder that happens to be called one. Each of these reached `Project::open` before.
+        assert!(!is_project_path(Path::new("thumbnails.encastra.txt")));
+        assert!(!is_project_path(Path::new("encastra")));
+        assert!(!is_project_path(Path::new("notes.txt")));
+        assert!(!is_project_path(Path::new("")));
+        assert!(!is_project_path(Path::new("my-encastra-backups")));
+    }
+
+    #[test]
+    fn the_guard_says_what_is_wrong_rather_than_where() {
+        // The message names the rule, never the path: these end up in logs and on screen, and
+        // the path is somebody's home folder.
+        let refused = project_path("notes.txt").expect_err("a .txt is not a project");
+        assert_eq!(refused, NOT_A_PROJECT);
+        assert!(!refused.contains("notes.txt"));
+        assert!(project_path("thumbnails.encastra").is_ok());
+    }
+
+    #[test]
+    fn a_handle_kind_is_guessed_from_the_extension_and_nothing_else() {
+        assert_eq!(kind_for(Path::new("a.png")), HandleKind::Image);
+        assert_eq!(kind_for(Path::new("a.JPEG")), HandleKind::Image);
+        assert_eq!(kind_for(Path::new("a.mp4")), HandleKind::Video);
+        assert_eq!(kind_for(Path::new("a.flac")), HandleKind::Audio);
+        // Anything unrecognised is a file, which is the honest answer: the guess is a hint, and
+        // the component that decodes it is where a wrong one is actually found out.
+        assert_eq!(kind_for(Path::new("a.csv")), HandleKind::File);
+        assert_eq!(kind_for(Path::new("a")), HandleKind::File);
+        assert_eq!(kind_for(Path::new("a.png.txt")), HandleKind::File);
+    }
+
+    #[test]
+    fn a_prepared_folders_identity_matches_how_the_library_names_a_path() {
+        // The two have to agree, or the same thing saved and then prepared would appear twice
+        // under two different names. This is `encastra_library`'s own `identity_of`.
+        let path = r"C:\work\dev.alice.thumbnails-1.0.0";
+        assert_eq!(
+            library_id(path),
+            encastra_project::hash(path.as_bytes())[..16]
+        );
+        assert_eq!(library_id(path).len(), 16);
+        assert_ne!(library_id(path), library_id(&format!("{path}.encastra")));
+    }
 }

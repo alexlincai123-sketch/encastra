@@ -1,9 +1,10 @@
 /**
  * Where you are in the application.
  *
- * Five places, not ten. Marketplace and Community are not here because they do not exist, and a
+ * Six places, not ten. Marketplace and Community are not here because they do not exist, and a
  * navigation item that opens an empty "coming soon" page teaches people that half the
- * application is decoration.
+ * application is decoration. Library is here because it does: it lists files on this machine,
+ * and it is empty until there is something on this machine to list.
  */
 
 import { useTranslation } from './i18n';
@@ -24,6 +25,16 @@ const ICONS: Record<View, React.ReactNode> = {
       <rect x="2" y="7" width="6" height="8" rx="1.5" />
       <rect x="14" y="3" width="6" height="8" rx="1.5" />
       <rect x="7" y="9.6" width="8" height="2.8" rx="1.2" />
+    </>
+  ),
+  // Blocks on a shelf: the same rectangles the mark is built from, stood on a line, because
+  // what this holds is things that were assembled rather than a category of them.
+  library: (
+    <>
+      <rect x="2.5" y="4" width="4.5" height="12" rx="1.5" />
+      <rect x="8.75" y="6.5" width="4.5" height="9.5" rx="1.5" />
+      <rect x="15" y="2.5" width="4.5" height="13.5" rx="1.5" />
+      <rect x="2" y="17.8" width="18" height="2.2" rx="1.1" />
     </>
   ),
   components: (
@@ -47,7 +58,14 @@ const ICONS: Record<View, React.ReactNode> = {
 
 /** Sidebar order. Labels come from `sidebar.items.*`, translated at render time so a locale
  * switch updates the labels without touching this order. */
-const ITEM_IDS: readonly View[] = ['home', 'builder', 'components', 'security', 'settings'];
+const ITEM_IDS: readonly View[] = [
+  'home',
+  'builder',
+  'library',
+  'components',
+  'security',
+  'settings',
+];
 
 export function Sidebar() {
   const view = useEditor((s) => s.view);

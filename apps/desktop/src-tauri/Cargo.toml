@@ -19,6 +19,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 encastra-builtins = { path = "../../../crates/encastra-builtins" }
 encastra-core = { path = "../../../crates/encastra-core" }
+encastra-library = { path = "../../../crates/encastra-library" }
 encastra-project = { path = "../../../crates/encastra-project" }
 encastra-protocol = { path = "../../../crates/encastra-protocol" }
 encastra-publish = { path = "../../../crates/encastra-publish" }

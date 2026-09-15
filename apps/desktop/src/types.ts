@@ -269,3 +269,121 @@ export interface Prepared {
   bundle: PublicationBundle;
   folder: string;
 }
+
+/**
+ * What kinds of thing a publication can be. Mirrors `Kind` in `crates/encastra-publish`.
+ *
+ * Wider than `PublicationDraft['kind']` on purpose: this build only offers to publish a project
+ * or a template, and it has to be able to *read* a document that says `component` in order to
+ * refuse it by name rather than by a shrug.
+ */
+export type PublicationKind = 'project' | 'template' | 'component';
+
+/**
+ * Everything read out of a publication folder, and nothing taken on trust.
+ *
+ * Mirrors `Inspected` in `crates/encastra-publish/src/import.rs`, which is `camelCase`. Holding
+ * one of these means the folder passed; it does not mean anything has been written anywhere.
+ *
+ * `provenanceVerified` and `publisherVerified` are always false in this build, and they are
+ * fields rather than omissions so that an interface has to render "no" rather than being free
+ * to imply "yes" by saying nothing.
+ */
+export interface Inspected {
+  bundle: PublicationBundle;
+  /** The file name inside the folder, never a path. */
+  projectFile: string;
+  projectName: string;
+  projectId: string;
+  /** `Option<String>` in Rust, which serialises as `null` rather than being left out. */
+  projectDescription: string | null;
+  steps: number;
+  stepsSwitchedOff: number;
+  versions: number;
+  /** The findings of the check run on this machine, on these bytes. */
+  review: PublicationReview;
+  provenanceVerified: boolean;
+  publisherVerified: boolean;
+}
+
+/**
+ * Why a publication could not be taken in.
+ *
+ * Mirrors `ImportError` in `crates/encastra-publish/src/import.rs`, which is tagged on `kind`
+ * and renamed kebab-case. Matched on rather than read, so that improving an English sentence on
+ * the Rust side cannot change which explanation the interface shows — and so every one of them
+ * can have a sentence of its own in six languages. `library.ts` holds that mapping.
+ */
+export type ImportError =
+  | { kind: 'not-a-folder' }
+  | { kind: 'folder-is-a-link' }
+  | { kind: 'no-document' }
+  | { kind: 'document-is-a-link' }
+  | { kind: 'document-too-large'; size: number; max: number }
+  | { kind: 'document-unreadable'; reason: string }
+  | { kind: 'no-project' }
+  | { kind: 'more-than-one-project'; names: string[] }
+  | { kind: 'project-is-a-link' }
+  | { kind: 'unexpected-entries'; names: string[] }
+  | { kind: 'project-too-large'; size: number; max: number }
+  | { kind: 'checksum-mismatch' }
+  | { kind: 'project-unreadable'; reason: string }
+  // Named `publicationKind` in the JSON: the enum is tagged on `kind`, and a field called
+  // `kind` would land on top of the tag that says which refusal this is.
+  | { kind: 'not-installable'; publicationKind: PublicationKind }
+  | { kind: 'not-a-listing-id'; id: string }
+  | { kind: 'not-a-version'; version: string }
+  | { kind: 'not-publishers-namespace'; listing: string; publisher: string }
+  | { kind: 'text-too-long'; field: string; max: number }
+  | { kind: 'text-has-control-characters'; field: string }
+  | { kind: 'document-disagrees-with-project'; about: string }
+  | { kind: 'runtime-incompatible'; requires: string; have: string }
+  | { kind: 'review-refused'; findings: PublicationFinding[] }
+  | { kind: 'capabilities-disagree'; declared: string[]; actual: string[] }
+  | { kind: 'already-imported'; listing: string; version: string }
+  | { kind: 'io'; reason: string };
+
+/** Where an entry came from, which is the only thing that decides what may be done to it. */
+export type LibraryOrigin = 'created' | 'imported' | 'prepared';
+
+/** Whether what an entry names is still there, and still what it was. */
+export type LibraryStatus = 'present' | 'missing' | 'changed';
+
+/**
+ * One thing somebody has. Mirrors `Entry` in `crates/encastra-library`, which is `camelCase`.
+ *
+ * `checksum` is integrity, not provenance: it answers "is this still what it was", and nothing
+ * about who made it.
+ */
+export interface LibraryEntry {
+  id: string;
+  origin: LibraryOrigin;
+  name: string;
+  description: string | null;
+  /** The `.encastra` file for something created or imported; the folder for one prepared. */
+  path: string;
+  addedAtMs: number;
+  lastOpenedMs: number | null;
+  modifiedAtMs: number;
+  checksum: string | null;
+  sizeBytes: number | null;
+  steps: number;
+  runtime: string;
+  listingId: string | null;
+  version: string | null;
+  publisher: string | null;
+  /** What it will ask to reach when it runs. Present for an import. */
+  capabilities: string[];
+}
+
+/** An entry with the answer to "is it still there", computed at the moment it was asked. */
+export interface EntryWithStatus {
+  entry: LibraryEntry;
+  status: LibraryStatus;
+}
+
+export interface LibraryListing {
+  entries: EntryWithStatus[];
+  /** The name an unreadable index was moved to. Reported once, then forgotten. */
+  quarantined: string | null;
+}

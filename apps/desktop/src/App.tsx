@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { selectPlural, useTranslation } from './i18n';
 import { ipc, recordedRuns } from './ipc';
 import { Welcome } from './onboarding/Welcome';
+import { Import } from './panels/Import';
 import { Publish } from './panels/Publish';
 import { applyToDocument, usePreferences } from './preferences';
 import { Sidebar } from './Sidebar';
@@ -16,6 +17,7 @@ import { useEditor } from './store';
 import { Builder } from './views/Builder';
 import { Components } from './views/Components';
 import { Home } from './views/Home';
+import { Library } from './views/Library';
 import { Security } from './views/Security';
 import { Settings } from './views/Settings';
 
@@ -337,10 +339,12 @@ export function App() {
           without needing the highlight state lifted up here. */}
       <Welcome />
       <Publish />
+      <Import />
 
       <div className="content">
         {view === 'home' ? <Home /> : null}
         {view === 'builder' ? <Builder /> : null}
+        {view === 'library' ? <Library /> : null}
         {view === 'components' ? <Components /> : null}
         {view === 'security' ? <Security /> : null}
         {view === 'settings' ? <Settings /> : null}
