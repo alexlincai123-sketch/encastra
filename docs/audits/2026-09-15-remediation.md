@@ -85,6 +85,7 @@ Severity is about this build as it ships: Windows-only, no third-party component
 | **ENC-NEW-04** | MEDIUM | **FIXED** | CI fails if a security test *skips* on the platform that can run it. | The gates themselves, checked against a real skip | A test could still skip on both platforms if somebody added a third condition. |
 | **ENC-NEW-05** | MEDIUM | **OPEN** | Not fixed. No aggregate memory ceiling across a run: the executor holds every node's output for the run's lifetime. | — | Twenty nodes each at their individual limit are twenty times the limit. See [N](#n-residual-risks). |
 | **ENC-NEW-06** | LOW | **OPEN — no known fix** | Hard links are undetectable by canonicalisation. | — | Somebody who can already write into a granted folder can link a file from elsewhere on the volume into it. |
+| **ENC-NEW-07** | MEDIUM | **FIXED** | `main` gained `encastra-publish` while this pass was running. `prepare_publication` builds a directory named after the listing id, inside a folder the renderer names, and neither was checked. `Publisher::owns` is a prefix test whose two sides are both arguments to the same command, so whoever chooses both chooses the answer — `publisher.id = "x"` with `listing_id = "x./../../evil"` passes it. Both identifiers now go through the product's existing identifier grammar, before the namespace test; the destination is resolved and must be a chosen folder; the joined path is asserted to stay inside it. | `a_listing_id_cannot_be_a_path`, `a_publisher_id_cannot_be_a_path_either`, `an_ordinary_listing_id_is_still_accepted` | A second session found the same defect independently and fixed it differently on another branch; the two implementations need reconciling, not both applying. |
 
 **Two fixes have no direct test, and that is a real gap, not an oversight to gloss over.**
 ENC-NEW-01 needs a panicking component inside a live Tauri thread, and ENC-NEW-03 needs an hour of
@@ -383,8 +384,8 @@ Everything below was run on this machine, on this branch, at this commit.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | **182 passed, 0 failed** (99 before the audit began) |
-| `npx vitest run` | **302 passed, 0 failed, 18 files** (265 before) |
+| `cargo test --workspace` | **223 passed, 0 failed** (99 before the audit began; 182 before `main` was merged in) |
+| `npx vitest run` | **336 passed, 0 failed, 20 files** (265 before) |
 | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
 | `cargo fmt --all --check` | clean |
 | `npx tsc --build` | clean — **exit code checked**, not the summary line |
@@ -412,6 +413,23 @@ Everything below was run on this machine, on this branch, at this commit.
 * **No libFuzzer run.** The targets exist and the corpus is seeded; running them needs nightly and
   hours. The stable sweep ran: 60,000 mutated inputs, no panic, within budget.
 * **Nothing here has been reviewed by anybody outside the project.**
+* **The installer predates the merge.** `main` was merged into this branch after the release build
+  ran, bringing in `encastra-publish` and the publication panel. Everything else was re-run on the
+  merged tree — 223 Rust tests, 336 TypeScript, clippy, fmt, `cargo deny`, `tsc`, biome — but the
+  installer itself was not rebuilt afterwards. Do that before shipping from this branch.
+
+### A note on the moving base
+
+`main` moved twice during this work, the second time merging a feature branch that added a new
+crate (`encastra-publish`) and a new Tauri command surface. That branch was merged into this one
+and re-verified, and auditing it produced ENC-NEW-07.
+
+Two consequences worth stating rather than leaving implied. First, **an audit is a statement about
+a commit, not about a repository**: the offensive audit's conclusions were already partly stale for
+`main` by the time they were written, because code was landing beside them. Second, a second
+session found ENC-NEW-07 independently and fixed it differently on a third branch. That is a good
+sign about the defect being real and a bad sign about two fixes for one bug; they need reconciling
+before either ships.
 
 ---
 
