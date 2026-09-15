@@ -1,0 +1,20 @@
+# gitleaks: secret scanning policy. Enforced in CI (ci.yml on every push, release.yml on the
+# whole history before a build).
+#
+# The default rules apply unchanged. What is below is the one thing they get wrong here, named
+# precisely enough that nothing else rides in on it: a fixture that has to look like a secret,
+# because the code under test exists to notice secrets.
+
+[extend]
+useDefault = true
+
+# `review.rs` tests that a publication carrying an API key in a component setting is refused.
+# The fixture value is not a credential to anything; it is the string the refusal is tested
+# against. Allowlisted by exact value AND exact file, with AND, so that a real key of the same
+# shape anywhere else — or this value pasted somewhere else — is still a finding.
+[[allowlists]]
+description = "the fake API key the publication review is tested against"
+condition = "AND"
+paths = ['''crates/encastra-publish/src/review\.rs''']
+regexTarget = "secret"
+regexes = ['''^sk-live-9d2f4a7c1b8e6f30$''']
