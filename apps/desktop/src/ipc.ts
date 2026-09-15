@@ -19,6 +19,7 @@ import type {
   About,
   ComponentManifest,
   EncastraGraph,
+  FolderPurpose,
   GrantSpec,
   InputSpec,
   Inspected,
@@ -41,7 +42,15 @@ export interface Ipc {
   validateGraph(graph: EncastraGraph, inputs: InputSpec[]): Promise<Validation>;
   runGraph(graph: EncastraGraph, inputs: InputSpec[], grants: GrantSpec[]): Promise<RunResult>;
   pickFile(): Promise<string | null>;
-  pickFolder(): Promise<string | null>;
+  /**
+   * Opens the native folder chooser to answer one particular question.
+   *
+   * `purpose` is required rather than optional, so a flow that forgets to say what it is
+   * choosing a folder for does not compile. The runtime records the folder against that
+   * purpose and nothing else: a folder picked to import a publication from is not a folder a
+   * component may be given, and the command that asks the wrong question refuses.
+   */
+  pickFolder(purpose: FolderPurpose): Promise<string | null>;
   pickProjectToOpen(): Promise<string | null>;
   pickProjectToSave(suggested: string): Promise<string | null>;
   saveProject(
@@ -160,9 +169,13 @@ class TauriIpc implements Ipc {
    * `choose_folder` opens the chooser on the privileged side, so the runtime learns the path from
    * the operating system rather than from here, and refuses a folder grant it has no record of.
    * The editor cannot add to that record, which is the point.
+   *
+   * The record is of the folder *and* what it was chosen for. Passing the purpose is not a
+   * formality: a folder recorded under one purpose answers no other, so a flow that names the
+   * wrong one gets a chooser that satisfies nothing it then asks for.
    */
-  async pickFolder(): Promise<string | null> {
-    const chosen = await this.invoke<string | null>('choose_folder');
+  async pickFolder(purpose: FolderPurpose): Promise<string | null> {
+    const chosen = await this.invoke<string | null>('choose_folder', { purpose });
     return typeof chosen === 'string' ? chosen : null;
   }
 

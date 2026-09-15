@@ -174,6 +174,28 @@ export interface GrantSpec {
   hosts?: string[];
 }
 
+/**
+ * What a folder is being chosen *for*.
+ *
+ * Consent is per question. The runtime records the folder somebody picked together with the
+ * purpose the chooser was opened to serve, and each command checks the pair for its own
+ * purpose — so a folder picked to import a publication from is not also a folder a component
+ * may write into, which is what it used to be.
+ *
+ * These four strings are the wire form of `FolderPurpose` in `apps/desktop/src-tauri/src/lib.rs`;
+ * `test/consent.test.ts` asserts the two lists are the same list. A string that is not one of
+ * them fails to deserialise on the Rust side, so there is nothing to gain by inventing one.
+ */
+export type FolderPurpose =
+  /** Where `prepare_publication` may write a publication. */
+  | 'publish-into'
+  /** Where `inspect_publication` and `import_publication` may read one from. */
+  | 'import-from'
+  /** A folder a step in the workflow may be given, via a grant on a run. */
+  | 'grant-to-component'
+  /** The Settings preference for where this person keeps their projects. */
+  | 'projects-location';
+
 export interface Snapshot {
   id: string;
   parent?: string;

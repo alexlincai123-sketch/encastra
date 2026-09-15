@@ -294,9 +294,9 @@ Stated plainly, because a security document that only lists controls is marketin
 4. **The broker's sensitive-location refusals are a list, not a rule.** *(Was "no deny-list";
    partly fixed.)* `resolve_grant_directory` refuses filesystem roots, the system and program
    directories, the profile root and the startup folders as trees, and a folder grant is only
-   accepted for a folder the person picked in the native chooser this session. What remains true
-   is that a list is never complete: an unwise folder that is not on it is granted if a person
-   grants it.
+   accepted for a folder the person picked in the native chooser this session **to give to a
+   component**. What remains true is that a list is never complete: an unwise folder that is not
+   on it is granted if a person grants it.
 
 5. **Secrets are declared and never resolved.** `variables.json` records that a variable is
    secret; nothing reads it, and there is no keystore integration. The invariant that a secret
@@ -334,10 +334,28 @@ Stated plainly, because a security document that only lists controls is marketin
 9. **The desktop bridge checks what it can and still relays a decision.** Tauri commands take a
    graph, inputs and grants from the WebView; a grant is dropped unless its node exists, its
    component declared the capability, and its folder resolves to one the person picked in the
-   native chooser this session. What the runtime cannot check is that the person *meant* it: the
-   sentence they agreed to is still drawn by the WebView. The CSP in §10 is what keeps foreign
-   code out of it, and an XSS there would still be a consent-forging bug, not merely a
-   defacement.
+   native chooser this session *for that purpose*. What the runtime cannot check is that the
+   person *meant* it: the sentence they agreed to is still drawn by the WebView. The CSP in §10
+   is what keeps foreign code out of it, and an XSS there would still be a consent-forging bug,
+   not merely a defacement.
+
+   **Consent is per purpose, not per folder.** `choose_folder` takes a purpose — `publish-into`,
+   `import-from`, `grant-to-component` or `projects-location` — and records the folder paired
+   with it; each command checks the pair for its own question and refuses otherwise
+   (`folder-not-chosen` on the import path, and the equivalent refusal on the others). It was
+   one shared set until 2026-09-15, so a folder picked to import a publication *from* also
+   answered "may this component write here" and "may a publication be written into this" —
+   three different sentences, one of which the person read. Browsing for a projects folder in
+   Settings answered all three. The path in a command is resolved before it is compared, so
+   `..`, a trailing separator, a `\\?\` spelling, a different case on a case-insensitive volume
+   and a junction all collapse to the one real folder: substitution buys nothing, and a link
+   pointing somewhere else is refused because it resolves somewhere else. Nothing is written to
+   disk — a restart forgets every choice, which is what makes "this session" true.
+
+   **`inputs[].path` is still not gated.** A file supplied for a graph input is imported into the
+   run's scratch folder on the strength of the WebView naming it, because the *file* chooser
+   still runs in the editor. That is the shape the folder chooser had before `choose_folder`;
+   the same move for files is not built. See [DESKTOP](DESKTOP.md) §2.
 
 10. **No external audit.** This model has been reviewed by the people who built it and by the
     tests in [TESTING](TESTING.md) §5. That is not the same thing, and an audit is a

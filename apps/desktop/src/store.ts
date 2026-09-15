@@ -822,7 +822,10 @@ export const useEditor = create<EditorState>((set, get) => ({
     // Import while the first chooser is up used to open a second chooser.
     set({ importInspected: null, importError: null, busy: true });
     try {
-      const folder = await ipc.pickFolder();
+      // Chosen to import *from*, and recorded as nothing else: the runtime will not let this
+      // folder answer "may a component write here" or "may a publication be written into this"
+      // later in the session on the strength of somebody having picked it here.
+      const folder = await ipc.pickFolder('import-from');
       if (!folder) return;
       set({ importOpen: true });
       set({ importInspected: { folder, inspected: await ipc.inspectPublication(folder) } });

@@ -53,7 +53,7 @@ state. Building it per call would let two calls disagree about what is installed
 
 | Command | What it does |
 |---|---|
-| `choose_folder` | opens the native folder chooser on the Rust side, resolves and sanity-checks the choice, and records it — the only way a folder becomes grantable, publishable-into or importable-from this session |
+| `choose_folder` | takes a `purpose`, opens the native folder chooser on the Rust side, resolves and sanity-checks the choice, and records the **pair** — the only way a folder becomes grantable, publishable-into or importable-from this session, and only for the one purpose it was chosen under |
 | `list_components` | every manifest this build offers, for the palette |
 | `type_graph` | the coercion table, served by the runtime that enforces it |
 | `validate_graph` | validation for a graph plus the ports the application will supply |
@@ -69,6 +69,37 @@ state. Building it per call would let two calls disagree about what is installed
 | `library_remove` | forgets an entry, and — only for a copy Encastra made itself — deletes it too |
 | `report_dirty` / `close_window` | whether the canvas holds unsaved work, and the close that happens once somebody has said it may go |
 | `about` | versions, taken from the build rather than typed anywhere |
+
+### Which path gate each command goes through
+
+Every command that takes a path, and what stands between the string the WebView sent and the
+filesystem. Consent is recorded as `(purpose, canonical path)`; a folder chosen for one purpose
+does not satisfy another.
+
+| Command | Path it takes | Gate |
+|---|---|---|
+| `choose_folder` | none — the chooser produces it | records `(purpose, resolved)`; there is **no** command that takes a path and adds it to the record |
+| `run_graph`, `start_workflow` | `grants[].folder` | `grant-to-component` pair, after `resolve_grant_directory` |
+| `run_graph`, `start_workflow` | `inputs[].path` | **not gated** — see the limitation below |
+| `prepare_publication` | `into` | `publish-into` pair |
+| `prepare_publication`, `review_publication` | `path` | must be a `.encastra` file; read only |
+| `inspect_publication`, `import_publication` | `folder` | `import-from` pair; refuses with `folder-not-chosen` |
+| `save_project` | `path` | must be a `.encastra` file; the only path this application writes outside a granted folder |
+| `open_project`, `restore_version`, `compare_versions` | `path` | must be a `.encastra` file |
+| `library_remove` | none — an entry id | deletion is confined by the library crate to copies under `imports/` |
+
+`FolderPurpose` has exactly four members — `publish-into`, `import-from`, `grant-to-component`,
+`projects-location` — and the editor cannot name a fifth: an unknown string fails to deserialise
+before the chooser opens. `projects-location` is the Settings preference for where somebody keeps
+their projects; it is recorded under its own name and no command acts on it, which is the point —
+browsing there used to make that folder grantable, publishable-into and importable-from.
+
+**`inputs[].path` is not gated, and is the one remaining path the WebView names freely.** A file
+supplied for an input is canonicalised and imported into the run's scratch folder, so a step that
+reads its input can read any file this account can read, whether or not a person picked it. The
+file chooser still runs in the editor rather than on this side, which is exactly the shape the
+folder chooser had before `choose_folder`. Closing it means the same move for files: a
+`choose_file` command that records what the OS returned. It is not built.
 
 A few of these are worth spelling out.
 
