@@ -56,6 +56,8 @@ all, and settles trailing dots and spaces, which Windows drops when it opens a f
 
 | Limit | Value | Why |
 |---|---|---|
+| `MAX_LIVE_VALUE_BYTES` | 1 GiB | The sum of every value the run holds at once, by the runtime's own accounting (`Value::approx_bytes`: text and bytes by length, JSON by a recursive estimate, a handle as zero because its content is a file). Release-at-last-consumer bounded a run by its depth; this bounds its width — five thousand independent readers feeding one node are all resident together, and no per-item cap could see that. A producer that would cross it fails with `run-memory-budget`, its consumers are skipped, the run finishes. **A bound on the runtime's accounting, not a guarantee against the operating system running out of memory**: component working memory, decoder buffers and the per-edge delivery copies are outside it. |
+| `MAX_LOG_LINES_PER_NODE` / `MAX_LOG_LINE_CHARS` | 200 / 2 000 | A node's log lines are a `Vec` the journal clones and emits over IPC. Past the line cap the rest are dropped and one line says how many; a longer line is truncated on a character boundary with a marker. |
 | `MAX_RUN_DURATION` | 1 hour | Validation refuses cycles, so a run's step count is already bounded by the node ceiling. Duration is not: a chain of `Delay` nodes is a legal graph and each may wait an hour. Checked between nodes; past it the run is cancelled exactly as if Stop had been pressed, so there is one mechanism and one appearance in the journal. Per run — a session with a trigger starts a new run per event and is unaffected. |
 
 **There is still no per-node timeout.** Cancellation is cooperative. A component that never
@@ -127,9 +129,13 @@ part of the permission identity, so a grant for a host's web API does not also a
 
 * **The number of grants in a run.** Each is checked individually and a list of them costs
   nothing; bounding it would be a number with no threat behind it.
-* **Aggregate memory across a run, by width.** Each file and each image is capped, and since
-  `feat/readiness` a produced value is dropped once every edge out of its port has been read —
-  the executor works that out from the graph, which is what this entry used to say it should do
-  and did not. What stays unbounded is the *width* of the graph: twenty producers feeding one
-  consumer are twenty values held at once, each under its own cap, and no number would be right
-  for a shape a person chose.
+* **Delivery copies.** A value is charged to the run budget once, when it is produced, and is
+  cloned once per edge when delivered. Execution is sequential, so at most one extra copy is
+  alive at a time and the peak is bounded — but the cumulative allocation for a value fanned out
+  to N consumers is N × its size. `// TODO(ENC-NEW-05b)` marks the clone site in `runner.rs`;
+  the fix is `Arc<str>` / `Arc<[u8]>` in `Value`, which changes the type every component
+  touches and is not done here.
+* **Memory outside the runtime's accounting.** `MAX_LIVE_VALUE_BYTES` counts `Value` payloads.
+  What a component allocates while it works, what an image decoder holds mid-decode, and what
+  the allocator keeps fragmented are not counted. The per-item caps (512 MB read, 100 MP image,
+  16 MB response) are what bound those, one node at a time.
