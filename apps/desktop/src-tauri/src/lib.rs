@@ -66,6 +66,16 @@ struct Runtime {
     /// system — a title-bar X, Alt+F4, a session ending — and the close event has to be answered
     /// before anything can be asked of the webview. Knowing already is the only way to say no.
     dirty: AtomicBool,
+    /// Whether an import is in flight, pushed here by `report_busy`.
+    ///
+    /// A separate flag from `dirty` rather than a second meaning for it, and the choice is
+    /// deliberate: the two answer different questions and produce different sentences. `dirty`
+    /// means "there is work in the canvas nobody has saved", and the editor's answer to that is
+    /// a prompt offering Save. An import is neither unsaved work nor something to save — it is
+    /// this process writing into `imports/` right now — and reusing `dirty` would ask somebody
+    /// about saving a canvas they never touched, then clear a flag that may have been genuinely
+    /// true. One boolean, one meaning.
+    importing: AtomicBool,
     /// Whether a close has already been decided by the person, and is now merely being carried
     /// out. Set by [`close_window`] so that the guard below lets that close through instead of
     /// prompting about the same work forever.
@@ -77,8 +87,14 @@ struct Runtime {
 /// A function rather than an expression inline in the handler so that the decision can be tested
 /// without a window: the failure that matters here is not "it prompted" but "it prompted again
 /// after the person already said yes", which is a window nobody can close.
-fn should_prevent_close(dirty: bool, closing: bool) -> bool {
-    dirty && !closing
+///
+/// An import in flight stops a close for a different reason from unsaved work. Unsaved work is
+/// the person's to lose if they say so; an import that is half-written is this software's mess,
+/// and a process that exits between staging and the rename leaves a directory nothing accounts
+/// for. It is a short wait — the ceiling on what an import writes is 64 MB — and the editor says
+/// so rather than appearing to ignore the X.
+fn should_prevent_close(dirty: bool, importing: bool, closing: bool) -> bool {
+    (dirty || importing) && !closing
 }
 
 struct Running {
@@ -1140,8 +1156,27 @@ struct LibraryListing {
 /// What to say when a lock is held by a thread that panicked while holding it.
 const LIBRARY_BUSY: &str = "The library is busy. Try that again.";
 
+/// What to say to a close that arrives while an import is being written.
+const IMPORT_IN_FLIGHT: &str =
+    "An import is being written. The window will close once it has finished.";
+
 impl LibraryHandle {
     fn open(root: PathBuf) -> LibraryHandle {
+        LibraryHandle::open_after(root, encastra_publish::import::STAGING_GRACE)
+    }
+
+    /// [`LibraryHandle::open`], with the age a staging directory has to reach before it is swept
+    /// as a parameter — so the sweep can be exercised without a test waiting an hour for it.
+    fn open_after(root: PathBuf, staging_grace: Duration) -> LibraryHandle {
+        // Whatever an interrupted import left behind goes at start-up, before anything counts
+        // the tree. Bytes that belong to nothing still take up room and still count against the
+        // library's ceiling. Only leftovers older than the grace period are taken — a second
+        // copy of this application may be importing right now.
+        let swept = encastra_publish::sweep_staging(&root, staging_grace);
+        if swept > 0 {
+            eprintln!("[library] {swept} interrupted import(s) cleared");
+        }
+
         match Library::load_or_quarantine(&root) {
             Ok(Recovered {
                 library,
@@ -1182,6 +1217,62 @@ impl LibraryHandle {
         candidate.save(&self.root).map_err(|e| e.to_string())?;
         *library = candidate;
         Ok(outcome)
+    }
+
+    /// Takes a publication in, having first made sure there is room for it — as one act.
+    ///
+    /// The index lock is held from measuring what the library already holds until the new entry
+    /// has been written, which is what makes the ceiling a ceiling. Two imports running at once
+    /// would otherwise each measure the same library, each be told there was room for one, and
+    /// both land: check-then-copy is only a check if nothing can happen in between.
+    ///
+    /// The lock is therefore held across the copy. That is deliberate and it is bounded: an
+    /// import writes at most `MAX_PUBLICATION_BYTES` plus a document, and what it blocks is the
+    /// Library list redrawing for that long. The alternative — reserve, release, copy — is the
+    /// bug this method exists to not have.
+    ///
+    /// `max_bytes` is a parameter rather than the constant so that the refusal can be exercised
+    /// against a small value instead of by writing four gibibytes in a test.
+    fn import_reserving(
+        &self,
+        folder: &Path,
+        registry: &dyn ComponentRegistry,
+        runtime_version: &str,
+        max_bytes: u64,
+    ) -> Result<Entry, ImportError> {
+        let mut guard = self.index.lock().map_err(|_| ImportError::Io {
+            reason: LIBRARY_BUSY.to_owned(),
+        })?;
+        let library = guard.as_mut().map_err(|reason| ImportError::Io {
+            reason: reason.clone(),
+        })?;
+
+        // Measured, not believed: `size_bytes` in the index is a number out of a file, and the
+        // tree on disk is the thing the ceiling is about. See `bytes_in_use`.
+        let used = encastra_library::bytes_in_use(library, &self.root);
+        let imported = encastra_publish::import_reserving(
+            folder,
+            registry,
+            runtime_version,
+            &self.root,
+            &|needed| encastra_library::room_for(used, needed, max_bytes),
+        )?;
+
+        let entry = encastra_library::entry_for_import(&imported, encastra_core::journal::now_ms());
+        let mut candidate = library.clone();
+        candidate.upsert(entry.clone());
+        if let Err(reason) = candidate.save(&self.root) {
+            // The copy landed and the index cannot be made to know about it. A folder nothing in
+            // the application can see, open or account for is worse than no import at all, so it
+            // goes back — through the crate's own check that it is inside `imports/`, never a
+            // bare delete of a path that came out of a file. The index is left exactly as it was.
+            let _ = encastra_library::remove_imported_copy(&self.root, &entry);
+            return Err(ImportError::Io {
+                reason: reason.to_string(),
+            });
+        }
+        *library = candidate;
+        Ok(entry)
     }
 
     /// Records something that was just saved, opened or prepared.
@@ -1245,32 +1336,22 @@ fn inspect_publication(
 /// Nothing is opened and nothing is run. The bytes that were checked are the bytes that are
 /// kept — the crate copies what it verified rather than reading the source a second time — and
 /// what comes back is the entry, so the interface can decide whether to offer to open it.
+///
+/// Whether there is room for it is decided here rather than in the crate, because the answer
+/// lives in the index and the crate has never heard of one. See `LibraryHandle::import_reserving`
+/// for why the check and the copy are one act.
 #[tauri::command]
 fn import_publication(
     state: tauri::State<'_, Runtime>,
     folder: String,
 ) -> Result<Entry, ImportError> {
     let folder = chosen_publication_folder(&state, &folder)?;
-    let imported = encastra_publish::import::import(
+    state.library.import_reserving(
         &folder,
         &state.registry,
         encastra_core::RUNTIME_VERSION,
-        &state.library.root,
-    )?;
-
-    let entry = encastra_library::entry_for_import(&imported, encastra_core::journal::now_ms());
-    if let Err(reason) = state.library.edit(|library| {
-        library.upsert(entry.clone());
-        Ok(())
-    }) {
-        // The copy landed and the index does not know about it. A folder nothing in the
-        // application can see, open or account for is worse than no import at all, so it goes
-        // back — through the crate's own check that it is inside `imports/`, never a bare
-        // delete of a path that came out of a file.
-        let _ = encastra_library::remove_imported_copy(&state.library.root, &entry);
-        return Err(ImportError::Io { reason });
-    }
-    Ok(entry)
+        encastra_library::MAX_LIBRARY_BYTES,
+    )
 }
 
 /// Everything in the index, each with the answer to whether it is still there.
@@ -1352,6 +1433,16 @@ fn report_dirty(state: tauri::State<'_, Runtime>, dirty: bool) {
     state.dirty.store(dirty, Ordering::Relaxed);
 }
 
+/// The editor telling this side that an import has started or finished.
+///
+/// The same arrangement as `report_dirty` and for the same reason: a close arrives from the
+/// operating system and has to be answered before anything can be asked of the webview, so the
+/// answer has to already be here. See [`Runtime::importing`] for why this is not `dirty`.
+#[tauri::command]
+fn report_busy(state: tauri::State<'_, Runtime>, importing: bool) {
+    state.importing.store(importing, Ordering::Relaxed);
+}
+
 /// Closes the window, after the person has said the unsaved work may go.
 ///
 /// The flag is set before the close is asked for, so [`should_prevent_close`] lets this one
@@ -1359,6 +1450,13 @@ fn report_dirty(state: tauri::State<'_, Runtime>, dirty: bool) {
 /// afterwards is a second close of a window that no longer exists.
 #[tauri::command]
 fn close_window(app: tauri::AppHandle, state: tauri::State<'_, Runtime>) -> Result<(), String> {
+    // Checked before the flag is set, and checked here as well as in the editor: this is the
+    // side that knows an import is running, and a close that arrived while one was in flight
+    // would tear it down between the staging write and the rename. The editor refuses first so
+    // that somebody sees a sentence; this refuses so that being right does not depend on it.
+    if state.importing.load(Ordering::Relaxed) {
+        return Err(IMPORT_IN_FLIGHT.to_owned());
+    }
     state.closing.store(true, Ordering::Relaxed);
     let window = app
         .get_webview_window("main")
@@ -1418,6 +1516,7 @@ pub fn run() {
                 };
                 if should_prevent_close(
                     state.dirty.load(Ordering::Relaxed),
+                    state.importing.load(Ordering::Relaxed),
                     state.closing.load(Ordering::Relaxed),
                 ) {
                     api.prevent_close();
@@ -1444,8 +1543,10 @@ pub fn run() {
                 running: Mutex::new(None),
                 chosen_folders: Mutex::new(BTreeSet::new()),
                 library: LibraryHandle::open(library_root),
-                // Nothing has been edited yet, and nobody has decided to close anything.
+                // Nothing has been edited yet, nothing is being imported, and nobody has
+                // decided to close anything.
                 dirty: AtomicBool::new(false),
+                importing: AtomicBool::new(false),
                 closing: AtomicBool::new(false),
             });
             Ok(())
@@ -1470,6 +1571,7 @@ pub fn run() {
             library_list,
             library_remove,
             report_dirty,
+            report_busy,
             close_window,
             about
         ])
@@ -1513,14 +1615,24 @@ mod tests {
     #[test]
     fn a_close_is_stopped_only_while_there_is_unsaved_work_nobody_has_decided_about() {
         // The ordinary close of a saved window: nothing to ask about, so nothing is asked.
-        assert!(!should_prevent_close(false, false));
+        assert!(!should_prevent_close(false, false, false));
         // Work in the window, and no decision yet: this is the one the feature exists for.
-        assert!(should_prevent_close(true, false));
+        assert!(should_prevent_close(true, false, false));
         // The person said the work may go, and the editor is now closing the window itself.
         // Stopping this one would mean a window that cannot be closed at all — the failure
         // that turns a safeguard into a trap.
-        assert!(!should_prevent_close(true, true));
-        assert!(!should_prevent_close(false, true));
+        assert!(!should_prevent_close(true, false, true));
+        assert!(!should_prevent_close(false, false, true));
+
+        // An import being written stops a close of its own accord, with nothing unsaved in the
+        // window: the half-written folder it would leave behind is this software's mess, not
+        // the person's work. It is a short wait and the editor says so.
+        assert!(should_prevent_close(false, true, false));
+        assert!(should_prevent_close(true, true, false));
+        // And it is still not a trap: a close already decided goes through. `close_window`
+        // refuses that one separately while an import is in flight, which is the check that
+        // holds this case shut.
+        assert!(!should_prevent_close(false, true, true));
     }
 
     #[test]
@@ -1801,5 +1913,294 @@ mod tests {
             is_hash || commit == "unknown",
             "the stamp is a full commit hash, `-dirty` if the tree did not match, or `unknown`; got {commit:?}"
         );
+    }
+
+    // -- the library's byte ceiling --------------------------------------------------------------
+    //
+    // The arithmetic lives in `encastra-library` and is tested there. What is tested here is the
+    // part only this file can be wrong about: that the check and the copy it authorises happen
+    // under one lock, and that a failed index write puts the copied bytes back.
+
+    mod ceiling {
+        use super::*;
+        use encastra_core::ComponentRef;
+        use encastra_core::graph::{Node, Position};
+        use encastra_core::registry::InMemoryRegistry;
+        use encastra_project::{LockedComponent, Lockfile};
+        use encastra_publish::{Kind, Pricing};
+        use std::collections::BTreeMap;
+
+        const RUNTIME: &str = encastra_core::RUNTIME_VERSION;
+        const PROJECT_FILE: &str = "thumbnails.encastra";
+
+        struct Sandbox(PathBuf);
+
+        impl Sandbox {
+            fn new(name: &str) -> Self {
+                let path = std::env::temp_dir()
+                    .join("encastra-desktop-ceiling")
+                    .join(format!("{}-{name}", std::process::id()));
+                let _ = std::fs::remove_dir_all(&path);
+                std::fs::create_dir_all(&path).expect("the sandbox can be created");
+                Sandbox(path)
+            }
+            fn dir(&self, name: &str) -> PathBuf {
+                let path = self.0.join(name);
+                std::fs::create_dir_all(&path).expect("created");
+                path
+            }
+        }
+
+        impl Drop for Sandbox {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
+        fn manifest() -> ComponentManifest {
+            ComponentManifest::parse(
+                &serde_json::json!({
+                    "schema": 1,
+                    "id": "encastra.net.request",
+                    "version": "1.0.0",
+                    "name": "Fetch",
+                    "runtime": ">=0.1.0",
+                    "kind": "core",
+                    "license": "MIT",
+                    "ports": { "inputs": {}, "outputs": { "text": { "type": "string", "required": true } } },
+                    "config": {},
+                    "capabilities": [
+                        { "kind": "net.http", "scope": "allowed-hosts", "reason": "Fetches the address you configure." }
+                    ],
+                    "platforms": ["windows", "macos", "linux"]
+                })
+                .to_string(),
+            )
+            .expect("a manifest the runtime accepts")
+        }
+
+        fn registry() -> InMemoryRegistry {
+            let mut registry = InMemoryRegistry::default();
+            registry.insert(manifest()).expect("registered once");
+            registry
+        }
+
+        /// A publication folder, laid out the way `prepare_publication` writes one. The version is
+        /// a parameter so that two of them are two different things to import rather than the same
+        /// one twice, which is refused for an entirely different reason.
+        fn publication(folder: &Path, registry: &InMemoryRegistry, version: &str) {
+            let mut project = Project::new("Thumbnails", 1_000);
+            project.manifest.runtime = format!(">={RUNTIME}");
+            let mut nodes = BTreeMap::new();
+            nodes.insert(
+                NodeId("fetch".into()),
+                Node {
+                    component: ComponentRef {
+                        id: "encastra.net.request".into(),
+                        version: "1.0.0".into(),
+                    },
+                    label: None,
+                    config: BTreeMap::new(),
+                    position: Position::default(),
+                    disabled: false,
+                },
+            );
+            project.graph = Graph {
+                nodes,
+                edges: Vec::new(),
+            };
+            let installed = manifest();
+            project.lock = Lockfile {
+                components: vec![LockedComponent {
+                    id: installed.id.clone(),
+                    version: installed.version.clone(),
+                    manifest_digest: installed.digest(),
+                    origin: "builtin".into(),
+                }],
+            };
+
+            let bytes = project.to_bytes().expect("serialises");
+            let draft = PublicationDraft {
+                listing_id: "dev.alice.thumbnails".into(),
+                kind: Kind::Project,
+                version: version.into(),
+                title: "Thumbnails".into(),
+                summary: "Makes a small copy of every picture dropped in a folder.".into(),
+                categories: Vec::new(),
+                tags: Vec::new(),
+                license: License::Mit,
+                pricing: Pricing::Free,
+                changelog: None,
+            };
+            let publisher = Publisher {
+                id: "dev.alice".into(),
+                display_name: "Alice".into(),
+                bio: None,
+                verified: false,
+            };
+            let review = encastra_publish::review(&project, registry, &draft.license);
+            let bundle = PublicationBundle::prepare(
+                draft,
+                &publisher,
+                &bytes,
+                &project.manifest.runtime,
+                &review,
+                1_700_000_000_000,
+            )
+            .expect("the fixture prepares");
+
+            std::fs::write(
+                folder.join("publication.json"),
+                serde_json::to_vec_pretty(&bundle).expect("serialises"),
+            )
+            .expect("written");
+            std::fs::write(folder.join(PROJECT_FILE), &bytes).expect("written");
+        }
+
+        fn shelf(root: &Path) -> PathBuf {
+            root.join("imports").join("dev.alice.thumbnails")
+        }
+
+        fn staging_left(root: &Path) -> Vec<String> {
+            let Ok(entries) = std::fs::read_dir(shelf(root)) else {
+                return Vec::new();
+            };
+            entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|name| name.starts_with('.'))
+                .collect()
+        }
+
+        #[test]
+        fn two_imports_at_once_into_room_for_one_land_exactly_one() {
+            let sandbox = Sandbox::new("race");
+            let registry = registry();
+            let first = sandbox.dir("first");
+            let second = sandbox.dir("second");
+            publication(&first, &registry, "1.0.0");
+            publication(&second, &registry, "2.0.0");
+
+            // How much one import weighs, learnt by doing one into a library that is then thrown
+            // away. Guessing the number would make this test pass for the wrong reason the day
+            // the fixture changes size.
+            let scratch = sandbox.dir("scratch");
+            let probe = LibraryHandle::open(scratch.clone());
+            probe
+                .import_reserving(&first, &registry, RUNTIME, u64::MAX)
+                .expect("the probe import fits");
+            let one = encastra_library::measure_imports(&scratch);
+            assert!(one > 0);
+
+            // A ceiling with room for one and not two.
+            let max = one + one / 2;
+            let root = sandbox.dir("library");
+            let library = LibraryHandle::open(root.clone());
+
+            let outcomes = std::thread::scope(|scope| {
+                let a = scope.spawn(|| library.import_reserving(&first, &registry, RUNTIME, max));
+                let b = scope.spawn(|| library.import_reserving(&second, &registry, RUNTIME, max));
+                (a.join().expect("no panic"), b.join().expect("no panic"))
+            });
+
+            let (winners, losers): (Vec<_>, Vec<_>) = [outcomes.0, outcomes.1]
+                .into_iter()
+                .partition(|outcome| outcome.is_ok());
+            assert_eq!(
+                winners.len(),
+                1,
+                "exactly one import may win: {winners:?} / {losers:?}"
+            );
+            assert!(
+                matches!(losers[0], Err(ImportError::LibraryFull { .. })),
+                "the one that lost has to be told why: {:?}",
+                losers[0]
+            );
+
+            // The ceiling held: what is on disk is one import and not two, and the loser left
+            // nothing half-copied behind it.
+            let held = encastra_library::measure_imports(&root);
+            assert!(held <= max, "{held} bytes past a ceiling of {max}");
+            assert_eq!(held, one);
+            assert!(staging_left(&root).is_empty(), "staging was abandoned");
+            let versions: Vec<String> = std::fs::read_dir(shelf(&root))
+                .expect("the shelf exists")
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(versions.len(), 1, "two version folders: {versions:?}");
+
+            // And the index says the same thing the disk does.
+            let entries = library
+                .read(|library| library.entries.len())
+                .expect("the index is readable");
+            assert_eq!(entries, 1);
+        }
+
+        #[test]
+        fn an_index_that_cannot_be_written_takes_the_copied_bytes_back_out() {
+            let sandbox = Sandbox::new("rollback");
+            let registry = registry();
+            let folder = sandbox.dir("publication");
+            publication(&folder, &registry, "1.0.0");
+
+            let root = sandbox.dir("library");
+            let library = LibraryHandle::open(root.clone());
+
+            // The injected failure: the index's own path is a directory, so the atomic rename
+            // that finishes a save cannot happen. Created after the handle is open, because a
+            // handle that could not read the index at start-up would refuse before importing and
+            // would prove nothing about the rollback.
+            std::fs::create_dir_all(root.join(encastra_library::INDEX_FILE)).expect("created");
+
+            let refused = library
+                .import_reserving(
+                    &folder,
+                    &registry,
+                    RUNTIME,
+                    encastra_library::MAX_LIBRARY_BYTES,
+                )
+                .expect_err("the index cannot be written, so the import cannot stand");
+            assert!(matches!(refused, ImportError::Io { .. }), "{refused}");
+
+            // The copy went back. An import the application cannot see, open or account for is
+            // worse than no import at all.
+            assert_eq!(
+                encastra_library::measure_imports(&root),
+                0,
+                "the copied bytes are still there"
+            );
+            assert!(!shelf(&root).join("1.0.0").exists());
+            assert!(staging_left(&root).is_empty());
+
+            // The index in memory did not move forward either, because the disk never did.
+            assert_eq!(library.read(|l| l.entries.len()).expect("readable"), 0);
+
+            // And the folder somebody was sent is untouched.
+            assert!(folder.join(PROJECT_FILE).exists());
+        }
+
+        #[test]
+        fn opening_the_library_clears_what_an_interrupted_import_left() {
+            let sandbox = Sandbox::new("sweep");
+            let root = sandbox.dir("library");
+            let abandoned = shelf(&root).join(".1.0.0.importing-42-cafe-0");
+            std::fs::create_dir_all(&abandoned).expect("created");
+            std::fs::write(abandoned.join(PROJECT_FILE), b"half an import").expect("written");
+            let kept = shelf(&root).join("1.0.0");
+            std::fs::create_dir_all(&kept).expect("created");
+            std::fs::write(kept.join(PROJECT_FILE), b"a real one").expect("written");
+
+            // With the shipped grace period a leftover this fresh is left alone: another copy of
+            // this application may be importing right now.
+            let _ = LibraryHandle::open(root.clone());
+            assert!(abandoned.exists());
+
+            // An hour later — which is what a grace of nothing stands in for — it goes, and the
+            // import beside it does not.
+            let _ = LibraryHandle::open_after(root.clone(), Duration::ZERO);
+            assert!(!abandoned.exists());
+            assert!(kept.join(PROJECT_FILE).exists());
+        }
     }
 }
