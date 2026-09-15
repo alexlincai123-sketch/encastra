@@ -120,6 +120,32 @@ def write_at(path: pathlib.Path, keys: tuple[str, ...], version: str) -> bool:
     return False
 
 
+LOCK = ROOT / "Cargo.lock"
+
+
+def lock_members(text: str) -> list[tuple[str, str]]:
+    """The workspace crates as Cargo.lock records them: `[[package]]` entries with no `source`."""
+    found = []
+    for block in text.split("[[package]]")[1:]:
+        head = block.split("\n\n", 1)[0]
+        name = re.search(r'^name = "([^"]+)"', head, re.M)
+        version = re.search(r'^version = "([^"]+)"', head, re.M)
+        if name and version and not re.search(r"^source = ", head, re.M):
+            found.append((name.group(1), version.group(1)))
+    return found
+
+
+def write_lock(text: str, version: str) -> str:
+    """Rewrites the version of every workspace crate in Cargo.lock, nothing else."""
+    parts = text.split("[[package]]")
+    for index in range(1, len(parts)):
+        head, sep, tail = parts[index].partition("\n\n")
+        if not re.search(r"^source = ", head, re.M):
+            head = re.sub(r'^version = "[^"]+"', f'version = "{version}"', head, count=1, flags=re.M)
+        parts[index] = head + sep + tail
+    return "[[package]]".join(parts)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if anything disagrees")
@@ -166,6 +192,23 @@ def main() -> int:
         else:
             print(f"  {rel} ({name}): {found}   DISAGREES", file=sys.stderr)
             disagreements += 1
+
+    # Cargo.lock records the workspace crates' own versions. `cargo build` rewrites them to match
+    # Cargo.toml — which made the first build after a bump come out of a dirty tree, stamped
+    # `-dirty`, and refused by the manifest. So the lock is part of the bump, and of the check.
+    if LOCK.exists():
+        lock_text = LOCK.read_text("utf-8")
+        stale = [(name, found) for name, found in lock_members(lock_text) if found != version]
+        if stale and args.sync:
+            LOCK.write_text(write_lock(lock_text, version), encoding="utf-8", newline="\n")
+            for name, found in stale:
+                print(f"  Cargo.lock ({name}): {found} -> {version}")
+        elif stale:
+            for name, found in stale:
+                print(f"  Cargo.lock ({name}): {found}   DISAGREES", file=sys.stderr)
+            disagreements += len(stale)
+        else:
+            print(f"  Cargo.lock: {len(lock_members(lock_text))} workspace crates at {version}")
 
     if args.check and disagreements:
         print(
