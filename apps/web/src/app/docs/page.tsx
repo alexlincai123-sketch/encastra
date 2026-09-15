@@ -29,6 +29,9 @@ const DOC_KEY: Record<string, string> = {
   'RELEASE.md': 'release',
   'TESTING.md': 'testing',
   'PRODUCT-ROADMAP.md': 'productRoadmap',
+  'THIRD-PARTY.md': 'thirdParty',
+  'security/CI_SECURITY.md': 'ciSecurity',
+  'security/AI-AGENT-SURFACE.md': 'aiAgentSurface',
   'adr/': 'adr',
 };
 
