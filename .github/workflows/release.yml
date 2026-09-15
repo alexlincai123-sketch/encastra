@@ -207,6 +207,12 @@ jobs:
             npm run tauri:build
           fi
 
+      # Every artefact in target/ must be this version's and this commit's, read from the
+      # artefact itself (the VS_VERSIONINFO resource and the build stamp), not from its name.
+      - name: Every artefact is this version's and this commit's
+        shell: bash
+        run: python scripts/release_identity.py --check
+
       # The manifest that was published, put back beside the artefacts this machine just built.
       # After the build, not before: the build script stamps the binary `-dirty` if a tracked
       # file differs from the commit, and the tree at the build commit carries the previous
@@ -252,12 +258,24 @@ jobs:
               sys.exit(1)
           PY
 
+      # The verdict, machine-readable, uploaded beside the artefact. The gates already ran in
+      # the job above, so they are not re-run here and are marked NOT_VERIFIED in the file; CI
+      # evidence needs the GitHub API, which the runner's token is not asked to reach. A BLOCKED
+      # verdict does not fail this step — the file is the record of *why*, for the person who
+      # reads the artefact.
+      - name: The verdict, machine-readable
+        shell: bash
+        run: |
+          python scripts/release_check.py --skip-gate --skip-deps --no-network --out release-readiness.json || true
+          cat release-readiness.json
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: encastra-installer
           path: |
             target/release/bundle/nsis/*.exe
             docs/RELEASE.md
+            release-readiness.json
           if-no-files-found: error
           retention-days: 30
 
