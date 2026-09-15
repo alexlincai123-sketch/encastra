@@ -1,13 +1,15 @@
-# Release candidate readiness — Encastra 0.5.0-rc.2, written 2026-09-15
+# Release candidate readiness — Encastra 0.5.0-rc.3, written 2026-09-15
 
 **Verdict: RELEASE CANDIDATE — BLOCKED.** Five blockers are external (a certificate, a licence
 and a legal identity, a trademark clearance, an external security assessment, a repository
 plan) and each has an owner, an exact action and the evidence that would close it (§13). Two
 are internal and are stated as such: the four native chooser flows that gate permissions have
 never been driven end to end by a person or by GUI automation on any build (§7, B5), and the
-candidate's bytes are reproducible on the developer machine but **were not reproduced by the
-hosted Windows runner** (§6, B7) — found by the release workflow itself on rc.1, under
-analysis on rc.2. Everything else that can be done from the repository has been done, and §14
+candidate's bytes are reproducible on the developer machine but **are not reproduced by the
+hosted Windows runner** (§6, B7) — found by the release workflow itself on rc.1 and measured on
+rc.2: the runner's executable is deterministic *on the runner* and differs from this machine's
+in code and data, and the runner's installer differs even between two runner builds of the same
+executable. Everything else that can be done from the repository has been done, and §14
 says how it was verified — including what the second model that reviewed this document said
 before it was fixed, and what CI found after that.
 
@@ -28,7 +30,8 @@ artefact), **CI EXECUTED** (a run on GitHub Actions with a URL), **NOT VERIFIED*
 |---|---|
 | Remote | `github.com/alexlincai123-sketch/encastra`, private, free plan, created 2026-09-15 |
 | Frozen beta | `v0.5.0-beta.1` → publication commit `7608bb1`, build commit `349b2ff`; not modified |
-| **Candidate** | **`v0.5.0-rc.2`** → publication commit `8d96366`, **build commit `90e479d`**; `docs/RELEASE.md` at the tag holds the hashes; unsigned, on record |
+| **Candidate** | **`v0.5.0-rc.3`** → publication commit `e1c4c62`, **build commit `3264e07`**; `docs/RELEASE.md` at the tag holds the hashes; unsigned, on record. Same code as rc.2: the only change is `release.yml` (the install job runs on the runner's own build; the release build uses Node 24 like the developer machine, to remove one variable from B7) |
+| Superseded | `v0.5.0-rc.2` (publication `8d96366`, build `90e479d`): its CI was fully green and its bytes reproduce locally; its release runs failed at the cross-machine reproduction (B7) and, because the install job waited for that, produced no installation evidence — which rc.3 changes |
 | Superseded | `v0.5.0-rc.1` (publication `ea1ad29`, build `137c93a`): its own CI run failed at the fuzz-corpus gate (the seed carried the runtime version and went stale with the bump — fixed by making the seed version-independent and by one command that checks every generated artefact), and its release run showed the hosted runner does not reproduce the developer machine's bytes (B7). Same code otherwise; rc.2 differs from it by the seed, the generated-artefacts check, the version and the runner-build upload |
 | Branch | `feat/rc` (36 commits over `main` at the rc.2 publication commit; merged into `main` at the end of this cycle — §14) |
 | Waves integrated, in order | `rc/release` (release engineering, CI, inventories, docs) · `rc/errors` (typed, localised refusals; status-bar messages) · `rc/import-policy` (import state machine; library byte ceiling) · `rc/consent` (folder and file consent by purpose; `choose_file`) · `rc/commercial-closure` (artefact identity from the artefact, one release verdict, reproduce script, hand-off and legal drafts — by the security session `akuinu-28`) · the adversarial review's fixes |
@@ -117,15 +120,28 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
   in-tree build and both fresh builds are byte-identical (installer `41168df8…`, executable
   `b5d98cef…`, 378 s and 403 s). The security session had the same result on `d527d46`. For
   `90e479d` see §14.
-- **Reproducibility, across machines: NOT ACHIEVED (B7).** The release workflow builds the
-  build commit on `windows-latest` and compares with the published hashes; on `137c93a` the
-  runner produced installer `9725e01e…` and executable `8e5d6ae1…` against the published
-  `41168df8…`/`b5d98cef…`. Same pinned rustc 1.98.1 and `package-lock.json`; the runner's MSVC
-  toolset, NSIS and Node differ from this machine's (local toolset 14.44.35207, Node 24; the
-  runner image's are in its log). `/Brepro` makes a build deterministic *for a toolchain*, not
-  across toolchains. rc.2 uploads the runner's bytes so `scripts/pe_diff.py` can say which
-  structures differ; until that says "linker metadata only" or the toolchains are made equal,
-  the honest claim is: *two builds on the same machine match; a build elsewhere has not.*
+- **Reproducibility, across machines: NOT ACHIEVED (B7), now measured.** The release workflow
+  builds the build commit on `windows-latest` and compares with the published hashes. What the
+  runner's uploaded builds of rc.2 (`90e479d`) show, under `scripts/pe_diff.py`:
+  - **The runner is deterministic with itself for the executable:** two runs (tag push and
+    dispatch) produced the same `encastra-desktop.exe` (`835087ad…`), and rc.1's two runs had
+    done the same (`8e5d6ae1…` twice).
+  - **The runner's executable differs from this machine's** (`b26cb76c…`) in **code (199 111
+    bytes) and data (3 162 440 bytes)**, sizes 9 860 608 vs 9 856 000 — not linker metadata.
+    Same pinned rustc 1.98.1, same `Cargo.lock` (`--locked`), same commit stamp inside both.
+    The candidates are the MSVC toolset and CRT the runner image carries (this machine:
+    14.44.35207) and the Node that builds the embedded frontend (runner 22, this machine 24;
+    rc.3 equalises that one).
+  - **The runner's installer is not deterministic even with itself:** the two runner installers
+    of rc.2 wrap the identical executable and differ in 3 540 070 bytes, all in the NSIS
+    overlay (the compressed payload after the stub; every PE section identical). On this
+    machine three installers of one commit are byte-identical, so whatever varies is specific
+    to the runner's packaging run (NSIS 3.11 downloaded by Tauri on the runner; the cause is
+    not identified).
+  - Until the toolchains are made equal or the runner's build becomes the published artefact,
+    the honest claim is: *two builds on the same machine match; the runner's executable
+    matches itself; nothing matches across the two machines, and the runner's installer does
+    not match itself.*
 - **The chain:** `version.py --set` (eight files and the lock) → clean build commit → build →
   `release_identity.py --check` → `release_manifest.py --allow-unsigned` (pre-release only;
   production refuses unsigned with no override) → publication commit → tag → `release.yml`
@@ -226,16 +242,16 @@ that neither fix has been exercised through the GUI on this build (B5).
 | B4 | No external security assessment | owner (+ provider) | every security claim is the project's own | contract a test against `v0.5.0-rc.1` with the hand-off | the tag (done) | the report and the fixes it produces |
 | B5 | **Chooser journeys with a purpose never driven** | owner, or this project on a free machine | the permission-gating flows of this candidate have no GUI evidence on any build | on a machine where nobody is working: install the candidate, run `scripts/verify/install_check.ps1`, then `scripts/verify/gui_chooser.ps1` extended to publish-into, import-from, grant-to-component and the file chooser — or do the four flows by hand and attach the observations to `docs/audits/` | the candidate (done) | PASS lines for the four flows on `137c93a` |
 | B6 | Branch protection unavailable | owner | a private repository on a free plan cannot protect `main` | GitHub Pro, or make the repository public (which is B2's decision) | B2 | the protection rule visible on `main` |
-| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | diff the runner's rc.2 build against the published bytes with `scripts/pe_diff.py`; if the difference is linker/toolchain metadata only, pin the toolset in CI (or publish the runner's build as the artefact and make the developer machine reproduce *it*); if it is code or data, find the source | rc.2 release run (uploads the runner's build) | `release.yml`'s "the build reproduces the published hashes" step green on a tag, or a documented equivalence with `pe_diff` output |
+| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | the diff is code and data, not metadata (§6). Next: (1) read rc.3's runner build — if Node 24 removed the data difference, the rest is the MSVC toolset: pin it in CI to the developer's (14.44.35207) or make the runner's build the published artefact and reproduce *it* locally with the same toolset; (2) make the NSIS step deterministic on the runner (compare the two rc.2 runner installers' overlays; suspect the packaging inputs, not the exe) | rc.3 release runs | `release.yml`'s "the build reproduces the published hashes" step green on a tag, and two runner installers of one commit identical |
 
 ## 14. Integration record, final numbers, self-critique
 
-**Commits that matter:** `main` @ `f2446b5` (start) → rc.1: build `137c93a`, publication `ea1ad29` → rc.2: build `90e479d`, publication `8d96366`, tag `v0.5.0-rc.2`. Per-wave commits: `rc/release` a0c81af…ae81122,
+**Commits that matter:** `main` @ `f2446b5` (start) → rc.1: build `137c93a`, publication `ea1ad29` → rc.2: build `90e479d`, publication `8d96366` → rc.3: build `3264e07`, publication `e1c4c62`, tag `v0.5.0-rc.3`. Per-wave commits: `rc/release` a0c81af…ae81122,
 `rc/errors` 1ca6365, d3fe5d3, `rc/import-policy` 41ffa9d, 1a924be, `rc/consent` 369d688, aeff618,
 `rc/commercial-closure` f7dcf0a…d5f1618, review fixes 260b0c9, 137c93a.
 
-**Numbers:** §3. Runtime: 23/23 IPC checks and 3/3 main-thread checks on `137c93a` and again on
-`90e479d` (`docs/audits/2026-09-15-rc-runtime-qa.md`).
+**Numbers:** §3. Runtime: 23/23 IPC checks on `137c93a`, `90e479d` and `3264e07`; 3/3 main-thread
+checks on the first two (`docs/audits/2026-09-15-rc-runtime-qa.md`).
 
 **Reproducibility and CI outcomes for the candidate:** recorded in `CI_SECURITY.md` §4.1 and
 below as they landed; a row that is empty at the commit you are reading means the run had not
@@ -246,10 +262,12 @@ finished when this file was committed, and the next docs-only commit fills it.
 | `reproduce.py` on `137c93a` (rc.1) | **IDENTICAL** to the published bytes, both fresh builds |
 | CI run 34978855319 (rc.1 tree) | **✗** Rust Linux at the fuzz-corpus gate (seed carried the version); TypeScript, supply chain, secrets, Rust Windows ✓ |
 | Release run 34978855610 (rc.1, tag push) | gates ✓ · build ✓ · identity ✓ · **reproduction ✗** (B7); never reached the unsigned-decision step |
-| Release run 34978859110 (rc.1, dispatch) | see the last commit of this file |
-| `reproduce.py` on `90e479d` (rc.2) | see the last commit of this file |
-| CI run 34981764114 (rc.2 tree) | see the last commit of this file |
-| Release runs 34981765564 (tag push) / 34981768456 (dispatch) for rc.2 | see the last commit of this file; the runner's build is uploaded either way for `pe_diff` |
+| Release run 34978859110 (rc.1, dispatch) | gates ✓ · build ✓ · identity ✓ · **reproduction ✗** — the runner's executable had the same hash as in the tag-push run; the installer had another |
+| `reproduce.py` on `90e479d` (rc.2) | **IDENTICAL** to the published bytes, both fresh builds (326 s) |
+| CI run 34981764114 (rc.2 tree) | **all green** — TypeScript, supply chain, secrets, Rust Linux (corpus gate, symlink and link-refusal anti-skip), Rust Windows (startup-folder and junction anti-skip) |
+| Release runs 34981765564 (tag push) / 34981768456 (dispatch) for rc.2 | gates ✓ · build ✓ · identity ✓ · **reproduction ✗** in both; the runner's builds were uploaded and are what §6 measures; the install job did not run (it waited for a green build) |
+| `reproduce.py` on `3264e07` (rc.3) | see the last commit of this file |
+| CI 34986565216 / Release 34986561347 (tag push) / 34986561591 (dispatch) for rc.3 | see the last commit of this file — the install job now runs on the runner's build |
 
 **Self-critique — twenty questions, answered without softening:**
 

@@ -91,6 +91,8 @@ against, with their outcome. A run is listed whether it passed or not.
 | [34981764114](https://github.com/alexlincai123-sketch/encastra/actions/runs/34981764114) | `feat/rc` @ `8d96366` (the publication commit of `v0.5.0-rc.2`) | dispatch | see §4.1 | rc.2's tree: version-independent fuzz seed, `generated_check.py`. |
 | [34981765564](https://github.com/alexlincai123-sketch/encastra/actions/runs/34981765564) | tag `v0.5.0-rc.2` | tag push | see §4.1 | Uploads the runner's build whether or not it reproduces; expected to refuse at the unsigned-decision step afterwards. |
 | [34981768456](https://github.com/alexlincai123-sketch/encastra/actions/runs/34981768456) | tag `v0.5.0-rc.2` | dispatch, `allow_unsigned=true` | see §4.1 | The run that decides rc.2. |
+| [34986565216](https://github.com/alexlincai123-sketch/encastra/actions/runs/34986565216) | `feat/rc` @ `e1c4c62` (the publication commit of `v0.5.0-rc.3`) | dispatch | see §4.1 | Same code as rc.2. |
+| [34986561347](https://github.com/alexlincai123-sketch/encastra/actions/runs/34986561347) / [34986561591](https://github.com/alexlincai123-sketch/encastra/actions/runs/34986561591) | tag `v0.5.0-rc.3` | tag push / dispatch | see §4.1 | The install job runs on the runner's own build; Node 24 in the release build. |
 
 ### 4.1 Outcomes of the candidates' runs
 
@@ -112,7 +114,26 @@ against, with their outcome. A run is listed whether it passed or not.
   decision step, the verdict and the install job did not run.
 - Release 34978859110 (dispatch): recorded below when finished.
 
-**rc.2 (`8d96366` / build `90e479d`)** — recorded below when finished.
+- Release 34978859110 (dispatch): gates ✓ · build ✓ · identity ✓ · **reproduction ✗** — the
+  runner's executable hashed the same as in the tag-push run (`8e5d6ae1…`), the installer
+  differently (`823ac71c…` vs `9725e01e…`).
+
+**rc.2 (`8d96366` / build `90e479d`)**
+
+- CI 34981764114: **all green** — TypeScript ✓ · supply chain ✓ · secrets ✓ · Rust Linux ✓
+  (corpus gate, symlink-escape and link-refusal anti-skip greps executed) · Rust Windows ✓
+  (startup-folder and junction anti-skip greps executed). The first fully green run of a
+  candidate's own tree.
+- Release 34981765564 (tag push) and 34981768456 (dispatch): gates ✓ · build ✓ · identity ✓ ·
+  **reproduction ✗** in both. Both uploaded the runner's build (`encastra-runner-build-<run>`),
+  which is what the readiness report's §6 measures: the runner's executable is the same in both
+  runs (`835087ad…`) and differs from the developer machine's (`b26cb76c…`) in code and data;
+  the runner's two installers differ from each other in the NSIS overlay only. The install job
+  did not run in either (it waited for a build that reproduced).
+
+**rc.3 (`e1c4c62` / build `3264e07`)** — same code; `release.yml` runs the install job on the
+runner's own build and builds the frontend with Node 24. Runs 34986565216 (CI), 34986561347
+(tag push), 34986561591 (dispatch): recorded below when finished.
 
 Open question from the second row, now answered: pushing the annotated tag `v0.5.0-beta.1`
 seconds after the first push of `main` did not start `release.yml`; pushing `v0.5.0-rc.1` to a

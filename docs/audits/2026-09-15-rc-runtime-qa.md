@@ -1,9 +1,10 @@
 # Runtime QA of the release-candidate binary — 2026-09-15
 
-**Build:** `encastra-desktop.exe` built from build commit `90e479d` (stamp read from the binary,
-clean), version `0.5.0-rc.2` — the bytes the manifest at tag `v0.5.0-rc.2` describes. The same 23
-checks passed on `137c93a` (rc.1, superseded: same code, a version-carrying fuzz seed) and, before
-the adversarial review's fixes, on `e74e9ec`. The table below is the run on the rc.2 bytes.
+**Build:** `encastra-desktop.exe` built from build commit `3264e07` (stamp read from the binary,
+clean), version `0.5.0-rc.3` — the bytes the manifest at tag `v0.5.0-rc.3` describes. The same 23
+checks passed on `90e479d` (rc.2) and `137c93a` (rc.1), both superseded by the same code, and,
+before the adversarial review's fixes, on `e74e9ec`. The table below is the run on the rc.3 bytes
+(the observations are identical to rc.2's).
 
 **Method:** the same as `2026-09-15-runtime-qa.md` — the binary launched with
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, every command invoked
