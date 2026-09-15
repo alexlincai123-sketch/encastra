@@ -25,13 +25,17 @@ use encastra_core::validate::{Validation, validate_with_supplied};
 use encastra_core::value::{HandleKind, Value};
 // `Status` under another name: this crate already has one, and it answers a different question
 // (whether a workflow is running, not whether a file is still where it was).
-use encastra_library::{Entry, Library, Origin, Recovered, Status as LibraryStatus};
+use encastra_library::{Entry, Library, LibraryError, Origin, Recovered, Status as LibraryStatus};
 use encastra_project::{History, LockedComponent, Lockfile, Project, SnapshotId};
 use encastra_protocol::manifest::ComponentManifest;
 use encastra_publish::import::{ImportError, Inspected};
 use encastra_publish::{License, PublicationBundle, PublicationDraft, Publisher, Review};
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
+
+pub mod error;
+
+use error::{AppError, GrantRefusal};
 
 /// Loaded once at start-up. Building the registry per call would let two calls disagree about
 /// what is installed.
@@ -152,14 +156,14 @@ enum RunResult {
 async fn choose_folder(
     app: tauri::AppHandle,
     state: tauri::State<'_, Runtime>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AppError> {
     use tauri_plugin_dialog::DialogExt;
 
     let handle = app.clone();
     let picked =
         tauri::async_runtime::spawn_blocking(move || handle.dialog().file().blocking_pick_folder())
             .await
-            .map_err(|_| "The folder chooser did not return.".to_owned())?;
+            .map_err(|_| AppError::ChooserDidNotReturn)?;
 
     let Some(picked) = picked else {
         return Ok(None);
@@ -167,15 +171,15 @@ async fn choose_folder(
 
     let path = picked
         .into_path()
-        .map_err(|_| "That is not a folder on this machine.".to_owned())?;
+        .map_err(|_| AppError::NotAFolderOnThisMachine)?;
 
-    let resolved = resolve_grant_directory(&path)
-        .map_err(|why| format!("That folder cannot be used: {why}."))?;
+    let resolved =
+        resolve_grant_directory(&path).map_err(|reason| AppError::FolderUnusable { reason })?;
 
     state
         .chosen_folders
         .lock()
-        .map_err(|_| "The runtime is busy.".to_owned())?
+        .map_err(|_| AppError::RuntimeBusy)?
         .insert(resolved.clone());
 
     // The resolved path is what is returned — without its verbatim `\\?\` prefix — so the string
@@ -217,13 +221,13 @@ fn run_graph(
     graph: Graph,
     inputs: Vec<InputSpec>,
     grants: Vec<GrantSpec>,
-) -> Result<RunResult, String> {
+) -> Result<RunResult, AppError> {
     let (allowed, refused) = grant_set(&graph, &state.registry, &grants, &chosen_folders(&state)?);
     // Said before the run rather than discovered during it. A permission the person answered yes
     // to and that did not take effect is the one thing they must not find out about by reading a
     // journal afterwards.
     if !refused.is_empty() {
-        return Err(refused.join("\n"));
+        return Err(AppError::GrantsRefused { refusals: refused });
     }
 
     let run_id = format!("run-{}", encastra_core::journal::now_ms());
@@ -232,8 +236,11 @@ fn run_graph(
     // that line was a folder left under %TEMP% per call, for a caller that could make one input
     // fail to resolve. A path that does not exist was enough.
     let scratch = ScratchDir::new(std::env::temp_dir().join("encastra").join(&run_id));
-    let mut broker = Broker::new(scratch.path().to_path_buf(), allowed)
-        .map_err(|e| format!("Could not prepare a working folder: {e}"))?;
+    let mut broker = Broker::new(scratch.path().to_path_buf(), allowed).map_err(|e| {
+        AppError::WorkingFolder {
+            reason: e.to_string(),
+        }
+    })?;
 
     let seed = seed_for(&mut broker, &inputs)?;
 
@@ -326,10 +333,10 @@ fn for_display(path: &Path) -> String {
 }
 
 /// The one place a project path is turned from a string into something to act on.
-fn project_path(path: &str) -> Result<PathBuf, String> {
+fn project_path(path: &str) -> Result<PathBuf, AppError> {
     let target = PathBuf::from(path);
     if !is_project_path(&target) {
-        return Err(NOT_A_PROJECT.to_owned());
+        return Err(AppError::NotAProject);
     }
     Ok(target)
 }
@@ -393,7 +400,7 @@ fn save_project(
     name: String,
     graph: Graph,
     label: Option<String>,
-) -> Result<OpenProject, String> {
+) -> Result<OpenProject, AppError> {
     let target = project_path(&path)?;
     let now = encastra_core::journal::now_ms();
 
@@ -409,15 +416,15 @@ fn save_project(
     project.lock = lock_for(&project.graph, &state.registry);
     project.history.record(&project.graph, label, None, now);
 
-    project.save(&target).map_err(|e| e.to_string())?;
+    project.save(&target)?;
     remember_project(&state, &project, &target, now);
     Ok(describe(project, &path, &state.registry))
 }
 
 #[tauri::command]
-fn open_project(state: tauri::State<'_, Runtime>, path: String) -> Result<OpenProject, String> {
+fn open_project(state: tauri::State<'_, Runtime>, path: String) -> Result<OpenProject, AppError> {
     let target = project_path(&path)?;
-    let project = Project::open(&target).map_err(|e| e.to_string())?;
+    let project = Project::open(&target)?;
     remember_project(&state, &project, &target, encastra_core::journal::now_ms());
     Ok(describe(project, &path, &state.registry))
 }
@@ -444,9 +451,9 @@ fn restore_version(
     state: tauri::State<'_, Runtime>,
     path: String,
     snapshot: String,
-) -> Result<OpenProject, String> {
+) -> Result<OpenProject, AppError> {
     let target = project_path(&path)?;
-    let mut project = Project::open(&target).map_err(|e| e.to_string())?;
+    let mut project = Project::open(&target)?;
     let id = SnapshotId(snapshot);
 
     // Restoring appends a new version equal to the old one, so the restore itself can be
@@ -454,11 +461,11 @@ fn restore_version(
     let graph = project
         .history
         .restore(&id, encastra_core::journal::now_ms())
-        .ok_or("That version is not in this project.")?;
+        .ok_or(AppError::VersionNotInProject)?;
     project.graph = graph;
     let now = encastra_core::journal::now_ms();
     project.manifest.modified_at_ms = now;
-    project.save(&target).map_err(|e| e.to_string())?;
+    project.save(&target)?;
     // The file just changed under the library's hash of it. Without this the library showed a
     // project as "changed" moments after the application itself rewrote it.
     remember_project(&state, &project, &target, now);
@@ -466,12 +473,12 @@ fn restore_version(
 }
 
 #[tauri::command]
-fn compare_versions(path: String, from: String, to: String) -> Result<Vec<String>, String> {
-    let project = Project::open(&project_path(&path)?).map_err(|e| e.to_string())?;
+fn compare_versions(path: String, from: String, to: String) -> Result<Vec<String>, AppError> {
+    let project = Project::open(&project_path(&path)?)?;
     let changes = project
         .history
         .compare(&SnapshotId(from), &SnapshotId(to))
-        .ok_or("One of those versions is not in this project.")?;
+        .ok_or(AppError::VersionsNotInProject)?;
     Ok(changes
         .iter()
         .map(encastra_project::Change::describe)
@@ -628,9 +635,9 @@ fn grant_set(
     registry: &InMemoryRegistry,
     grants: &[GrantSpec],
     chosen_folders: &BTreeSet<PathBuf>,
-) -> (GrantSet, Vec<String>) {
+) -> (GrantSet, Vec<GrantRefusal>) {
     let mut set = GrantSet::new();
-    let mut refused: Vec<String> = Vec::new();
+    let mut refused: Vec<GrantRefusal> = Vec::new();
 
     for (id, node) in &graph.nodes {
         if let Some(manifest) = registry.get(&node.component) {
@@ -655,19 +662,18 @@ fn grant_set(
             (Some(folder), _) => {
                 let resolved = match resolve_grant_directory(Path::new(folder)) {
                     Ok(resolved) => resolved,
-                    Err(why) => {
-                        refused.push(format!(
-                            "{}: that folder cannot be used — {why}.",
-                            grant.node
-                        ));
+                    Err(reason) => {
+                        refused.push(GrantRefusal::FolderUnusable {
+                            node: grant.node.clone(),
+                            reason,
+                        });
                         continue;
                     }
                 };
                 if !chosen_folders.contains(&resolved) {
-                    refused.push(format!(
-                        "{}: choose that folder with the Choose button before allowing it.",
-                        grant.node
-                    ));
+                    refused.push(GrantRefusal::FolderNotChosen {
+                        node: grant.node.clone(),
+                    });
                     continue;
                 }
                 GrantScope::Directory(resolved)
@@ -677,10 +683,10 @@ fn grant_set(
         };
 
         if !set.grant_declared(&node, manifest, &grant.kind, scope) {
-            refused.push(format!(
-                "{}: this component does not ask for {}.",
-                grant.node, grant.kind
-            ));
+            refused.push(GrantRefusal::NotDeclared {
+                node: grant.node.clone(),
+                capability: grant.kind.clone(),
+            });
         }
     }
 
@@ -688,20 +694,25 @@ fn grant_set(
 }
 
 /// The folders chosen this session, as the grant builder needs them.
-fn chosen_folders(state: &tauri::State<'_, Runtime>) -> Result<BTreeSet<PathBuf>, String> {
+fn chosen_folders(state: &tauri::State<'_, Runtime>) -> Result<BTreeSet<PathBuf>, AppError> {
     state
         .chosen_folders
         .lock()
         .map(|set| set.clone())
-        .map_err(|_| "The runtime is busy.".to_owned())
+        .map_err(|_| AppError::RuntimeBusy)
 }
 
-fn seed_for(broker: &mut Broker, inputs: &[InputSpec]) -> Result<BTreeMap<PortRef, Value>, String> {
+fn seed_for(
+    broker: &mut Broker,
+    inputs: &[InputSpec],
+) -> Result<BTreeMap<PortRef, Value>, AppError> {
     let mut seed = BTreeMap::new();
     for input in inputs {
         let path = PathBuf::from(&input.path);
-        let absolute = std::fs::canonicalize(&path)
-            .map_err(|e| format!("Could not open {}: {}", path.display(), e.kind()))?;
+        let absolute = std::fs::canonicalize(&path).map_err(|e| AppError::InputUnreadable {
+            path: path.display().to_string(),
+            reason: e.kind().to_string(),
+        })?;
         let kind = kind_for(&absolute);
         let handle = broker.import_file(absolute, kind);
         seed.insert(input.port_ref(), Value::Handle(handle));
@@ -721,11 +732,11 @@ fn start_workflow(
     graph: Graph,
     inputs: Vec<InputSpec>,
     grants: Vec<GrantSpec>,
-) -> Result<Status, String> {
+) -> Result<Status, AppError> {
     {
-        let running = state.running.lock().map_err(|_| "The runtime is busy.")?;
+        let running = state.running.lock().map_err(|_| AppError::RuntimeBusy)?;
         if running.is_some() {
-            return Err("A workflow is already running. Stop it before starting another.".into());
+            return Err(AppError::WorkflowAlreadyRunning);
         }
     }
 
@@ -735,7 +746,7 @@ fn start_workflow(
 
     let (allowed, refused) = grant_set(&graph, &registry, &grants, &chosen_folders(&state)?);
     if !refused.is_empty() {
-        return Err(refused.join("\n"));
+        return Err(AppError::GrantsRefused { refusals: refused });
     }
 
     let run_id = format!("session-{}", encastra_core::journal::now_ms());
@@ -744,8 +755,11 @@ fn start_workflow(
     // reached the first of them on every press of Run. The guard moves into the thread below,
     // so the folder lives exactly as long as the session does.
     let scratch = ScratchDir::new(std::env::temp_dir().join("encastra").join(&run_id));
-    let mut broker = Broker::new(scratch.path().to_path_buf(), allowed)
-        .map_err(|e| format!("Could not prepare a working folder: {e}"))?;
+    let mut broker = Broker::new(scratch.path().to_path_buf(), allowed).map_err(|e| {
+        AppError::WorkingFolder {
+            reason: e.to_string(),
+        }
+    })?;
 
     let seed = seed_for(&mut broker, &inputs)?;
 
@@ -758,15 +772,16 @@ fn start_workflow(
     )
     .map_err(|validation| {
         // The editor already shows the issues; this is the one-line version for the status bar.
-        let errors = validation.errors().count();
-        format!("This workflow cannot run yet: {errors} problem(s) to fix.")
+        AppError::WorkflowInvalid {
+            problems: validation.errors().count(),
+        }
     })?;
 
     let watching = session.has_triggers();
     let stop = session.stop_flag();
 
     {
-        let mut running = state.running.lock().map_err(|_| "The runtime is busy.")?;
+        let mut running = state.running.lock().map_err(|_| AppError::RuntimeBusy)?;
         *running = Some(Running {
             stop: Arc::clone(&stop),
             started_at_ms: encastra_core::journal::now_ms(),
@@ -883,7 +898,9 @@ fn start_workflow(
                 *running = None;
             }
         })
-        .map_err(|e| format!("Could not start the workflow: {e}"))?;
+        .map_err(|e| AppError::WorkflowNotStarted {
+            reason: e.to_string(),
+        })?;
 
     Ok(Status {
         running: true,
@@ -896,8 +913,8 @@ fn start_workflow(
 }
 
 #[tauri::command]
-fn stop_workflow(state: tauri::State<'_, Runtime>) -> Result<(), String> {
-    let running = state.running.lock().map_err(|_| "The runtime is busy.")?;
+fn stop_workflow(state: tauri::State<'_, Runtime>) -> Result<(), AppError> {
+    let running = state.running.lock().map_err(|_| AppError::RuntimeBusy)?;
     if let Some(running) = running.as_ref() {
         running.stop.store(true, Ordering::Relaxed);
     }
@@ -950,8 +967,8 @@ fn review_publication(
     state: tauri::State<'_, Runtime>,
     path: String,
     license: License,
-) -> Result<Review, String> {
-    let project = Project::open(&project_path(&path)?).map_err(|e| e.to_string())?;
+) -> Result<Review, AppError> {
+    let project = Project::open(&project_path(&path)?)?;
     Ok(encastra_publish::review(
         &project,
         &state.registry,
@@ -976,28 +993,24 @@ fn prepare_publication(
     draft: PublicationDraft,
     publisher: Publisher,
     into: String,
-) -> Result<Prepared, String> {
+) -> Result<Prepared, AppError> {
     let source = project_path(&path)?;
     // The folder is looked at without following it. A junction on Windows reads as a directory
     // while pointing anywhere at all, so a publication prepared "into" one would be written
     // somewhere other than where the person was told it went.
     match std::fs::symlink_metadata(&into) {
-        Err(_) => return Err("That folder is not there. Choose one that exists.".to_owned()),
+        Err(_) => return Err(AppError::DestinationMissing),
         Ok(meta) if meta.file_type().is_symlink() => {
-            return Err(
-                "That folder is a link to somewhere else, so what was written would land \
-                 somewhere other than where you chose. Pick the folder itself."
-                    .to_owned(),
-            );
+            return Err(AppError::DestinationIsALink);
         }
         Ok(meta) if !meta.is_dir() => {
-            return Err("That is a file, not a folder. A publication needs a folder.".to_owned());
+            return Err(AppError::DestinationIsAFile);
         }
         Ok(_) => {}
     }
 
-    let project = Project::open(&source).map_err(|e| e.to_string())?;
-    let bytes = std::fs::read(&source).map_err(|e| e.to_string())?;
+    let project = Project::open(&source)?;
+    let bytes = std::fs::read(&source)?;
 
     let review = encastra_publish::review(&project, &state.registry, &draft.license);
     let runtime = project.manifest.runtime.clone();
@@ -1008,19 +1021,16 @@ fn prepare_publication(
         &runtime,
         &review,
         encastra_core::journal::now_ms(),
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // The destination is resolved and has to be a folder the person chose in the native chooser,
     // for the same reason a folder grant does: `into` arrives as a string from the webview, and a
     // string from the webview is not evidence that anybody picked anything. The Publish panel
     // already opens the chooser, so this costs a legitimate flow nothing.
     let destination = resolve_grant_directory(Path::new(&into))
-        .map_err(|why| format!("That folder cannot be used: {why}."))?;
+        .map_err(|reason| AppError::FolderUnusable { reason })?;
     if !chosen_folders(&state)?.contains(&destination) {
-        return Err(
-            "Choose the folder to publish into with the Choose button before preparing.".to_owned(),
-        );
+        return Err(AppError::DestinationNotChosen);
     }
 
     // One folder per version, named after what is in it, so a second version does not land on
@@ -1036,16 +1046,15 @@ fn prepare_publication(
         version = bundle.draft.version
     ));
     if !folder.starts_with(&destination) {
-        return Err("That publication cannot be written where it was asked to go.".to_owned());
+        return Err(AppError::PublicationPathEscapes);
     }
     let document = folder.join("publication.json");
     if document.exists() {
-        return Err(format!(
-            "{} already holds a publication. Delete it or choose another folder.",
-            folder.display()
-        ));
+        return Err(AppError::PublicationAlreadyThere {
+            folder: folder.display().to_string(),
+        });
     }
-    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&folder)?;
 
     // The project is copied rather than moved: publishing must never be able to take somebody's
     // only copy of their own work.
@@ -1053,12 +1062,13 @@ fn prepare_publication(
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "project.encastra".to_string());
-    std::fs::write(folder.join(&name), &bytes).map_err(|e| e.to_string())?;
+    std::fs::write(folder.join(&name), &bytes)?;
     std::fs::write(
         &document,
-        serde_json::to_vec_pretty(&bundle).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
+        serde_json::to_vec_pretty(&bundle).map_err(|e| AppError::Io {
+            reason: e.to_string(),
+        })?,
+    )?;
 
     let folder = folder.to_string_lossy().to_string();
 
@@ -1111,8 +1121,12 @@ struct LibraryHandle {
     /// Created on demand rather than at start-up: somebody who never imports anything should
     /// not find an empty folder they did not ask for.
     root: PathBuf,
-    /// `Err` holds the sentence to show instead of doing anything. See the note above.
-    index: Mutex<Result<Library, String>>,
+    /// `Err` holds the refusal to show instead of doing anything. See the note above.
+    ///
+    /// The crate's own error rather than its sentence: an index written by another version and
+    /// an index too large to hold are different things to be told, and a `String` here made both
+    /// of them the same untranslatable English.
+    index: Mutex<Result<Library, LibraryError>>,
     /// The name the unreadable index was moved to, if there was one. Reported once and then
     /// forgotten: it is news the first time the list is drawn and noise every time after.
     quarantined: Mutex<Option<String>>,
@@ -1137,9 +1151,6 @@ struct LibraryListing {
     quarantined: Option<String>,
 }
 
-/// What to say when a lock is held by a thread that panicked while holding it.
-const LIBRARY_BUSY: &str = "The library is busy. Try that again.";
-
 impl LibraryHandle {
     fn open(root: PathBuf) -> LibraryHandle {
         match Library::load_or_quarantine(&root) {
@@ -1155,17 +1166,19 @@ impl LibraryHandle {
             // replace it, so the handle carries the refusal instead of a library.
             Err(reason) => LibraryHandle {
                 root,
-                index: Mutex::new(Err(reason.to_string())),
+                index: Mutex::new(Err(reason)),
                 quarantined: Mutex::new(None),
             },
         }
     }
 
-    fn read<T>(&self, of: impl FnOnce(&Library) -> T) -> Result<T, String> {
-        let guard = self.index.lock().map_err(|_| LIBRARY_BUSY.to_owned())?;
+    fn read<T>(&self, of: impl FnOnce(&Library) -> T) -> Result<T, AppError> {
+        let guard = self.index.lock().map_err(|_| AppError::LibraryBusy)?;
         match guard.as_ref() {
             Ok(library) => Ok(of(library)),
-            Err(reason) => Err(reason.clone()),
+            Err(reason) => Err(AppError::Library {
+                error: reason.clone(),
+            }),
         }
     }
 
@@ -1174,12 +1187,17 @@ impl LibraryHandle {
     /// The change is applied to a copy and the copy is saved first. Memory moves forward only
     /// once the disk has: otherwise a failed save would leave the running application believing
     /// in an entry that the next successful save would write out as fact.
-    fn edit<T>(&self, change: impl FnOnce(&mut Library) -> Result<T, String>) -> Result<T, String> {
-        let mut guard = self.index.lock().map_err(|_| LIBRARY_BUSY.to_owned())?;
-        let library = guard.as_mut().map_err(|reason| reason.clone())?;
+    fn edit<T>(
+        &self,
+        change: impl FnOnce(&mut Library) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        let mut guard = self.index.lock().map_err(|_| AppError::LibraryBusy)?;
+        let library = guard.as_mut().map_err(|reason| AppError::Library {
+            error: reason.clone(),
+        })?;
         let mut candidate = library.clone();
         let outcome = change(&mut candidate)?;
-        candidate.save(&self.root).map_err(|e| e.to_string())?;
+        candidate.save(&self.root)?;
         *library = candidate;
         Ok(outcome)
     }
@@ -1224,7 +1242,9 @@ fn chosen_publication_folder(
 ) -> Result<PathBuf, ImportError> {
     let resolved =
         resolve_grant_directory(Path::new(folder)).map_err(|_| ImportError::NotAFolder)?;
-    let chosen = chosen_folders(state).map_err(|reason| ImportError::Io { reason })?;
+    let chosen = chosen_folders(state).map_err(|e| ImportError::Io {
+        reason: e.to_string(),
+    })?;
     if !chosen.contains(&resolved) {
         return Err(ImportError::FolderNotChosen);
     }
@@ -1235,9 +1255,13 @@ fn chosen_publication_folder(
 fn inspect_publication(
     state: tauri::State<'_, Runtime>,
     folder: String,
-) -> Result<Inspected, ImportError> {
+) -> Result<Inspected, AppError> {
     let folder = chosen_publication_folder(&state, &folder)?;
-    encastra_publish::import::inspect(&folder, &state.registry, encastra_core::RUNTIME_VERSION)
+    Ok(encastra_publish::import::inspect(
+        &folder,
+        &state.registry,
+        encastra_core::RUNTIME_VERSION,
+    )?)
 }
 
 /// Takes a publication in, and does nothing else with it.
@@ -1246,10 +1270,7 @@ fn inspect_publication(
 /// kept — the crate copies what it verified rather than reading the source a second time — and
 /// what comes back is the entry, so the interface can decide whether to offer to open it.
 #[tauri::command]
-fn import_publication(
-    state: tauri::State<'_, Runtime>,
-    folder: String,
-) -> Result<Entry, ImportError> {
+fn import_publication(state: tauri::State<'_, Runtime>, folder: String) -> Result<Entry, AppError> {
     let folder = chosen_publication_folder(&state, &folder)?;
     let imported = encastra_publish::import::import(
         &folder,
@@ -1268,14 +1289,14 @@ fn import_publication(
         // back — through the crate's own check that it is inside `imports/`, never a bare
         // delete of a path that came out of a file.
         let _ = encastra_library::remove_imported_copy(&state.library.root, &entry);
-        return Err(ImportError::Io { reason });
+        return Err(reason);
     }
     Ok(entry)
 }
 
 /// Everything in the index, each with the answer to whether it is still there.
 #[tauri::command]
-fn library_list(state: tauri::State<'_, Runtime>) -> Result<LibraryListing, String> {
+fn library_list(state: tauri::State<'_, Runtime>) -> Result<LibraryListing, AppError> {
     let entries = state.library.read(|library| {
         library
             .entries
@@ -1291,7 +1312,7 @@ fn library_list(state: tauri::State<'_, Runtime>) -> Result<LibraryListing, Stri
         .library
         .quarantined
         .lock()
-        .map_err(|_| LIBRARY_BUSY.to_owned())?
+        .map_err(|_| AppError::LibraryBusy)?
         .take();
 
     Ok(LibraryListing {
@@ -1310,7 +1331,7 @@ fn library_remove(
     state: tauri::State<'_, Runtime>,
     id: String,
     delete_copy: bool,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let found = state.library.read(|library| library.find(&id).cloned())?;
     let Some(entry) = found else {
         // Already not there. That is the state that was asked for, so it is not a complaint.
@@ -1320,11 +1341,7 @@ fn library_remove(
     // Checked before anything is removed from the index, so a refusal leaves the library
     // exactly as it was rather than half-done.
     if delete_copy && entry.origin != Origin::Imported {
-        return Err(
-            "That file is yours, and it stays where it is. Encastra only deletes copies it \
-             made itself, which means things you imported."
-                .to_owned(),
-        );
+        return Err(AppError::NotOursToDelete);
     }
 
     state.library.edit(|library| {
@@ -1336,7 +1353,9 @@ fn library_remove(
         // The index is already saved. If the folder will not go, the entry is still forgotten —
         // which is what was asked — and saying so is better than pretending the files are gone.
         encastra_library::remove_imported_copy(&state.library.root, &entry).map_err(|e| {
-            format!("It is out of your library, but the copy could not be deleted: {e}")
+            AppError::CopyNotDeleted {
+                reason: e.to_string(),
+            }
         })?;
     }
     Ok(())
@@ -1358,14 +1377,10 @@ fn report_dirty(state: tauri::State<'_, Runtime>, dirty: bool) {
 /// through. It is never cleared: the window is going, and the only thing that could read it
 /// afterwards is a second close of a window that no longer exists.
 #[tauri::command]
-fn close_window(app: tauri::AppHandle, state: tauri::State<'_, Runtime>) -> Result<(), String> {
+fn close_window(app: tauri::AppHandle, state: tauri::State<'_, Runtime>) -> Result<(), AppError> {
     state.closing.store(true, Ordering::Relaxed);
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "There is no window to close.".to_owned())?;
-    window
-        .close()
-        .map_err(|_| "The window refused to close.".to_owned())
+    let window = app.get_webview_window("main").ok_or(AppError::NoWindow)?;
+    window.close().map_err(|_| AppError::WindowWouldNotClose)
 }
 
 /// The commit this binary was built from, as one string the release manifest can find in the
@@ -1505,8 +1520,11 @@ mod tests {
         // The message names the rule, never the path: these end up in logs and on screen, and
         // the path is somebody's home folder.
         let refused = project_path("notes.txt").expect_err("a .txt is not a project");
-        assert_eq!(refused, NOT_A_PROJECT);
-        assert!(!refused.contains("notes.txt"));
+        // The refusal now has a name the interface can translate; the sentence it still carries
+        // is the one this test was written against, and is what a log line shows.
+        assert_eq!(refused.kind(), "not-a-project");
+        assert_eq!(refused.to_string(), NOT_A_PROJECT);
+        assert!(!refused.to_string().contains("notes.txt"));
         assert!(project_path("thumbnails.encastra").is_ok());
     }
 
@@ -1632,7 +1650,8 @@ mod tests {
 
         assert!(!set.has(&NodeId("save".into()), "fs.write"));
         assert_eq!(refused.len(), 1);
-        assert!(refused[0].contains("Choose"), "{}", refused[0]);
+        assert_eq!(refused[0].kind(), "folder-not-chosen");
+        assert!(refused[0].to_string().contains("Choose"), "{}", refused[0]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1665,7 +1684,12 @@ mod tests {
 
         assert!(!set.has(&NodeId("save".into()), "fs.write"));
         assert_eq!(refused.len(), 1);
-        assert!(refused[0].contains("cannot be used"), "{}", refused[0]);
+        assert_eq!(refused[0].kind(), "folder-unusable");
+        assert!(
+            refused[0].to_string().contains("cannot be used"),
+            "{}",
+            refused[0]
+        );
     }
 
     #[test]
@@ -1682,7 +1706,12 @@ mod tests {
 
         assert!(!set.has(&NodeId("save".into()), "system.clipboard"));
         assert_eq!(refused.len(), 1);
-        assert!(refused[0].contains("does not ask for"), "{}", refused[0]);
+        assert_eq!(refused[0].kind(), "not-declared");
+        assert!(
+            refused[0].to_string().contains("does not ask for"),
+            "{}",
+            refused[0]
+        );
     }
 
     #[test]

@@ -123,7 +123,11 @@ impl Default for Library {
 }
 
 /// Why the index could not be read, written or acted on.
-#[derive(Debug, thiserror::Error, PartialEq, Eq, Serialize)]
+///
+/// `Clone` because the desktop application holds one of these for the life of a session when the
+/// index could not be read at all, and hands a copy to every command that would otherwise have
+/// written to it. Copying the refusal is what lets each of them say the same specific thing.
+#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum LibraryError {
     #[error("the library index could not be read: {reason}")]

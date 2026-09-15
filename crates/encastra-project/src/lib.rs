@@ -37,16 +37,24 @@ const ENTRY_VARIABLES: &str = "variables.json";
 const ENTRY_HISTORY: &str = "versions/index.json";
 const HISTORY_PREFIX: &str = "versions/";
 
-#[derive(Debug, thiserror::Error)]
+/// Why a project file could not be read or written.
+///
+/// Tagged on `kind` and named in kebab-case, exactly as `LibraryError` and `ImportError` are, so
+/// that the desktop application can hand one to the interface as a refusal with a name rather
+/// than as an English sentence nobody can translate. Every variant carries named fields for the
+/// same reason: an internally tagged enum has nowhere to put a nameless one, and a field the
+/// interface cannot name is a value it cannot put into a sentence.
+#[derive(Debug, thiserror::Error, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum ProjectError {
     #[error("this build reads project schema {ours}, but the file declares {theirs}")]
     UnsupportedSchema { ours: u32, theirs: u32 },
-    #[error("the project file is missing {0}")]
-    MissingEntry(String),
+    #[error("the project file is missing {entry}")]
+    MissingEntry { entry: String },
     #[error("{entry} is not valid: {reason}")]
     Invalid { entry: String, reason: String },
-    #[error("the project file could not be read as an archive: {0}")]
-    Archive(String),
+    #[error("the project file could not be read as an archive: {reason}")]
+    Archive { reason: String },
     #[error("{entry} unpacks to more than this build will read ({limit} bytes)")]
     TooLarge { entry: String, limit: u64 },
     #[error("this project unpacks to more than this build will read ({limit} bytes in total)")]
@@ -59,15 +67,17 @@ pub enum ProjectError {
         "the archive lists {declared} entries under only {distinct} names, so it names something twice"
     )]
     AmbiguousArchive { declared: usize, distinct: usize },
-    #[error("input/output error: {0}")]
-    Io(String),
+    #[error("input/output error: {reason}")]
+    Io { reason: String },
 }
 
 impl From<std::io::Error> for ProjectError {
     fn from(e: std::io::Error) -> Self {
         // The kind, not the message: an io error message can contain a path from the user's
         // machine, and these surface in logs and in the UI.
-        ProjectError::Io(e.kind().to_string())
+        ProjectError::Io {
+            reason: e.kind().to_string(),
+        }
     }
 }
 
@@ -178,8 +188,10 @@ impl Project {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ProjectError> {
-        let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
-            .map_err(|e| ProjectError::Archive(e.to_string()))?;
+        let mut archive =
+            zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| ProjectError::Archive {
+                reason: e.to_string(),
+            })?;
 
         reject_ambiguous_archive(bytes, &archive)?;
 
@@ -290,13 +302,15 @@ impl Project {
             for (name, content) in entries {
                 writer
                     .start_file(&name, deterministic_options())
-                    .map_err(|e| ProjectError::Archive(e.to_string()))?;
+                    .map_err(|e| ProjectError::Archive {
+                        reason: e.to_string(),
+                    })?;
                 writer.write_all(&content)?;
             }
 
-            writer
-                .finish()
-                .map_err(|e| ProjectError::Archive(e.to_string()))?;
+            writer.finish().map_err(|e| ProjectError::Archive {
+                reason: e.to_string(),
+            })?;
         }
         Ok(buffer.into_inner())
     }
@@ -401,9 +415,9 @@ fn reject_ambiguous_archive<R: Read + Seek>(
     archive: &zip::ZipArchive<R>,
 ) -> Result<(), ProjectError> {
     let Some(declared) = declared_entry_count(bytes) else {
-        return Err(ProjectError::Archive(
-            "the archive has no end-of-central-directory record".to_owned(),
-        ));
+        return Err(ProjectError::Archive {
+            reason: "the archive has no end-of-central-directory record".to_owned(),
+        });
     };
     let distinct = archive.file_names().count();
     if declared != distinct {
@@ -435,7 +449,9 @@ fn read_json<T: for<'de> Deserialize<'de>, R: Read + Seek>(
 ) -> Result<T, ProjectError> {
     let file = archive
         .by_name(entry)
-        .map_err(|_| ProjectError::MissingEntry(entry.to_owned()))?;
+        .map_err(|_| ProjectError::MissingEntry {
+            entry: entry.to_owned(),
+        })?;
 
     let ceiling = budget.ceiling();
 
@@ -604,7 +620,7 @@ mod tests {
     #[test]
     fn refuses_a_file_that_is_not_an_archive() {
         let error = Project::from_bytes(b"this is not a zip file at all").unwrap_err();
-        assert!(matches!(error, ProjectError::Archive(_)));
+        assert!(matches!(error, ProjectError::Archive { .. }));
     }
 
     #[test]

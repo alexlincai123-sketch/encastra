@@ -113,6 +113,17 @@ what was imported is a separate thing a person presses, and running it is a thir
 are returned as a serialised `ImportError` rather than as a sentence, so the interface branches
 on the reason rather than on English.
 
+**Every command that can fail refuses with a tag, not a sentence.** A failing command returns
+`Result<T, AppError>`, serialised internally tagged on `kind` in kebab-case with the values a
+sentence needs as named fields — the shape import refusals have always had. The editor matches on
+the tag and writes the sentence itself, so a refusal reaches a Spanish reader in Spanish rather
+than in whatever English the runtime happened to build. Four of the tags nest the refusal of the
+crate that raised it (`project`, `library`, `bundle`, `import`), keeping that crate's own
+vocabulary reachable instead of flattening it into prose; free text an operating system produced
+is a parameter the sentence quotes, never the sentence. The full inventory — every command, every
+tag, every key, and the three gates that stop the two sides drifting — is
+[`docs/desktop/ERRORS.md`](desktop/ERRORS.md).
+
 **The library only deletes what it made.** `library_remove` forgets an entry by default. Deleting
 the copy on disk is a second argument, and the runtime refuses it for anything whose origin is
 not `Imported` — a project somebody made is theirs, and this software did not put that file there.

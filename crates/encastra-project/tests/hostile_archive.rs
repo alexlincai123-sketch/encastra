@@ -132,11 +132,11 @@ fn an_entry_name_that_climbs_out_of_the_archive_reaches_nothing() {
 fn an_archive_that_is_not_an_archive_is_refused_cleanly() {
     assert!(matches!(
         Project::from_bytes(b"this is not a zip file at all"),
-        Err(ProjectError::Archive(_))
+        Err(ProjectError::Archive { .. })
     ));
     assert!(matches!(
         Project::from_bytes(&[]),
-        Err(ProjectError::Archive(_))
+        Err(ProjectError::Archive { .. })
     ));
 }
 

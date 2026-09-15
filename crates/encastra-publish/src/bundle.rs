@@ -49,24 +49,35 @@ pub struct PublicationDraft {
 }
 
 /// Why a publication could not be prepared.
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+///
+/// Tagged on `kind` and named in kebab-case, the same vocabulary [`crate::ImportError`] uses, so
+/// that a refusal reaching the interface is a name it can translate rather than an English
+/// sentence it can only print. Named fields throughout: an internally tagged enum has nowhere to
+/// put a nameless one, and a value with no name is a value no sentence can quote.
+#[derive(Debug, thiserror::Error, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum BundleError {
     #[error("the review found {blocking} thing(s) that have to change first")]
     ReviewRefused { blocking: usize },
-    #[error("\"{0}\" is not a version; publications are numbered like 1.2.0")]
-    NotAVersion(String),
+    #[error("\"{version}\" is not a version; publications are numbered like 1.2.0")]
+    NotAVersion { version: String },
     #[error("\"{listing}\" is not inside {publisher}'s namespace")]
     NotYourNamespace { listing: String, publisher: String },
-    #[error("a publication needs a {0}")]
-    Missing(&'static str),
+    #[error("a publication needs a {field}")]
+    Missing { field: &'static str },
     #[error("the {field} is longer than this build will publish ({max} characters)")]
     TooLong { field: &'static str, max: usize },
-    #[error("the {0} holds characters that can hide what it really says")]
-    ControlCharacters(&'static str),
+    #[error("the {field} holds characters that can hide what it really says")]
+    ControlCharacters { field: &'static str },
     #[error("{size} bytes is larger than this build will publish ({max})")]
     TooLarge { size: u64, max: u64 },
-    #[error("this build cannot install a {0:?}, so it will not offer one")]
-    NotInstallable(Kind),
+    #[error("this build cannot install a {kind:?}, so it will not offer one")]
+    NotInstallable {
+        // Serialised under another name, for the reason `ImportError::NotInstallable` gives: the
+        // enum is tagged on `kind`, and a field of that name would land on top of the tag.
+        #[serde(rename = "publicationKind")]
+        kind: Kind,
+    },
     #[error("\"{value}\" is not a usable identifier: {why}")]
     NotAnIdentifier { value: String, why: String },
 }
@@ -110,7 +121,7 @@ impl PublicationBundle {
             return Err(BundleError::ReviewRefused { blocking });
         }
         if !draft.kind.installable_in_this_build() {
-            return Err(BundleError::NotInstallable(draft.kind));
+            return Err(BundleError::NotInstallable { kind: draft.kind });
         }
         // Both identifiers go through the product's one identifier grammar — the same one a
         // component id passes — and *before* the namespace test below rather than after.
@@ -154,13 +165,15 @@ impl PublicationBundle {
             });
         }
         if semver::Version::parse(&draft.version).is_err() {
-            return Err(BundleError::NotAVersion(draft.version));
+            return Err(BundleError::NotAVersion {
+                version: draft.version,
+            });
         }
         if draft.title.trim().is_empty() {
-            return Err(BundleError::Missing("title"));
+            return Err(BundleError::Missing { field: "title" });
         }
         if draft.summary.trim().is_empty() {
-            return Err(BundleError::Missing("summary"));
+            return Err(BundleError::Missing { field: "summary" });
         }
 
         // The same limits the receiving side applies, applied here so that a publication is not
@@ -179,13 +192,13 @@ impl PublicationBundle {
                 return Err(BundleError::TooLong { field, max });
             }
             if has_control_characters(text) {
-                return Err(BundleError::ControlCharacters(field));
+                return Err(BundleError::ControlCharacters { field });
             }
         }
 
         let size_bytes = project_bytes.len() as u64;
         if size_bytes == 0 {
-            return Err(BundleError::Missing("project"));
+            return Err(BundleError::Missing { field: "project" });
         }
         if size_bytes > MAX_PUBLICATION_BYTES {
             return Err(BundleError::TooLarge {
@@ -520,14 +533,14 @@ mod tests {
         spoofed.title = "Thumbnails\u{202e}gnp.exe".into();
         assert_eq!(
             prepare(spoofed, &passed()),
-            Err(BundleError::ControlCharacters("title"))
+            Err(BundleError::ControlCharacters { field: "title" })
         );
 
         let mut invisible = draft();
         invisible.summary = "Makes a small copy\u{200b} of every picture.".into();
         assert_eq!(
             prepare(invisible, &passed()),
-            Err(BundleError::ControlCharacters("summary"))
+            Err(BundleError::ControlCharacters { field: "summary" })
         );
 
         // A line break is a C0 control too, and it is the ordinary shape of a changelog. The three
@@ -541,7 +554,7 @@ mod tests {
         escape.changelog = Some("First release.\u{1b}[2J".into());
         assert_eq!(
             prepare(escape, &passed()),
-            Err(BundleError::ControlCharacters("changelog"))
+            Err(BundleError::ControlCharacters { field: "changelog" })
         );
     }
 
@@ -551,7 +564,9 @@ mod tests {
         latest.version = "latest".into();
         assert_eq!(
             prepare(latest, &passed()),
-            Err(BundleError::NotAVersion("latest".into()))
+            Err(BundleError::NotAVersion {
+                version: "latest".into(),
+            })
         );
     }
 
@@ -561,14 +576,14 @@ mod tests {
         blank.title = "   ".into();
         assert_eq!(
             prepare(blank, &passed()),
-            Err(BundleError::Missing("title"))
+            Err(BundleError::Missing { field: "title" })
         );
 
         let mut no_summary = draft();
         no_summary.summary = String::new();
         assert_eq!(
             prepare(no_summary, &passed()),
-            Err(BundleError::Missing("summary"))
+            Err(BundleError::Missing { field: "summary" })
         );
     }
 
@@ -580,14 +595,16 @@ mod tests {
         // nobody could use, which is a promise the product has not earned.
         assert_eq!(
             prepare(component, &passed()),
-            Err(BundleError::NotInstallable(Kind::Component))
+            Err(BundleError::NotInstallable {
+                kind: Kind::Component,
+            })
         );
     }
 
     #[test]
     fn an_empty_or_enormous_project_is_refused() {
         let empty = PublicationBundle::prepare(draft(), &publisher(), b"", ">=0.4.0", &passed(), 0);
-        assert_eq!(empty, Err(BundleError::Missing("project")));
+        assert_eq!(empty, Err(BundleError::Missing { field: "project" }));
 
         let huge = vec![0_u8; (MAX_PUBLICATION_BYTES + 1) as usize];
         let result =

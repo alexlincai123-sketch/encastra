@@ -877,6 +877,108 @@ const it: Messages = {
       '{name} non è più nell’elenco, e la copia fatta da Encastra è stata cancellata.',
   },
 
+  errors: {
+    unknown:
+      'Encastra ha rifiutato per un motivo che questa versione non sa nominare ({kind}). Non è stato modificato nulla.',
+    runtimeBusy: 'Il motore è occupato con altro. Riprova tra un momento.',
+    libraryBusy: 'La tua libreria è occupata. Riprova tra un momento.',
+    chooserDidNotReturn:
+      'Il selettore di cartelle si è chiuso senza rispondere. Non è stato scelto nulla.',
+    notAFolderOnThisMachine:
+      'Quello che il selettore ha restituito non è una cartella di questo computer.',
+    folderUnusable: 'Quella cartella non può essere usata ({reason}).',
+    notAProject: 'Questo non è un progetto Encastra. Il nome di un progetto finisce con .encastra.',
+    versionNotInProject:
+      'Quella versione non è in questo progetto. La sua cronologia potrebbe essere cambiata dall’ultima volta che l’hai vista.',
+    versionsNotInProject:
+      'Una di quelle due versioni non è in questo progetto, quindi non c’è nulla da confrontare.',
+    grantsRefused: 'Non è stato eseguito nulla. {count} dei permessi concessi non sono stati dati:',
+    workingFolder:
+      'Encastra non è riuscito a preparare una cartella di lavoro per questa esecuzione ({reason}). Non è stato eseguito nulla.',
+    inputUnreadable: 'Non è stato possibile aprire {path} ({reason}). Non è stato eseguito nulla.',
+    workflowAlreadyRunning: 'C’è già un flusso in esecuzione. Fermalo prima di avviarne un altro.',
+    workflowInvalid:
+      'Questo flusso non può ancora essere eseguito: {problems} cosa/e da sistemare prima.',
+    workflowNotStarted:
+      'Non è stato possibile avviare il flusso ({reason}). Non è stato eseguito nulla.',
+    destinationMissing: 'Quella cartella non c’è. Scegline una che esista.',
+    destinationIsALink:
+      'Quella cartella è un collegamento a un altro punto, quindi ciò che viene scritto finirebbe altrove rispetto a dove hai scelto. Scegli la cartella stessa.',
+    destinationIsAFile:
+      'Quello è un file, non una cartella. Una pubblicazione ha bisogno di una cartella propria.',
+    destinationNotChosen:
+      'Scegli prima la cartella di pubblicazione con il pulsante Scegli, così Encastra scrive dove hai indicato.',
+    publicationPathEscapes:
+      'Quella pubblicazione non può essere scritta dove è stato chiesto. Non è stato scritto nulla.',
+    publicationAlreadyThere:
+      '{folder} contiene già una pubblicazione. Eliminala oppure scegli un’altra cartella.',
+    notOursToDelete:
+      'Quel file è tuo e resta dov’è. Encastra elimina solo le copie che ha fatto lui, cioè le cose che hai importato.',
+    copyNotDeleted: 'Non è più nel tuo elenco, ma la copia non è stata eliminata ({reason}).',
+    noWindow: 'Non c’è nessuna finestra da chiudere.',
+    windowWouldNotClose: 'La finestra non si è chiusa. Il tuo lavoro è ancora qui.',
+    io: 'Qualcosa su questo computer ha rifiutato l’operazione ({reason}).',
+    grant: {
+      folderUnusable: '{node}: quella cartella non può essere usata ({reason}).',
+      folderNotChosen:
+        '{node}: scegli quella cartella con il pulsante Scegli prima di consentirla, così ciò che viene consentito è ciò che hai indicato.',
+      notDeclared:
+        '{node}: questo passo non chiede mai {capability}, quindi non c’è nulla da consentire.',
+    },
+    project: {
+      generic: 'Non è stato possibile leggere quel file di progetto.',
+      unsupportedSchema:
+        'Questa versione legge progetti nella versione {ours}, e quello dichiara la versione {theirs}. È stato creato da un Encastra più recente.',
+      missingEntry: 'Il file di progetto non contiene {entry}, quindi non è un progetto completo.',
+      invalid: '{entry}, dentro quel progetto, non è valido: {reason}.',
+      archive:
+        'Il file di progetto non è leggibile come archivio ({reason}). Potrebbe essere danneggiato.',
+      tooLarge:
+        '{entry}, dentro quel progetto, si espande oltre ciò che questa versione legge ({limit} byte).',
+      tooLargeInTotal:
+        'Quel progetto si espande oltre ciò che questa versione legge ({limit} byte in tutto).',
+      tooManySnapshots:
+        'Quel progetto conserva {count} versioni, e questa build ne tiene al massimo {limit}.',
+      fileTooLarge:
+        'Quel file di progetto occupa {size} byte, e questa versione ne legge al massimo {limit}.',
+      ambiguousArchive:
+        'L’archivio del progetto elenca {declared} voci con soli {distinct} nomi, quindi nomina qualcosa due volte. Encastra non indovina quale fosse.',
+      io: 'Il file di progetto non è stato letto né scritto ({reason}).',
+    },
+    library: {
+      generic: 'Non è stato possibile leggere la tua libreria.',
+      corrupt:
+        'L’indice della tua libreria non è leggibile ({reason}). È stato lasciato esattamente com’è: è il registro del tuo lavoro, ed Encastra non lo ricomincia da capo.',
+      writtenByAnotherVersion:
+        'L’indice della tua libreria è stato scritto da un’altra versione di Encastra (dichiara la versione {theirs}, e questa legge la {ours}). È stato lasciato com’è.',
+      tooManyEntries:
+        'L’indice della tua libreria elenca {count} cose, e questa versione ne tiene al massimo {max}. È stato lasciato com’è.',
+      notOurs: 'Non è Encastra ad averlo messo lì, quindi non è Encastra a toglierlo.',
+      io: 'La tua libreria non è stata letta né scritta ({reason}).',
+    },
+    bundle: {
+      generic: 'Non è stato possibile preparare quella pubblicazione.',
+      reviewRefused:
+        'Il controllo ha trovato {blocking} cosa/e da cambiare prima che questo possa essere pubblicato.',
+      notAVersion: '«{version}» non è una versione. Le pubblicazioni si numerano come 1.2.0.',
+      notYourNamespace:
+        '«{listing}» non è dentro lo spazio dei nomi di {publisher}. Una pubblicazione viene archiviata sotto il nome di chi la pubblica.',
+      missing: 'A una pubblicazione serve: {field}.',
+      tooLong:
+        'Il campo {field} è più lungo di quanto questa versione pubblichi (al massimo {max} caratteri).',
+      controlCharacters:
+        'Il campo {field} contiene caratteri che possono nascondere ciò che dice davvero. Encastra lo rifiuta invece di riscrivere in silenzio ciò che hai scritto.',
+      tooLarge: 'Quel progetto occupa circa {size}, e questa versione pubblica al massimo {max}.',
+      notInstallable:
+        'Questa versione non può installare {publicationKind}, quindi non lo propone.',
+      notAnIdentifier: '«{value}» non è un nome utilizzabile: {why}.',
+    },
+    import: {
+      generic:
+        'Quella pubblicazione non è stata acquisita, e su questo computer non è cambiato nulla.',
+    },
+  },
+
   demos: {
     imageProcessor: {
       name: 'Elaboratore di immagini',
