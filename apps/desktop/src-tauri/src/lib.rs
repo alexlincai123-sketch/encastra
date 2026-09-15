@@ -1340,14 +1340,29 @@ fn close_window(app: tauri::AppHandle, state: tauri::State<'_, Runtime>) -> Resu
         .map_err(|_| "The window refused to close.".to_owned())
 }
 
+/// The commit this binary was built from, as one string the release manifest can find in the
+/// built file.
+///
+/// `build.rs` sets `ENCASTRA_BUILD_COMMIT` to the commit the tree was at — `<hash>-dirty` if the
+/// tree did not match it, `unknown` without git. It is embedded between fixed markers so that
+/// `scripts/release_manifest.py` can read it back out of `encastra-desktop.exe` rather than ask
+/// git at manifest time, which named the wrong commit by construction (ENC-NEW-17): the commit
+/// that publishes a manifest is always one after the commit whose bytes the manifest describes.
+pub const BUILD_STAMP: &str = concat!("encastra-build-commit=", env!("ENCASTRA_BUILD_COMMIT"), ";");
+
+/// `BUILD_STAMP` without its markers: what Settings shows.
+pub fn build_commit() -> &'static str {
+    BUILD_STAMP
+        .strip_prefix("encastra-build-commit=")
+        .and_then(|rest| rest.strip_suffix(';'))
+        .unwrap_or(BUILD_STAMP)
+}
+
 #[tauri::command]
 fn about() -> serde_json::Value {
     serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
-        // Set by build.rs: the commit this binary came from, `-dirty` if the tree did not match
-        // it, `unknown` without git. The release manifest reads this same string back out of the
-        // built file, so the commit it publishes is the one that produced the bytes.
-        "buildCommit": env!("ENCASTRA_BUILD_COMMIT"),
+        "buildCommit": build_commit(),
         "runtime": encastra_core::RUNTIME_VERSION,
         "protocolSchema": encastra_protocol::SCHEMA_VERSION,
         "projectSchema": encastra_project::PROJECT_SCHEMA,
@@ -1707,5 +1722,20 @@ mod tests {
         )));
         assert!(!is_project_path(Path::new("C:/work/report")));
         assert!(!is_project_path(Path::new("C:/work/report.encastra.exe")));
+    }
+
+    #[test]
+    fn the_binary_states_the_commit_it_was_built_from() {
+        // What the manifest greps for in the built file, and what Settings shows. A test binary
+        // is built from the same tree as the release binary, so the stamp here is the stamp there.
+        assert!(BUILD_STAMP.starts_with("encastra-build-commit="));
+        assert!(BUILD_STAMP.ends_with(';'));
+        let commit = build_commit();
+        let hex = commit.trim_end_matches("-dirty");
+        let is_hash = hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit());
+        assert!(
+            is_hash || commit == "unknown",
+            "the stamp is a full commit hash, `-dirty` if the tree did not match, or `unknown`; got {commit:?}"
+        );
     }
 }
