@@ -140,6 +140,8 @@ interface IntroCopy {
   readonly eyebrow: string;
   readonly headline: string;
   readonly sub: string;
+  /** The accessible name of the 3D stage's `<section>`, which holds scenes 1 and 2. */
+  readonly label: string;
 }
 
 /**
@@ -152,8 +154,8 @@ interface IntroCopy {
  * rewritten for rhythm, and the landmark name should not silently change with it. Scene 9's are
  * already different — "Terminal" against an eyebrow of "The same thing, typed".
  *
- * Scenes 1 and 2 (`scenes3d/SceneAssembly.tsx`) do not have one: that component is out of scope
- * for this pass and does not read this file.
+ * Scenes 1 and 2 share one `<section>` in `scenes3d/SceneAssembly.tsx`; its name is
+ * `IntroCopy.label` above, because that component reads `intro` rather than a section of its own.
  */
 interface SceneSectionCopy extends BodyCopy {
   readonly label: string;
@@ -220,6 +222,7 @@ export const SCENE_COPY: SceneCopy = {
     eyebrow: 'Encastra',
     headline: 'SOFTWARE SHOULD NOT ALWAYS START FROM ZERO.',
     sub: 'A local-first desktop application that runs a typed graph of components. Scroll.',
+    label: 'Assembly',
   },
   whatIf: {
     index: '02',
@@ -306,12 +309,9 @@ export const SCENE_COPY: SceneCopy = {
  * change. `test/i18n.test.ts` checks the two objects carry exactly the same keys in both
  * directions, the same way it checks `dictionaries/en.ts` against `dictionaries/es.ts`.
  *
- * `intro` and `whatIf` are translated here for completeness and because a half-translated data
- * file is worse than a whole one, but neither currently reaches the screen in Spanish: both are
- * rendered by `components/scenes3d/SceneAssembly.tsx`, which is out of scope for this pass (see
- * `HomeExperience.tsx`'s own note on why) and does not read `SCENE_COPY` at all today. Scenes 3
- * through 10, in `components/scenes/Scene0*.tsx`, do read it, via `sceneCopy()` below, and are
- * the scenes a Spanish visitor actually sees translated.
+ * `intro` reaches the screen through `components/scenes3d/SceneAssembly.tsx`, which reads it via
+ * `sceneCopy()` below — headline, subtitle and the section's accessible name. Scenes 3 through
+ * 10, in `components/scenes/Scene0*.tsx`, read their own sections the same way.
  */
 const SCENE_COPY_ES: SceneCopy = {
   intro: {
@@ -319,6 +319,7 @@ const SCENE_COPY_ES: SceneCopy = {
     eyebrow: 'Encastra',
     headline: 'EL SOFTWARE NO SIEMPRE TIENE QUE EMPEZAR DE CERO.',
     sub: 'Una aplicación de escritorio local-first que ejecuta un grafo tipado de componentes. Desplázate.',
+    label: 'Ensamblaje',
   },
   whatIf: {
     index: '02',
