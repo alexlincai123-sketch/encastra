@@ -6,11 +6,13 @@
  */
 
 import { useEffect } from 'react';
+import { onCloseRequested } from './events';
 import { selectPlural, useTranslation } from './i18n';
 import { ipc, recordedRuns } from './ipc';
 import { Welcome } from './onboarding/Welcome';
 import { Import } from './panels/Import';
 import { Publish } from './panels/Publish';
+import { UnsavedChanges } from './panels/UnsavedChanges';
 import { applyToDocument, usePreferences } from './preferences';
 import { Sidebar } from './Sidebar';
 import { useEditor } from './store';
@@ -289,6 +291,35 @@ export function App() {
     return () => off?.();
   }, [attachRuntime]);
 
+  /**
+   * The window being closed with work in it.
+   *
+   * The runtime has already refused that close by the time this arrives — it knows whether there
+   * is unsaved work because the store tells it whenever the answer changes — so nothing is lost
+   * while the question sits on screen, and the window closes only when `ipc.closeWindow()` asks
+   * for it a second time.
+   *
+   * The `dirty` check here is not the guard; the runtime's is. It is here because the two sides
+   * hold the same answer in two places, and if they ever disagree, prompting about work that
+   * does not exist is the failure that would make somebody distrust the prompt that matters.
+   */
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    void onCloseRequested(() => {
+      const { dirty, requestDiscard } = useEditor.getState();
+      if (!dirty) {
+        void ipc.closeWindow();
+        return;
+      }
+      requestDiscard('close', () => {
+        void ipc.closeWindow();
+      });
+    }).then((teardown) => {
+      off = teardown;
+    });
+    return () => off?.();
+  }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const meta = event.ctrlKey || event.metaKey;
@@ -339,6 +370,7 @@ export function App() {
           without needing the highlight state lifted up here. */}
       <Welcome />
       <Publish />
+      <UnsavedChanges />
       <Import />
 
       <div className="content">

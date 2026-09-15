@@ -316,6 +316,14 @@ function Permissions({ nodeId, manifest }: { nodeId: string; manifest: Component
         );
       })}
 
+      {/* How long an answer lasts, said once under the controls rather than on each of them.
+          "Allow this folder" reads like a permanent decision and is not one: a grant is held
+          for the project that is open, sent with every run of it, and dropped the moment a new
+          project, another project or a sample replaces the canvas. Somebody deciding whether to
+          press Allow is deciding about a scope, and the scope was the one thing the buttons
+          never stated. */}
+      <p className="field__doc">{t('inspector.permissions.scope')}</p>
+
       {cannot.length > 0 ? (
         <div className="cannot">
           <span className="cannot__label">{t('common.itCannot')}</span>

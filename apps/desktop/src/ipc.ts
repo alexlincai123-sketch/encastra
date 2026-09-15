@@ -88,6 +88,24 @@ export interface Ipc {
    * interface can decide whether to offer to open it — which is a separate thing to press.
    */
   importPublication(folder: string): Promise<LibraryEntry>;
+  /**
+   * Tells the window whether there is unsaved work in it.
+   *
+   * The window is closed by the operating system, not by this code: a title-bar X, Alt+F4 or a
+   * shutdown never passes through the editor at all. The only way to answer one of those with
+   * "there is unsaved work here" is for the privileged side to know it already, before the
+   * question is asked — so the answer is pushed there whenever it changes, rather than fetched
+   * at a moment when nothing can be prevented any more.
+   */
+  reportDirty(dirty: boolean): Promise<void>;
+  /**
+   * Closes the window, this time for good.
+   *
+   * Only ever called after somebody has said, in the dialog, that the unsaved work can go. The
+   * runtime marks the close as already decided before it asks for it, so its own guard lets this
+   * one through instead of prompting about the same work forever.
+   */
+  closeWindow(): Promise<void>;
   /** Everything in the library, each with the answer to whether it is still where it was. */
   libraryList(): Promise<LibraryListing>;
   /**
@@ -223,6 +241,14 @@ class TauriIpc implements Ipc {
     return this.invoke<LibraryEntry>('import_publication', { folder });
   }
 
+  reportDirty(dirty: boolean): Promise<void> {
+    return this.invoke<void>('report_dirty', { dirty });
+  }
+
+  closeWindow(): Promise<void> {
+    return this.invoke<void>('close_window');
+  }
+
   libraryList(): Promise<LibraryListing> {
     return this.invoke<LibraryListing>('library_list');
   }
@@ -317,6 +343,18 @@ class PreviewIpc implements Ipc {
   async importPublication(): Promise<LibraryEntry> {
     throw new PreviewOnlyError('Importing a publication');
   }
+
+  /**
+   * Both of these do nothing in a browser, rather than refusing.
+   *
+   * There is no window to keep open and nothing to tell about unsaved work: a browser tab
+   * already asks its own question on the way out, and it is not this application's to answer.
+   * Throwing here would turn every edit in the preview into an error in the console — a refusal
+   * is the honest answer to "run this graph", never to "there are unsaved changes".
+   */
+  async reportDirty(): Promise<void> {}
+
+  async closeWindow(): Promise<void> {}
 
   /**
    * An empty library, rather than a refusal.

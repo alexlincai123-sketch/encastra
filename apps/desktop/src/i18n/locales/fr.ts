@@ -91,6 +91,60 @@ const fr: Messages = {
           'Un flux de travail s’exécute vers l’avant. Pour répéter le même travail plusieurs fois, démarrez-le depuis un déclencheur — Surveiller un dossier ou Minuteur — qui l’exécute une fois par événement.',
       },
       bridge: 'Une étape produisant {bridge} entre les deux les relierait.',
+      // Chaque formulation dont un refus est composé — voir `canvas/refusal.ts`.
+      cannotFeed: '{from} ne peut pas alimenter une étape qui attend {to}.',
+      rawType: '« {name} »',
+      listOf: 'une liste de valeurs de type {item}',
+      optional: 'une valeur facultative de type {item}',
+      types: {
+        bool: 'un booléen',
+        i64: 'un entier',
+        f64: 'un nombre',
+        string: 'du texte',
+        json: 'du JSON',
+        file: 'un fichier',
+        dir: 'un dossier',
+        bytes: 'des octets',
+        image: 'une image',
+        video: 'une vidéo',
+        audio: 'du son',
+      },
+      nouns: {
+        bool: 'booléen',
+        i64: 'entier',
+        f64: 'nombre',
+        string: 'texte',
+        json: 'JSON',
+        file: 'fichier',
+        dir: 'dossier',
+        bytes: 'octets',
+        image: 'image',
+        video: 'vidéo',
+        audio: 'son',
+      },
+      labels: {
+        bool: 'Booléen',
+        i64: 'Entier',
+        f64: 'Nombre',
+        string: 'Texte',
+        json: 'JSON',
+        file: 'Fichier',
+        dir: 'Dossier',
+        bytes: 'Octets',
+        image: 'Image',
+        video: 'Vidéo',
+        audio: 'Audio',
+      },
+      detail: {
+        notAType: '« {name} » n’est pas quelque chose que cette version sache lire comme un type.',
+        listsDoNotMatch: 'Les deux listes ne contiennent pas la même chose. {inner}',
+        cannotConnect: '{from} ne peut pas être relié à {to}.',
+        unknownType:
+          '« {name} » n’est pas un type connu de ce moteur. Le composant demande peut-être une version plus récente.',
+        siblings:
+          '{from} et {to} sont deux sortes de {shared}, mais l’un n’est pas l’autre. Passez par {shared} si c’est ce que vous vouliez dire.',
+        noConversion: '{from} ne peut pas devenir {to}. Aucune conversion n’existe entre les deux.',
+      },
     },
     empty: {
       heading: 'Votre canevas est vide',
@@ -602,6 +656,8 @@ const fr: Messages = {
       allowHost: 'Autoriser {host}',
       allowAddress: 'Autoriser cette adresse',
       allow: 'Autoriser',
+      scope:
+        'Autorisé tant que ce projet est ouvert. Chaque exécution utilise exactement ce dossier ou cette adresse, et fermer le projet ou en changer l’oublie.',
       chooseFolderFirst: 'Choisissez d’abord un dossier.',
       enterAddressFirst: 'Saisissez d’abord une adresse.',
       notASetting:
@@ -727,6 +783,23 @@ const fr: Messages = {
     },
   },
 
+  // La seule question que pose cette application avant d’abandonner du travail.
+  unsaved: {
+    title: 'Modifications non enregistrées',
+    reasons: {
+      new: 'Vous avez des modifications non enregistrées. Commencer un nouveau projet les perdrait.',
+      open: 'Vous avez des modifications non enregistrées. Ouvrir un autre projet les perdrait.',
+      demo: 'Vous avez des modifications non enregistrées. Charger un exemple les perdrait.',
+      restore:
+        'Vous avez des modifications non enregistrées. Restaurer une version antérieure les perdrait.',
+      close: 'Vous avez des modifications non enregistrées. Fermer Encastra les perdrait.',
+      'library-open':
+        'Vous avez des modifications non enregistrées. Ouvrir un élément de votre bibliothèque les perdrait.',
+    },
+    save: 'Enregistrer et continuer',
+    discard: 'Abandonner les modifications',
+    cancel: 'Annuler',
+  },
   messages: {
     untitledProject: 'Sans titre',
     recordingNote: 'Ceci est un enregistrement, pas une exécution sur cette machine.',

@@ -111,9 +111,27 @@ button {
   background: var(--ground-3);
 }
 
+/*
+ * Two lines are reserved for every label, in every language.
+ *
+ * "Components" fits on one line; "Komponenten" and "Bibliothèque" do not, and the row that wraps
+ * grows while its neighbours stay short — so the rail's icons stopped being evenly spaced as
+ * soon as the interface was read in German or French, and moved as the language changed. The
+ * height is reserved rather than measured: the same two lines whether a label uses them or not,
+ * so no row can push another one about. `anywhere` is what keeps a single long word (German has
+ * several) inside the rail instead of spilling out of it.
+ */
 .sidebar__label {
+  display: block;
+  /* The rail's width, so a long word wraps inside the rail instead of sizing the item to
+     itself — the row is centred, and a label wider than the rail would push the icon off it. */
+  width: 100%;
+  min-height: calc(2 * 1.2em);
   font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
   letter-spacing: var(--tracking-label);
+  overflow-wrap: anywhere;
 }
 
 .sidebar__running {
@@ -1597,6 +1615,60 @@ select.input {
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-top: var(--border);
+}
+
+/* ---------------------------------------------------------------------------------------
+ * The unsaved-work question
+ *
+ * Narrower than the publication panel and with no scrolling body, because it is one sentence
+ * and three answers: anything that needs a scrollbar is too much to read at the moment
+ * somebody is trying to leave. Sits above every other panel — it can be raised while Publish
+ * is open, and it is the one that must be answered first.
+ * ------------------------------------------------------------------------------------ */
+
+.unsaved {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 55%);
+}
+
+.unsaved__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(460px, 100%);
+  padding: var(--space-4);
+  background: var(--ground-1);
+  border: var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.unsaved__panel h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.unsaved__panel p {
+  margin: 0;
+  max-width: 54ch;
+  color: var(--ink-muted);
+}
+
+.unsaved__error {
+  color: var(--danger);
+}
+
+.unsaved__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 /* ---------------------------------------------------------------------------------------

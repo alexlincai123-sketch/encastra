@@ -92,6 +92,61 @@ const de: Messages = {
           'Ein Workflow läuft vorwärts. Um dieselbe Arbeit wiederholt auszuführen, starten Sie ihn über einen Auslöser — Ordner überwachen oder Timer —, der ihn einmal pro Ereignis ausführt.',
       },
       bridge: 'Ein Schritt, der dazwischen {bridge} erzeugt, würde die beiden verbinden.',
+      // Jede Formulierung, aus der eine Ablehnung besteht — siehe `canvas/refusal.ts`.
+      cannotFeed:
+        'Ein Wert vom Typ {from} passt nicht in einen Schritt, der einen Wert vom Typ {to} erwartet.',
+      rawType: '„{name}“',
+      listOf: 'Liste von Werten vom Typ {item}',
+      optional: 'optionaler Wert vom Typ {item}',
+      types: {
+        bool: 'Wahrheitswert',
+        i64: 'ganze Zahl',
+        f64: 'Zahl',
+        string: 'Text',
+        json: 'JSON',
+        file: 'Datei',
+        dir: 'Ordner',
+        bytes: 'Bytes',
+        image: 'Bild',
+        video: 'Video',
+        audio: 'Ton',
+      },
+      nouns: {
+        bool: 'Wahrheitswert',
+        i64: 'ganze Zahl',
+        f64: 'Zahl',
+        string: 'Text',
+        json: 'JSON',
+        file: 'Datei',
+        dir: 'Ordner',
+        bytes: 'Bytes',
+        image: 'Bild',
+        video: 'Video',
+        audio: 'Ton',
+      },
+      labels: {
+        bool: 'Wahrheitswert',
+        i64: 'Ganzzahl',
+        f64: 'Zahl',
+        string: 'Text',
+        json: 'JSON',
+        file: 'Datei',
+        dir: 'Ordner',
+        bytes: 'Bytes',
+        image: 'Bild',
+        video: 'Video',
+        audio: 'Ton',
+      },
+      detail: {
+        notAType: '„{name}“ kann diese Version nicht als Typ lesen.',
+        listsDoNotMatch: 'Die beiden Listen enthalten nicht dasselbe. {inner}',
+        cannotConnect: '{from} und {to} lassen sich nicht verbinden.',
+        unknownType:
+          '„{name}“ ist kein Typ, den diese Laufzeitumgebung kennt. Die Komponente braucht vielleicht eine neuere Version.',
+        siblings:
+          '{from} und {to} sind beides Arten von {shared}, aber das eine ist nicht das andere. Wandeln Sie über {shared} um, wenn Sie das meinen.',
+        noConversion: 'Zwischen {from} und {to} gibt es keine Umwandlung.',
+      },
     },
     empty: {
       heading: 'Ihre Fläche ist leer',
@@ -604,6 +659,8 @@ const de: Messages = {
       allowHost: '{host} erlauben',
       allowAddress: 'Diese Adresse erlauben',
       allow: 'Erlauben',
+      scope:
+        'Erlaubt, solange dieses Projekt geöffnet ist. Jeder Lauf verwendet genau diesen Ordner oder diese Adresse; beim Schließen oder Wechseln des Projekts wird das wieder vergessen.',
       chooseFolderFirst: 'Wählen Sie zuerst einen Ordner.',
       enterAddressFirst: 'Geben Sie zuerst eine Adresse ein.',
       notASetting:
@@ -730,6 +787,23 @@ const de: Messages = {
     },
   },
 
+  // Die einzige Frage, die diese Anwendung stellt, bevor Arbeit verworfen wird.
+  unsaved: {
+    title: 'Nicht gespeicherte Änderungen',
+    reasons: {
+      new: 'Sie haben nicht gespeicherte Änderungen. Ein neues Projekt zu beginnen würde sie verwerfen.',
+      open: 'Sie haben nicht gespeicherte Änderungen. Ein anderes Projekt zu öffnen würde sie verwerfen.',
+      demo: 'Sie haben nicht gespeicherte Änderungen. Ein Beispiel zu laden würde sie verwerfen.',
+      restore:
+        'Sie haben nicht gespeicherte Änderungen. Eine frühere Version wiederherzustellen würde sie verwerfen.',
+      close: 'Sie haben nicht gespeicherte Änderungen. Encastra zu schließen würde sie verwerfen.',
+      'library-open':
+        'Sie haben nicht gespeicherte Änderungen. Etwas aus Ihrer Bibliothek zu öffnen würde sie verwerfen.',
+    },
+    save: 'Speichern und fortfahren',
+    discard: 'Änderungen verwerfen',
+    cancel: 'Abbrechen',
+  },
   messages: {
     untitledProject: 'Unbenannt',
     recordingNote: 'Dies ist eine Aufzeichnung, keine Ausführung auf diesem Rechner.',

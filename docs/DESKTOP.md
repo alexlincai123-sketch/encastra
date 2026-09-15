@@ -65,9 +65,17 @@ state. Building it per call would let two calls disagree about what is installed
 | `import_publication` | copies the bytes that were verified into the library and records them — it does **not** open or run the project |
 | `library_list` | every entry, each with whether the file it names is still there and still what it was |
 | `library_remove` | forgets an entry, and — only for a copy Encastra made itself — deletes it too |
+| `report_dirty` / `close_window` | whether the canvas holds unsaved work, and the close that happens once somebody has said it may go |
 | `about` | versions, taken from the build rather than typed anywhere |
 
 A few of these are worth spelling out.
+
+**`report_dirty` exists because a window is closed by the operating system.** A title-bar X,
+Alt+F4 or a session ending never passes through the editor, so by the time anything could be
+asked of it the work is already gone. The editor pushes the answer to "is there unsaved work
+here" whenever it changes; the close handler refuses a close while that answer is yes and asks
+the editor to put the question to the person. Refusing is the safe half of the failure — if the
+editor never answers, the window stays open with the work still in it.
 
 **`type_graph` looks redundant and is not.** The editor already has the rule table at build
 time. Serving it from the runtime as well means a *running* application can be asked which rules

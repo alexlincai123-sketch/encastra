@@ -56,6 +56,7 @@ const SOURCE_FILES = [
   'panels/Palette.tsx',
   'panels/Publish.tsx',
   'panels/RunPanel.tsx',
+  'panels/UnsavedChanges.tsx',
   'onboarding/Welcome.tsx',
   'views/Builder.tsx',
   'views/Components.tsx',

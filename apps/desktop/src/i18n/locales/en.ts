@@ -97,6 +97,68 @@ const en: Messages = {
           'A workflow runs forwards. To do the same work repeatedly, start it from a trigger — Watch Folder or Timer — which runs it once per event.',
       },
       bridge: 'A step producing {bridge} in between would join them.',
+      // Every wording a refused connection is built from — see `canvas/refusal.ts`.
+      //
+      // `cannotFeed`, `listOf` and `optional` are whole constructions with a placeholder
+      // in them rather than fragments to be joined, because word order and agreement are
+      // yours to decide: German puts no article in `types` and carries the case on a fixed
+      // "Wert vom Typ …" instead, Spanish carries the article inside the phrase. Three
+      // wordings per type, because a sentence needs a different one in each place:
+      // `types` is the phrase a sentence refers to a value by, `nouns` the bare noun a
+      // construction frames, `labels` the name shown on the bridge chip and in `detail`.
+      cannotFeed: '{from} cannot be fed into a step that expects {to}.',
+      rawType: '“{name}”',
+      listOf: 'a list of {item} values',
+      optional: 'an optional {item}',
+      types: {
+        bool: 'a boolean',
+        i64: 'an integer',
+        f64: 'a number',
+        string: 'text',
+        json: 'JSON',
+        file: 'a file',
+        dir: 'a folder',
+        bytes: 'bytes',
+        image: 'an image',
+        video: 'a video',
+        audio: 'audio',
+      },
+      nouns: {
+        bool: 'boolean',
+        i64: 'integer',
+        f64: 'number',
+        string: 'text',
+        json: 'JSON',
+        file: 'file',
+        dir: 'folder',
+        bytes: 'bytes',
+        image: 'image',
+        video: 'video',
+        audio: 'audio',
+      },
+      labels: {
+        bool: 'Boolean',
+        i64: 'Integer',
+        f64: 'Number',
+        string: 'Text',
+        json: 'JSON',
+        file: 'File',
+        dir: 'Folder',
+        bytes: 'Bytes',
+        image: 'Image',
+        video: 'Video',
+        audio: 'Audio',
+      },
+      detail: {
+        notAType: '“{name}” is not something this build can read as a type.',
+        listsDoNotMatch: 'The two lists do not hold the same thing. {inner}',
+        cannotConnect: '{from} cannot connect to {to}.',
+        unknownType:
+          '“{name}” is not a type this runtime knows. The component may need a newer runtime version.',
+        siblings:
+          '{from} and {to} are both kinds of {shared}, but one is not the other. Convert through {shared} if that is what you mean.',
+        noConversion: '{from} cannot become {to}. There is no conversion between them.',
+      },
     },
     empty: {
       heading: 'Your canvas is empty',
@@ -621,6 +683,8 @@ const en: Messages = {
       allowHost: 'Allow {host}',
       allowAddress: 'Allow this address',
       allow: 'Allow',
+      scope:
+        'Allowed while this project is open. Every run uses exactly this folder or address, and closing or switching projects forgets it.',
       chooseFolderFirst: 'Choose a folder first.',
       enterAddressFirst: 'Enter an address first.',
       notASetting:
@@ -757,6 +821,26 @@ const en: Messages = {
   // `messages.saved`/etc. are looked up with `translate()` from that plain store module, the same
   // way `canvas/Canvas.tsx` does inside `isConnectionLegal` — see `i18n/index.ts`'s own note on
   // why: a store action has no React render to call `useTranslation()` from.
+  // The only question this application asks before work is thrown away.
+  //
+  // One sentence per way of throwing it away, rather than one sentence with the action
+  // interpolated into it: "opening another project" and "closing Encastra" decline
+  // differently in most of these languages, and a sentence with a hole in it cannot.
+  unsaved: {
+    title: 'Unsaved changes',
+    reasons: {
+      new: 'You have unsaved changes. Starting a new project would lose them.',
+      open: 'You have unsaved changes. Opening another project would lose them.',
+      demo: 'You have unsaved changes. Loading a sample would lose them.',
+      restore: 'You have unsaved changes. Restoring an earlier version would lose them.',
+      close: 'You have unsaved changes. Closing Encastra would lose them.',
+      'library-open':
+        'You have unsaved changes. Opening something from your library would lose them.',
+    },
+    save: 'Save and continue',
+    discard: 'Discard changes',
+    cancel: 'Cancel',
+  },
   messages: {
     untitledProject: 'Untitled',
     recordingNote: 'This is a recording, not a run on this machine.',

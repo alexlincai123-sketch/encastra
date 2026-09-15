@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { explainConnection } from '../src/canvas/refusal';
+import { loadLocale, useI18n } from '../src/i18n';
 
 /**
  * Whether the editor says something useful when a connection is refused.
@@ -8,9 +9,24 @@ import { explainConnection } from '../src/canvas/refusal';
  * `@encastra/protocol` does that, and these tests lean on real pairs from
  * `packages/protocol/data/type-graph.json` rather than inventing types that could never appear
  * on a real port.
+ *
+ * The English assertions below run through the real `translate()` at locale `en` rather than a
+ * stub: the sentences live in the message tree now, and a stubbed translator would prove only
+ * that the placeholders line up. The last suite switches the locale for real and checks that
+ * the same refusal comes back in Spanish — which is the whole point of the rewrite, and the one
+ * thing a key-parity test cannot show.
  */
 
 describe('explainConnection', () => {
+  beforeAll(() => {
+    // Pinned, and not out of tidiness. `initI18n()` runs when the module is imported and picks
+    // the language the machine asks for — which on the machine this was written on is Spanish —
+    // and then fetches that locale asynchronously. Which language these assertions ran against
+    // would otherwise depend on whether that import happened to have resolved first: the file
+    // passed on its own and failed in a full run, for no reason visible in either.
+    useI18n.setState({ locale: 'en' });
+  });
+
   it('says a compatible pair is fine, with nothing further to explain', () => {
     // image extends file: a value already IS a value of its supertype, so this needs no
     // conversion at all.
@@ -39,7 +55,12 @@ describe('explainConnection', () => {
     // image and video are siblings under file, so file is the two-hop bridge, and the protocol
     // package's own reason already names it — this module must not contradict it.
     expect(refusal.bridge).toBe('File');
-    expect(refusal.detail.length).toBeGreaterThan(0);
+    // The whole sentence, in English, from the message tree — `image` and `video` are siblings
+    // under `file`, and naming the parent is the only part of the answer that says what to do.
+    expect(refusal.headline).toBe('An image cannot be fed into a step that expects a video.');
+    expect(refusal.detail).toBe(
+      'Image and Video are both kinds of File, but one is not the other. Convert through File if that is what you mean.',
+    );
   });
 
   it('offers no bridge when the type table truly has no path between the two', () => {
@@ -107,5 +128,48 @@ describe('explainConnection', () => {
     if (refusal.ok) throw new Error('unreachable');
     expect(refusal.headline.toLowerCase()).toContain('optional');
     expect(refusal.bridge).toBe('File');
+    // "an optional image", not "an optional an image": the construction key frames a bare noun,
+    // so the article cannot arrive twice the way concatenating two phrases used to make it.
+    expect(refusal.headline).toBe(
+      'An optional image cannot be fed into a step that expects an optional video.',
+    );
+    // The option is never the refusal — what it holds is — so the reason talks about the two
+    // types inside, rather than saying "optional" twice and burying the answer.
+    expect(refusal.detail).toContain('Image and Video are both kinds of File');
+  });
+
+  it('says a type this build has no wording for by its own name rather than guessing one', () => {
+    // A port typed by a component newer than this dictionary. Nothing in `canvas.refusal.types`
+    // names it, and inventing a phrase for it would be worse than showing what it is called.
+    const refusal = explainConnection('image', 'hologram');
+    expect(refusal.ok).toBe(false);
+    if (refusal.ok) throw new Error('unreachable');
+    expect(refusal.headline).toContain('“hologram”');
+    expect(refusal.detail).toBe(
+      '“hologram” is not a type this runtime knows. The component may need a newer runtime version.',
+    );
+  });
+});
+
+describe('the same refusal in another language', () => {
+  afterAll(() => {
+    // Every other suite in this file reads English. Leaving Spanish set would make which of
+    // them pass depend on the order vitest happened to run them in.
+    useI18n.setState({ locale: 'en' });
+  });
+
+  it('is Spanish once Spanish is the active locale, sentence and bridge alike', async () => {
+    await loadLocale('es');
+    useI18n.setState({ locale: 'es' });
+
+    const refusal = explainConnection('image', 'video');
+    expect(refusal.ok).toBe(false);
+    if (refusal.ok) throw new Error('unreachable');
+    expect(refusal.headline).toBe('Una imagen no puede entrar en un paso que espera un vídeo.');
+    expect(refusal.detail).toBe(
+      'Imagen y Vídeo son dos clases de Archivo, pero una no es la otra. Convierte a través de Archivo si es eso lo que quieres decir.',
+    );
+    // The chip too: it names a type, and a type has a name in every language shipped here.
+    expect(refusal.bridge).toBe('Archivo');
   });
 });

@@ -59,6 +59,26 @@ struct Runtime {
     /// What this person has, and where it is. Read once at start-up for the same reason the
     /// registry is: two calls that each read the file would disagree about what is in it.
     library: LibraryHandle,
+    /// Whether the canvas holds work that has not been written to disk.
+    ///
+    /// The editor's answer, pushed here by `report_dirty` whenever it changes. It lives on this
+    /// side because the question is asked on this side: a window is closed by the operating
+    /// system — a title-bar X, Alt+F4, a session ending — and the close event has to be answered
+    /// before anything can be asked of the webview. Knowing already is the only way to say no.
+    dirty: AtomicBool,
+    /// Whether a close has already been decided by the person, and is now merely being carried
+    /// out. Set by [`close_window`] so that the guard below lets that close through instead of
+    /// prompting about the same work forever.
+    closing: AtomicBool,
+}
+
+/// Should this close be stopped and handed to the editor to ask about?
+///
+/// A function rather than an expression inline in the handler so that the decision can be tested
+/// without a window: the failure that matters here is not "it prompted" but "it prompted again
+/// after the person already said yes", which is a window nobody can close.
+fn should_prevent_close(dirty: bool, closing: bool) -> bool {
+    dirty && !closing
 }
 
 struct Running {
@@ -1258,6 +1278,32 @@ fn library_remove(
     Ok(())
 }
 
+/// The editor telling this side whether there is unsaved work in the window.
+///
+/// Called on every transition, not on every edit: `dirty` changes twice in a session where
+/// somebody saves once, and a message per keystroke would be a great deal of traffic for a
+/// boolean.
+#[tauri::command]
+fn report_dirty(state: tauri::State<'_, Runtime>, dirty: bool) {
+    state.dirty.store(dirty, Ordering::Relaxed);
+}
+
+/// Closes the window, after the person has said the unsaved work may go.
+///
+/// The flag is set before the close is asked for, so [`should_prevent_close`] lets this one
+/// through. It is never cleared: the window is going, and the only thing that could read it
+/// afterwards is a second close of a window that no longer exists.
+#[tauri::command]
+fn close_window(app: tauri::AppHandle, state: tauri::State<'_, Runtime>) -> Result<(), String> {
+    state.closing.store(true, Ordering::Relaxed);
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "There is no window to close.".to_owned())?;
+    window
+        .close()
+        .map_err(|_| "The window refused to close.".to_owned())
+}
+
 #[tauri::command]
 fn about() -> serde_json::Value {
     serde_json::json!({
@@ -1271,6 +1317,33 @@ fn about() -> serde_json::Value {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // A window closed with unsaved work in it takes the work with it, and nothing about a
+        // title-bar X passes through the editor on its way. So the close is refused here, where
+        // the answer is already known, and the editor is told to ask — it closes the window
+        // itself, through `close_window`, once somebody has said the work may go.
+        //
+        // Refusing is safe in a way that asking would not be: if the editor never answers, the
+        // window stays open with the work still in it. The opposite arrangement — let it close
+        // and hope the question is answered in time — has exactly one failure mode, and it is
+        // the one this exists to prevent.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Before `setup` has run there is no state, and nothing has been edited either:
+                // a close that early carries no work with it and may simply happen.
+                let Some(state) = window.try_state::<Runtime>() else {
+                    return;
+                };
+                if should_prevent_close(
+                    state.dirty.load(Ordering::Relaxed),
+                    state.closing.load(Ordering::Relaxed),
+                ) {
+                    api.prevent_close();
+                    // If this never arrives the window stays open, which is the safe half of
+                    // the failure: nothing is lost, and the person can try again.
+                    let _ = window.emit("encastra://close-requested", ());
+                }
+            }
+        })
         // The managed state is built here rather than before the builder because the library
         // needs to know where this application's own data lives, and only an app handle knows.
         .setup(|app| {
@@ -1288,6 +1361,9 @@ pub fn run() {
                 running: Mutex::new(None),
                 chosen_folders: Mutex::new(BTreeSet::new()),
                 library: LibraryHandle::open(library_root),
+                // Nothing has been edited yet, and nobody has decided to close anything.
+                dirty: AtomicBool::new(false),
+                closing: AtomicBool::new(false),
             });
             Ok(())
         })
@@ -1310,6 +1386,8 @@ pub fn run() {
             import_publication,
             library_list,
             library_remove,
+            report_dirty,
+            close_window,
             about
         ])
         .run(tauri::generate_context!())
@@ -1347,6 +1425,19 @@ mod tests {
         assert_eq!(refused, NOT_A_PROJECT);
         assert!(!refused.contains("notes.txt"));
         assert!(project_path("thumbnails.encastra").is_ok());
+    }
+
+    #[test]
+    fn a_close_is_stopped_only_while_there_is_unsaved_work_nobody_has_decided_about() {
+        // The ordinary close of a saved window: nothing to ask about, so nothing is asked.
+        assert!(!should_prevent_close(false, false));
+        // Work in the window, and no decision yet: this is the one the feature exists for.
+        assert!(should_prevent_close(true, false));
+        // The person said the work may go, and the editor is now closing the window itself.
+        // Stopping this one would mean a window that cannot be closed at all — the failure
+        // that turns a safeguard into a trap.
+        assert!(!should_prevent_close(true, true));
+        assert!(!should_prevent_close(false, true));
     }
 
     #[test]

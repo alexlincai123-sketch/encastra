@@ -91,6 +91,60 @@ const it: Messages = {
           'Un flusso di lavoro procede in avanti. Per ripetere lo stesso lavoro più volte, avvialo da un trigger — Osserva cartella o Timer — che lo esegue una volta per ogni evento.',
       },
       bridge: 'Un passaggio che produce {bridge} nel mezzo li collegherebbe.',
+      // Ogni formulazione con cui si costruisce un rifiuto — vedi `canvas/refusal.ts`.
+      cannotFeed: '{from} non può entrare in un passaggio che si aspetta {to}.',
+      rawType: '«{name}»',
+      listOf: 'un elenco di valori di tipo {item}',
+      optional: 'un valore facoltativo di tipo {item}',
+      types: {
+        bool: 'un booleano',
+        i64: 'un numero intero',
+        f64: 'un numero',
+        string: 'del testo',
+        json: 'del JSON',
+        file: 'un file',
+        dir: 'una cartella',
+        bytes: 'dei byte',
+        image: 'un’immagine',
+        video: 'un video',
+        audio: 'dell’audio',
+      },
+      nouns: {
+        bool: 'booleano',
+        i64: 'numero intero',
+        f64: 'numero',
+        string: 'testo',
+        json: 'JSON',
+        file: 'file',
+        dir: 'cartella',
+        bytes: 'byte',
+        image: 'immagine',
+        video: 'video',
+        audio: 'audio',
+      },
+      labels: {
+        bool: 'Booleano',
+        i64: 'Intero',
+        f64: 'Numero',
+        string: 'Testo',
+        json: 'JSON',
+        file: 'File',
+        dir: 'Cartella',
+        bytes: 'Byte',
+        image: 'Immagine',
+        video: 'Video',
+        audio: 'Audio',
+      },
+      detail: {
+        notAType: '«{name}» non è qualcosa che questa versione sappia leggere come tipo.',
+        listsDoNotMatch: 'I due elenchi non contengono la stessa cosa. {inner}',
+        cannotConnect: '{from} non può essere collegato a {to}.',
+        unknownType:
+          '«{name}» non è un tipo che questo motore conosca. Il componente potrebbe richiedere una versione più recente.',
+        siblings:
+          '{from} e {to} sono due tipi di {shared}, ma uno non è l’altro. Converti passando per {shared} se è questo che intendi.',
+        noConversion: '{from} non può diventare {to}. Non esiste alcuna conversione tra i due.',
+      },
     },
     empty: {
       heading: 'La tua tela è vuota',
@@ -598,6 +652,8 @@ const it: Messages = {
       allowHost: 'Consenti {host}',
       allowAddress: 'Consenti questo indirizzo',
       allow: 'Consenti',
+      scope:
+        'Consentito finché questo progetto resta aperto. Ogni esecuzione usa esattamente questa cartella o questo indirizzo, e chiudere il progetto o cambiarlo lo dimentica.',
       chooseFolderFirst: 'Scegli prima una cartella.',
       enterAddressFirst: 'Inserisci prima un indirizzo.',
       notASetting:
@@ -722,6 +778,22 @@ const it: Messages = {
     },
   },
 
+  // L’unica domanda che questa applicazione pone prima di scartare del lavoro.
+  unsaved: {
+    title: 'Modifiche non salvate',
+    reasons: {
+      new: 'Hai modifiche non salvate. Iniziare un nuovo progetto le perderebbe.',
+      open: 'Hai modifiche non salvate. Aprire un altro progetto le perderebbe.',
+      demo: 'Hai modifiche non salvate. Caricare un esempio le perderebbe.',
+      restore: 'Hai modifiche non salvate. Ripristinare una versione precedente le perderebbe.',
+      close: 'Hai modifiche non salvate. Chiudere Encastra le perderebbe.',
+      'library-open':
+        'Hai modifiche non salvate. Aprire qualcosa dalla tua libreria le perderebbe.',
+    },
+    save: 'Salva e continua',
+    discard: 'Scarta le modifiche',
+    cancel: 'Annulla',
+  },
   messages: {
     untitledProject: 'Senza titolo',
     recordingNote: 'Questa è una registrazione, non un’esecuzione su questo computer.',
