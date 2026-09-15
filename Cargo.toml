@@ -6,6 +6,7 @@ members = [
   "crates/encastra-project",
   "crates/encastra-builtins",
   "crates/encastra-publish",
+  "crates/encastra-library",
   "crates/encastra-cli",
   "apps/desktop/src-tauri",
 ]

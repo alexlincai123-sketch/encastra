@@ -13,6 +13,10 @@
 //!   release declares are kept apart on purpose, and nothing in this crate lets a price change
 //!   a capability, a decision, or a review outcome. A paid publication is reviewed by exactly
 //!   the same code as a free one.
+//! - **The receiving side runs the same check, and its answer is the one that counts.**
+//!   [`import::inspect`] reads a publication folder somebody sent and runs [`review`] again on
+//!   this machine, because the document travelling with a project was written by whoever
+//!   prepared it and a refusal that can be edited away is not a refusal.
 //! - **A publication is refused before it exists, not withdrawn afterwards.** [`review`] runs
 //!   over the project itself and returns findings; a finding that blocks is a refusal with a
 //!   reason and something to do about it, never a warning somebody can click past.
@@ -23,13 +27,15 @@
 //! explicit, reviewable state.
 
 pub mod bundle;
+pub mod import;
 pub mod license;
 pub mod listing;
 pub mod money;
 pub mod review;
 
 pub use bundle::{BundleError, PublicationBundle, PublicationDraft};
+pub use import::{ImportError, Imported, Inspected, import, inspect};
 pub use license::{License, LicenseVerdict};
-pub use listing::{Kind, Listing, Moderation, Publisher, Release, Withdrawal};
+pub use listing::{Kind, Listing, Moderation, Publisher, Release, Withdrawal, is_listing_id};
 pub use money::{Currency, Entitlement, EntitlementSource, Payout, Pricing, Purchase, Split};
 pub use review::{Finding, Outcome, Review, Severity, review};
