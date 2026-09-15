@@ -1,0 +1,1 @@
+{"schema":1,"id":"a.b","version":"0.1.0","name":"N","runtime":">=0.1.0","kind":"core","ports":{"inputs":{},"outputs":{"out":{"type":"text"}}},"capabilities":[]}

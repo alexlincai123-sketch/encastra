@@ -314,6 +314,17 @@ fn url_parts(url: &str) -> Result<UrlParts, NodeError> {
     Ok(UrlParts { scheme, host, port })
 }
 
+/// The authority a permission for this address is granted against, or `None` when the address is
+/// not one this build will request at all.
+///
+/// Public because the editor has a second implementation of this same reading
+/// (`apps/desktop/src/url.ts`), which is what builds the prompt a person answers. That
+/// duplication is deliberate — the editor cannot call into the runtime — and it is safe only for
+/// as long as the two agree. `tests/url_authority.rs` replays one shared table through both.
+pub fn permission_authority(url: &str) -> Option<String> {
+    url_parts(url).ok().map(|parts| parts.authority())
+}
+
 pub fn http() -> Arc<dyn CoreComponent> {
     Arc::new(Http)
 }
