@@ -591,6 +591,20 @@ impl Broker {
         node: &NodeId,
         directory: &Path,
     ) -> Result<Vec<DirEntry>, NodeError> {
+        self.list_dir_to(node, directory, MAX_DIR_ENTRIES)
+    }
+
+    /// The body of [`list_dir`](Self::list_dir), with the ceiling as an argument.
+    ///
+    /// Split out for the same reason as [`read_bounded_to`]: a test that has to create fifty
+    /// thousand files to reach a branch is a test nobody writes, and an untested branch is a
+    /// branch that does not work.
+    fn list_dir_to(
+        &mut self,
+        node: &NodeId,
+        directory: &Path,
+        limit: usize,
+    ) -> Result<Vec<DirEntry>, NodeError> {
         let detail = directory
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -619,24 +633,44 @@ impl Broker {
             )
         })?;
 
-        let mut files: Vec<DirEntry> = entries
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file()))
-            .filter_map(|entry| {
-                let metadata = entry.metadata().ok()?;
-                Some(DirEntry {
-                    name: entry.file_name().to_string_lossy().into_owned(),
-                    path: entry.path(),
-                    size: metadata.len(),
-                    modified_ms: metadata
-                        .modified()
-                        .ok()
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_millis() as u64)
-                        .unwrap_or(0),
-                })
-            })
-            .collect();
+        // Bounded as it is built, not after. A watched folder is somewhere other people put
+        // files — that is what watching one is for — so the length of this list is not the
+        // grantor's to decide, and it is re-read every polling interval. Refused rather than
+        // truncated: a watcher that silently skipped files would be worse than one that says
+        // the folder is too full to watch.
+        let mut files: Vec<DirEntry> = Vec::new();
+        for entry in entries {
+            let Ok(entry) = entry else { continue };
+            if !entry.file_type().is_ok_and(|t| t.is_file()) {
+                continue;
+            }
+            if files.len() >= limit {
+                return Err(self
+                    .deny(
+                        node,
+                        "fs.read",
+                        detail,
+                        "that folder holds more files than this build will list",
+                    )
+                    .with_hint(
+                        "Point this at a folder with fewer files, or move the processed ones out.",
+                    ));
+            }
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            files.push(DirEntry {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                path: entry.path(),
+                size: metadata.len(),
+                modified_ms: metadata
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+            });
+        }
         files.sort_by(|a, b| a.path.cmp(&b.path));
 
         self.allow(node, "fs.read", format!("listed {}", files.len()));
@@ -962,6 +996,16 @@ fn sensitive_roots() -> Vec<PathBuf> {
     roots
 }
 
+/// The most files a single folder listing may return.
+///
+/// `list_dir` reads a folder the user granted, but the *contents* of that folder are not theirs
+/// to decide — a watched folder is somewhere files arrive from elsewhere, and a trigger re-reads
+/// it every polling interval. Without a ceiling, the size of that allocation, repeated several
+/// times a second, belongs to whoever can write into the folder.
+///
+/// Far above any folder a person watches on purpose.
+pub const MAX_DIR_ENTRIES: usize = 50_000;
+
 /// The most any one file this runtime opens may weigh.
 ///
 /// Every read here lands in a `Vec` — the runtime passes bytes between components, it does not
@@ -975,6 +1019,16 @@ pub const MAX_READ_BYTES: u64 = 512 * 1024 * 1024;
 /// The size is checked before the allocation rather than after, so an enormous file costs a
 /// `metadata` call instead of the memory it claims.
 fn read_bounded(path: &Path) -> Result<Vec<u8>, NodeError> {
+    read_bounded_to(path, MAX_READ_BYTES)
+}
+
+/// The body of [`read_bounded`], with the ceiling as an argument.
+///
+/// Split out so the refusal branch can be tested against a small limit. A test that has to
+/// produce half a gigabyte to reach a branch is a test that does not get written, and the
+/// version of this that only ever exercised the "small file" path was passing while the branch
+/// it claimed to cover had never run once.
+fn read_bounded_to(path: &Path, limit: u64) -> Result<Vec<u8>, NodeError> {
     let size = std::fs::metadata(path)
         .map_err(|e| {
             NodeError::new(
@@ -984,10 +1038,10 @@ fn read_bounded(path: &Path) -> Result<Vec<u8>, NodeError> {
         })?
         .len();
 
-    if size > MAX_READ_BYTES {
+    if size > limit {
         return Err(NodeError::new(
             "too-large",
-            format!("That file is {size} bytes, and this build reads at most {MAX_READ_BYTES}."),
+            format!("That file is {size} bytes, and this build reads at most {limit}."),
         )
         .with_hint("Nothing was read. Use a smaller file, or split it before this step."));
     }
@@ -1068,11 +1122,21 @@ mod tests {
         assert_eq!(err.code, "denied");
         assert!(err.message.contains("connected"), "{}", err.message);
 
+        // A handle id that was never issued. Reachability is granted first, so that execution
+        // gets past that check and actually reaches the one about existence — otherwise this
+        // just re-runs the assertion above under a different name.
         let forged = Handle {
             id: 9999,
             kind: HandleKind::File,
         };
-        assert!(f.broker.open_input(&f.node, forged).is_err());
+        f.broker.make_reachable(&f.node, forged);
+        let err = f.broker.open_input(&f.node, forged).unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(
+            err.message.contains("does not exist"),
+            "a forged id must be refused for not existing, not for something else: {}",
+            err.message
+        );
     }
 
     #[test]
@@ -1200,6 +1264,40 @@ mod tests {
         let escape = allowed.join("inner").join("..");
         let err = broker.save_to(&node, out, &escape, "x.txt").unwrap_err();
         assert_eq!(err.code, "denied");
+        // Three different refusals in `save_to` all carry the code "denied". Naming the reason
+        // is what stops this passing because the folder happened not to exist.
+        assert!(err.message.contains("outside"), "{}", err.message);
+    }
+
+    #[test]
+    fn a_folder_with_more_files_than_the_build_lists_is_refused_not_truncated() {
+        // A watched folder is somewhere other people put files. Silently returning the first N
+        // would mean a watcher that skips work without saying so; the refusal is the honest
+        // answer. The ceiling is an argument here so the branch can be reached without creating
+        // fifty thousand files.
+        let dir = tempdir::TempDir::new();
+        let watched = dir.path().join("watched");
+        std::fs::create_dir_all(&watched).unwrap();
+        for i in 0..5 {
+            std::fs::write(watched.join(format!("f{i}.txt")), b"x").unwrap();
+        }
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.read", GrantScope::Directory(watched.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+
+        // Under the ceiling, all five come back — the control that makes the refusal meaningful.
+        assert_eq!(broker.list_dir_to(&node, &watched, 5).unwrap().len(), 5);
+
+        let err = broker.list_dir_to(&node, &watched, 3).unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("more files"), "{}", err.message);
+
+        // And the public entry point uses the documented ceiling, so the branch above is the
+        // one production reaches.
+        assert_eq!(MAX_DIR_ENTRIES, 50_000);
+        assert_eq!(broker.list_dir(&node, &watched).unwrap().len(), 5);
     }
 
     #[test]
@@ -1352,10 +1450,11 @@ mod tests {
         // "Allow this component to write to C:\" is not a decision any dialog offers, so it is
         // not one this side accepts relaying.
         let root = if cfg!(windows) { "C:\\" } else { "/" };
-        assert!(
-            resolve_grant_directory(Path::new(root)).is_err(),
-            "a filesystem root must be refused as a grant scope"
-        );
+        let err = resolve_grant_directory(Path::new(root))
+            .expect_err("a filesystem root must be refused as a grant scope");
+        // `resolve_grant_directory` has four refusals. Naming this one stops the test passing
+        // because a root was mistaken for, say, a sensitive directory.
+        assert!(err.contains("whole drive"), "{err}");
 
         // An ordinary folder inside one still resolves.
         let dir = tempdir::TempDir::new();
@@ -1381,12 +1480,28 @@ mod tests {
             return;
         }
 
+        let err = resolve_grant_directory(&startup)
+            .expect_err("the startup folder must not be grantable");
+        assert!(err.contains("decides what runs"), "{err}");
+
+        // The refusal must be this folder's, not some other rule's: the resolved startup path
+        // has to actually be one of the trees the check is built from.
+        let resolved = std::fs::canonicalize(&startup).unwrap();
         assert!(
-            resolve_grant_directory(&startup).is_err(),
-            "the startup folder must not be grantable"
+            forbidden_trees().contains(&resolved),
+            "the startup folder must be one of the forbidden trees"
         );
+
         // And a folder inside it, because a subfolder of a startup folder starts the same way.
-        assert!(!forbidden_trees().is_empty());
+        let inside = startup.join("encastra-test-subfolder");
+        if std::fs::create_dir_all(&inside).is_ok() {
+            let nested = resolve_grant_directory(&inside);
+            let _ = std::fs::remove_dir(&inside);
+            assert!(
+                nested.is_err(),
+                "a folder inside the startup folder must be refused too"
+            );
+        }
     }
 
     #[test]
@@ -1459,10 +1574,23 @@ mod tests {
     fn the_bounded_reader_refuses_before_it_allocates() {
         let dir = tempdir::TempDir::new();
         let path = dir.path().join("f.bin");
-        std::fs::write(&path, vec![0u8; 1024]).unwrap();
+        std::fs::write(&path, vec![0u8; 2048]).unwrap();
 
-        // Under the ceiling: read normally.
-        assert_eq!(read_bounded(&path).unwrap().len(), 1024);
+        // Under the ceiling: read normally. This is the control that proves the fixture is
+        // otherwise fine, so the refusal below is about the size and nothing else.
+        assert_eq!(read_bounded_to(&path, 4096).unwrap().len(), 2048);
+
+        // Over it: refused, by name. An earlier version of this test only ever exercised the
+        // line above, because reaching the real 512 MB ceiling would have meant writing half a
+        // gigabyte — so the branch it claimed to cover had never run. The ceiling is an argument
+        // now precisely so that this assertion exists.
+        let err = read_bounded_to(&path, 1024).unwrap_err();
+        assert_eq!(err.code, "too-large");
+        assert!(err.message.contains("2048"), "{}", err.message);
+        assert!(err.hint.is_some(), "a refusal should say what to do about it");
+
+        // Exactly at the ceiling is allowed: the limit is a maximum, not a strict bound.
+        assert_eq!(read_bounded_to(&path, 2048).unwrap().len(), 2048);
 
         // A path that is not there fails as an error, never a panic.
         let err = read_bounded(&dir.path().join("absent.bin")).unwrap_err();
@@ -1472,6 +1600,195 @@ mod tests {
             "an error must not carry the path: {}",
             err.message
         );
+    }
+
+    #[test]
+    fn the_public_reader_is_the_bounded_one_at_the_documented_ceiling() {
+        // `read_bounded_to` is tested against a small limit for practicality. This is what ties
+        // that branch to the number the rest of the system is documented as enforcing — without
+        // it, the constant could drift to u64::MAX and every test above would still pass.
+        let dir = tempdir::TempDir::new();
+        let path = dir.path().join("f.bin");
+        std::fs::write(&path, b"x").unwrap();
+
+        assert_eq!(MAX_READ_BYTES, 512 * 1024 * 1024);
+        assert_eq!(read_bounded(&path).unwrap(), b"x");
+        assert!(read_bounded_to(&path, 0).is_err(), "a zero ceiling refuses");
+    }
+
+    #[test]
+    fn the_profile_root_and_the_system_directory_are_not_grantable() {
+        // `sensitive_roots` had no test at all. These are the scopes that are technically a
+        // folder but are not a decision anybody makes in a dialog: the whole user profile, the
+        // container of every profile, the Windows directory, Program Files.
+        let mut refused = 0;
+        for key in ["USERPROFILE", "SystemRoot", "ProgramFiles", "HOME"] {
+            let Some(value) = std::env::var_os(key) else {
+                continue;
+            };
+            let path = PathBuf::from(&value);
+            if !path.is_dir() {
+                continue;
+            }
+
+            let err = resolve_grant_directory(&path)
+                .expect_err(&format!("{key} must not be grantable as a scope"));
+            assert!(
+                err.contains("belongs to the system"),
+                "{key} refused for the wrong reason: {err}"
+            );
+            refused += 1;
+
+            // The container of every profile, which has no variable of its own.
+            if key == "USERPROFILE"
+                && let Some(parent) = path.parent()
+                && parent.is_dir()
+                && parent.parent().is_some()
+            {
+                assert!(
+                    resolve_grant_directory(parent).is_err(),
+                    "the folder holding every profile must not be grantable either"
+                );
+            }
+        }
+
+        assert!(
+            refused > 0,
+            "this platform exposed none of the roots the check is about"
+        );
+    }
+
+    #[test]
+    fn listing_a_folder_nobody_allowed_is_refused_and_written_down() {
+        // `list_dir` is the read-side twin of `save_to` and had no test at all.
+        let dir = tempdir::TempDir::new();
+        let allowed = dir.path().join("allowed");
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&allowed).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::fs::write(elsewhere.join("secret.txt"), b"theirs").unwrap();
+        std::fs::write(allowed.join("ours.txt"), b"ours").unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.read", GrantScope::Directory(allowed.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+
+        // The allowed folder lists, which proves the fixture works and the refusal below is
+        // about the folder rather than about the setup.
+        let listed = broker.list_dir(&node, &allowed).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "ours.txt");
+
+        let err = broker.list_dir(&node, &elsewhere).unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("not been allowed"), "{}", err.message);
+
+        // A folder that is not there is a different refusal, not the same one.
+        let absent = broker.list_dir(&node, &dir.path().join("nope")).unwrap_err();
+        assert_eq!(absent.code, "denied");
+        assert!(absent.message.contains("does not exist"), "{}", absent.message);
+
+        // Both refusals are in the journal, which is the other half of the guarantee.
+        let calls = broker.take_calls(&node);
+        assert_eq!(calls.len(), 3);
+        assert!(calls[0].allowed);
+        assert!(!calls[1].allowed && calls[1].denied_because.is_some());
+        assert!(!calls[2].allowed && calls[2].denied_because.is_some());
+    }
+
+    #[test]
+    fn the_clipboard_and_notifications_need_the_component_to_have_declared_them() {
+        // Neither had any test. Both are capabilities a component can hold, and both are the
+        // kind that a person would not expect a file-resizing workflow to exercise.
+        let dir = tempdir::TempDir::new();
+        let node = NodeId("n".into());
+        let mut broker = Broker::new(dir.path().join("run"), GrantSet::new()).unwrap();
+
+        let err = broker.use_clipboard(&node, "copy").unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("clipboard"), "{}", err.message);
+
+        let err = broker.notify(&node, "done").unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("notification"), "{}", err.message);
+
+        assert!(!broker.has_capability(&node, "system.clipboard"));
+        assert!(!broker.has_capability(&node, "system.notify"));
+
+        // With the grant, both succeed — so the refusals above are about the grant.
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "system.clipboard", GrantScope::Allowed);
+        grants.grant(&node, "system.notify", GrantScope::Allowed);
+        let mut broker = Broker::new(dir.path().join("run2"), grants).unwrap();
+        assert!(broker.use_clipboard(&node, "copy").is_ok());
+        assert!(broker.notify(&node, "done").is_ok());
+    }
+
+    #[test]
+    fn a_node_cannot_write_through_a_handle_it_does_not_own() {
+        // `write_output`'s two refusals had no tests. A handle is a plain number, so "some other
+        // node's scratch output" is one increment away from a node's own.
+        let dir = tempdir::TempDir::new();
+        let mine = NodeId("mine".into());
+        let theirs = NodeId("theirs".into());
+        let mut broker = Broker::new(dir.path().join("run"), GrantSet::new()).unwrap();
+
+        let handle = broker
+            .create_output(&mine, HandleKind::File, "out.txt")
+            .unwrap();
+        assert!(broker.write_output(&mine, handle, b"ok").is_ok());
+
+        let err = broker.write_output(&theirs, handle, b"hijacked").unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("does not own"), "{}", err.message);
+
+        let forged = Handle {
+            id: 4242,
+            kind: HandleKind::File,
+        };
+        let err = broker.write_output(&mine, forged, b"x").unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("does not exist"), "{}", err.message);
+
+        // And the file the first write produced still says what the owner wrote.
+        assert_eq!(
+            std::fs::read(broker.path_of(handle).unwrap()).unwrap(),
+            b"ok"
+        );
+    }
+
+    #[test]
+    fn a_dangling_or_non_file_path_is_not_importable() {
+        // `import_guarded` refuses anything that does not canonicalise to a file. A directory
+        // inside an allowed folder is the readily available case.
+        let dir = tempdir::TempDir::new();
+        let watched = dir.path().join("watched");
+        std::fs::create_dir_all(watched.join("subfolder")).unwrap();
+        std::fs::write(watched.join("real.txt"), b"fine").unwrap();
+
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(&node, "fs.read", GrantScope::Directory(watched.clone()));
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+
+        // Positive control first.
+        assert!(
+            broker
+                .import_guarded(&node, &watched.join("real.txt"), HandleKind::File)
+                .is_ok()
+        );
+
+        let err = broker
+            .import_guarded(&node, &watched.join("subfolder"), HandleKind::File)
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("not one this can open"), "{}", err.message);
+
+        let err = broker
+            .import_guarded(&node, &watched.join("absent.txt"), HandleKind::File)
+            .unwrap_err();
+        assert_eq!(err.code, "denied");
     }
 
     #[test]

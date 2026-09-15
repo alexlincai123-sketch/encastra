@@ -404,13 +404,74 @@ mod tests {
 
     #[test]
     fn refuses_the_shapes_that_would_make_the_permission_check_a_lie() {
-        // Credentials would land in the journal and in the prompt.
-        assert!(url_parts("https://user:pass@evil.example/").is_err());
-        // Nothing to check a permission against.
-        assert!(url_parts("https:///path").is_err());
-        assert!(url_parts("example.com/path").is_err());
-        assert!(url_parts("ftp://example.com").is_err());
-        assert!(url_parts("file:///etc/passwd").is_err());
+        // Each shape is refused for its own reason. Asserting only `is_err()` would let a
+        // regression that broke the scheme allowlist pass, as long as the address happened to
+        // fail some other check on the way past.
+        let credentials = url_parts("https://user:hunter2@evil.example/")
+            .unwrap_err_or_else_message("an address carrying credentials must be refused");
+        assert!(
+            credentials.contains("user name and password"),
+            "{credentials}"
+        );
+        // The refusal must not repeat back what it refused, or the password is now in the
+        // journal that this check exists to keep it out of.
+        assert!(!credentials.contains("hunter2"), "{credentials}");
+
+        for (address, reason) in [
+            ("https:///path", "it has no host"),
+            ("example.com/path", "no https:// or http://"),
+            ("ftp://example.com", "only https and http"),
+            ("file:///etc/passwd", "only https and http"),
+            ("javascript://example.com", "only https and http"),
+        ] {
+            let err = url_parts(address)
+                .unwrap_err_or_else_message(&format!("{address} must be refused"));
+            assert!(
+                err.contains(reason),
+                "{address} refused for the wrong reason: {err}"
+            );
+        }
+    }
+
+    /// `unwrap_err` on a `Result<UrlParts, NodeError>`, returning the message.
+    ///
+    /// `UrlParts` is not `Debug`, so the built-in `unwrap_err` will not compile here.
+    trait UnwrapErrMessage {
+        fn unwrap_err_or_else_message(self, context: &str) -> String;
+    }
+
+    impl UnwrapErrMessage for Result<UrlParts, NodeError> {
+        fn unwrap_err_or_else_message(self, context: &str) -> String {
+            match self {
+                Ok(_) => panic!("{context}"),
+                Err(error) => error.message,
+            }
+        }
+    }
+
+    #[test]
+    fn a_failed_request_never_says_where_it_was_going() {
+        // A URL can carry a token in its query string, and these strings land in the journal,
+        // which is rendered on screen and pasted into bug reports. The error says what kind of
+        // failure it was and nothing about the address.
+        let secret = "https://api.example.com/v1?api_key=SUPER_SECRET_VALUE";
+        let io = ureq::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::ConnectionRefused,
+            format!("failed connecting to {secret}"),
+        ));
+
+        let described = describe(&io);
+        assert!(!described.contains("SUPER_SECRET_VALUE"), "{described}");
+        assert!(!described.contains("api.example.com"), "{described}");
+        assert!(described.contains("connection refused"), "{described}");
+
+        let read = describe_read(&io);
+        assert!(!read.contains("SUPER_SECRET_VALUE"), "{read}");
+        assert!(!read.contains("api.example.com"), "{read}");
+
+        // A size refusal says the size, which is not a secret, and still not the address.
+        let too_big = describe_read(&ureq::Error::BodyExceedsLimit(MAX_RESPONSE_BYTES));
+        assert!(too_big.contains(&MAX_RESPONSE_BYTES.to_string()), "{too_big}");
     }
 
     #[test]

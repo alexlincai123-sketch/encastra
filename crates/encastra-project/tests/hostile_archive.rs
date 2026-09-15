@@ -6,7 +6,7 @@
 
 use std::io::{Cursor, Write};
 
-use encastra_project::{MAX_ENTRY_BYTES, MAX_SNAPSHOTS, Project, ProjectError};
+use encastra_project::{MAX_ENTRY_BYTES, MAX_FILE_BYTES, MAX_SNAPSHOTS, Project, ProjectError};
 use zip::write::SimpleFileOptions;
 
 /// The entries of a project that opens, so a test can change exactly one thing about it.
@@ -104,19 +104,25 @@ fn an_entry_name_that_climbs_out_of_the_archive_reaches_nothing() {
     // Zip-slip, the classic. It cannot apply here because nothing is ever extracted to a path —
     // entries are looked up by fixed name — and this test exists to keep it that way. If
     // somebody later adds extraction, this is the test that should start failing.
-    let bytes = archive(&[
-        ("../../../../evil.json", br#"{"schema":1}"#),
-        ("..\\..\\evil.json", br#"{"schema":1}"#),
+    //
+    // The traversal entries are added to an otherwise *valid* project, deliberately. An earlier
+    // version built an archive containing only the malicious names, so `from_bytes` stopped at
+    // the first missing required entry and never reached any code that could have mishandled
+    // them — it asserted a refusal that had nothing to do with traversal.
+    let bytes = project_with(vec![
+        ("../../../../evil.json".to_owned(), br#"{"schema":1}"#.to_vec()),
+        ("..\\..\\evil.json".to_owned(), br#"{"schema":1}"#.to_vec()),
     ]);
 
-    // No entry called project.json, so it is missing rather than anything more interesting.
-    assert!(matches!(
-        Project::from_bytes(&bytes),
-        Err(ProjectError::MissingEntry(_))
-    ));
+    // It opens: the names are inert. Every lookup this module performs is by a fixed name, so
+    // an entry called something else is never resolved, whatever it is called.
+    let project = Project::from_bytes(&bytes)
+        .expect("traversal entry names are inert, not fatal — the project still opens");
+    assert_eq!(project.manifest.name, "p");
 
-    // And nothing was written anywhere.
+    // And nothing was written anywhere, in this directory or above it.
     assert!(!std::path::Path::new("evil.json").exists());
+    assert!(!std::path::Path::new("../evil.json").exists());
 }
 
 #[test]
@@ -297,6 +303,45 @@ fn a_graph_with_more_nodes_than_the_build_works_on_is_refused() {
         }
         other => panic!("an enormous graph must be refused, got {other:?}"),
     }
+}
+
+#[test]
+fn a_file_too_heavy_to_open_is_refused_before_it_is_read() {
+    // `from_bytes` needs the whole archive in memory to find the central directory, so every
+    // other ceiling in this module applies only after an allocation the size of the file. This
+    // is the one check that can happen first, and it had no test.
+    //
+    // The fixture is a file with a size and no contents: `set_len` moves the end of the file
+    // without writing a byte, which is what makes asserting a 256 MB ceiling cheap.
+    let dir = std::env::temp_dir().join(format!("encastra-toobig-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("huge.encastra");
+
+    let sized = std::fs::File::create(&path)
+        .and_then(|file| file.set_len(MAX_FILE_BYTES + 1))
+        .is_ok();
+    if !sized {
+        let _ = std::fs::remove_dir_all(&dir);
+        eprintln!("skipped: this filesystem would not size a file without writing it");
+        return;
+    }
+
+    match Project::open(&path) {
+        Err(ProjectError::FileTooLarge { size, limit }) => {
+            assert_eq!(limit, MAX_FILE_BYTES);
+            assert_eq!(size, MAX_FILE_BYTES + 1);
+        }
+        other => {
+            let _ = std::fs::remove_dir_all(&dir);
+            panic!("an oversized file must be refused before it is read, got {other:?}");
+        }
+    }
+
+    // And a small file at the same path still opens, so the refusal is about the size.
+    std::fs::write(&path, project_with(vec![])).unwrap();
+    assert!(Project::open(&path).is_ok());
+
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

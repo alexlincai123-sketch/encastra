@@ -539,6 +539,18 @@ fn start_workflow(
             };
             let mut session = session;
 
+            // The work is isolated from the bookkeeping that follows it.
+            //
+            // `panic = "abort"` is deliberately not set (see Cargo.toml), so that a component
+            // which panics is a bug in one node rather than the end of the application. That
+            // intent was only half true here: the panic unwound this thread, which meant every
+            // line *after* this block was skipped — including the one that sets `state.running`
+            // back to `None`. The application stayed up and never ran another workflow, because
+            // it believed one was still running, until it was restarted.
+            //
+            // So: catch it, and let the cleanup below run either way. A panicking node now ends
+            // the run, says so, and leaves the runtime able to start another one.
+            let work = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             if watching {
                 while !session.is_stopped() {
                     let tick = session.tick(&registry, &mut broker, Some(&observer));
@@ -600,6 +612,7 @@ fn start_workflow(
                     );
                 }
             }
+            }));
 
             // Scratch space belongs to the run. Anything worth keeping was copied into a folder
             // the user allowed, by a component that asked.
@@ -613,7 +626,11 @@ fn start_workflow(
                     runs: session.runs_completed(),
                     pending: 0,
                     dropped: session.backlog().1,
-                    message: None,
+                    // A panic is not an ordinary component failure, and saying "finished" would
+                    // be a lie. The panic itself has already been printed by the default hook.
+                    message: work.is_err().then(|| {
+                        "This workflow stopped unexpectedly. You can start it again.".to_owned()
+                    }),
                 },
             );
 
