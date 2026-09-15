@@ -1,0 +1,188 @@
+name: Release
+
+# A release is the one artefact that leaves this repository and runs on somebody else's machine.
+# Everything below exists so that it cannot be cut from a tree that is failing its own checks,
+# and so that shipping unsigned is a decision somebody makes rather than what happens by default.
+#
+# This workflow does not create a GitHub release or push anything anywhere. It builds, verifies,
+# and uploads the artefact for a person to look at. Publishing stays manual on purpose: there is
+# no signing certificate yet, and an automated publish of an unsigned installer is the thing this
+# is supposed to prevent.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      allow_unsigned:
+        description: >-
+          Publish without a code-signing certificate. This is a real decision: an unsigned
+          installer cannot be distinguished from a tampered one by anybody who receives it.
+          The manifest records that it was taken.
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  gates:
+    name: Security gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          components: rustfmt, clippy
+
+      - name: Tauri's Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf
+
+      # The same gates CI runs, re-run here rather than assumed. A release triggered from a tag
+      # can point at a commit whose CI run was cancelled, was never required, or predates a
+      # setting change. "It passed once" is not a property of the thing being shipped.
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: TypeScript tests
+        run: npm run test
+      - name: One version, declared in one place
+        run: python3 scripts/version.py --check
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Rust tests, including the security suite
+        run: cargo test --workspace
+
+      - name: The symlink escape tests must actually run, not skip
+        run: |
+          set -o pipefail
+          cargo test -p encastra-core --lib -- --nocapture --exact \
+            broker::tests::a_symlink_in_an_allowed_folder_cannot_reach_outside_it \
+            broker::tests::a_link_already_in_the_granted_folder_does_not_take_the_write_with_it \
+            2>&1 | tee symlink-tests.log
+          if grep -q 'skipped' symlink-tests.log; then
+            echo "::error::A symlink escape test skipped. Not shipping on that."
+            exit 1
+          fi
+
+      - name: npm advisories
+        run: npm audit --audit-level=high
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build and verify the installer
+    needs: gates
+    runs-on: windows-latest
+    env:
+      # The `secrets` context is not available in a step's `if`, so the question "is there a
+      # certificate at all" is answered once here, as a boolean string, and tested below. The
+      # secret's value never appears — only whether it is empty.
+      HAS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+      - uses: Swatinem/rust-cache@v2
+
+      # Signing, when there is something to sign with.
+      #
+      # Nothing here fabricates a certificate. If the secrets are absent — which is the state
+      # today — this step does nothing, the build comes out unsigned, and the manifest step below
+      # refuses unless the run explicitly asked to publish unsigned. See docs/SIGNING.md.
+      #
+      # The .pfx never touches the repository and never reaches a log: it arrives base64 in a
+      # secret, is written to a temporary file outside the working directory, imported, and the
+      # file is removed. The thumbprint goes into tauri.conf.json at build time, not in git.
+      - name: Import the code-signing certificate
+        id: signing
+        if: env.HAS_CERTIFICATE == 'true'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx -Force
+          # The thumbprint identifies the certificate in the store. It is not a secret, but it is
+          # also not committed: it is written into the config for this build only.
+          $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $config.bundle.windows | Add-Member -Force -NotePropertyName certificateThumbprint -NotePropertyValue $cert.Thumbprint
+          $config | ConvertTo-Json -Depth 32 | Set-Content apps/desktop/src-tauri/tauri.conf.json -Encoding utf8
+          Write-Output "A certificate was imported; this build will be signed."
+
+      - name: Build
+        run: npm run tauri:build
+
+      # The gate. `--require-signature` exits non-zero unless every artefact carries a valid
+      # Authenticode signature, and treats "this platform cannot check" as a refusal rather than
+      # as a pass. Publishing unsigned takes the dispatch input, which is recorded in the
+      # manifest the build produces.
+      - name: Hash the artefacts, and refuse an unsigned release
+        shell: bash
+        run: |
+          if [ "${{ inputs.allow_unsigned }}" = "true" ]; then
+            echo "::warning::Publishing UNSIGNED, as this run explicitly requested. Whoever
+            receives this installer cannot tell it from a tampered one."
+            python scripts/release_manifest.py --allow-unsigned
+          else
+            python scripts/release_manifest.py --require-signature
+          fi
+
+      - name: Restore the config the certificate step edited
+        if: always()
+        shell: bash
+        run: git checkout -- apps/desktop/src-tauri/tauri.conf.json || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: encastra-installer
+          path: |
+            target/release/bundle/nsis/*.exe
+            docs/RELEASE.md
+          if-no-files-found: error
+          retention-days: 30

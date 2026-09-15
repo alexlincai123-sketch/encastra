@@ -380,6 +380,8 @@ const de: Messages = {
         'Das ist kein Ordner. Eine Veröffentlichung ist ein Ordner mit einem Projekt und dem Dokument, das es beschreibt.',
       folderIsALink:
         'Dieser Ordner ist eine Verknüpfung woandershin. Encastra folgt ihr nicht, denn dann wären das Gelesene und das Gewählte nicht dasselbe. Wählen Sie den Ordner selbst.',
+      folderNotChosen:
+        'Dieser Ordner wurde in dieser Sitzung nicht ausgewählt. Wählen Sie ihn über die Ordnerauswahl, damit Encastra genau das liest, worauf Sie gezeigt haben.',
       noDocument:
         'In diesem Ordner gibt es keine publication.json, also sagt nichts darin, was es ist. Das ist ein Ordner voller Dateien, keine Veröffentlichung.',
       documentIsALink:

@@ -31,6 +31,12 @@ export default defineConfig({
     target: 'esnext',
     sourcemap: true,
   },
-  // Tauri's dev server sets these; keeping them out of the bundle avoids leaking build paths.
-  envPrefix: ['VITE_', 'TAURI_'],
+  // Vite's default, deliberately left alone: only `VITE_`-prefixed variables reach the bundle.
+  //
+  // `TAURI_` used to be on this list. Nothing reads a `TAURI_*` variable today, so nothing leaked
+  // — but the Tauri CLI sets variables in this namespace during a release build, signing material
+  // among them, and the widening meant the next person to reach for one out of convenience would
+  // have shipped it in the JavaScript without anything saying so. Build information that the
+  // frontend genuinely needs belongs in a `VITE_`-prefixed variable chosen on purpose.
+  envPrefix: ['VITE_'],
 });

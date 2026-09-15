@@ -288,21 +288,81 @@ mod tests {
         assert!(!error.to_string().contains("panic"));
     }
 
+    /// CRC-32 (IEEE), which is what a PNG chunk carries.
+    ///
+    /// Eight lines rather than a dependency, and needed because a bomb fixture that does not fix
+    /// up its checksum is not a bomb — it is a corrupt file, and a corrupt file is refused by a
+    /// different code path than the one under test.
+    fn crc32(data: &[u8]) -> u32 {
+        let mut crc = 0xFFFF_FFFFu32;
+        for &byte in data {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                crc = if crc & 1 != 0 {
+                    0xEDB8_8320 ^ (crc >> 1)
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        crc ^ 0xFFFF_FFFF
+    }
+
+    /// A structurally valid PNG header claiming `width` × `height`, with almost no pixel data.
+    ///
+    /// The decompression bomb in its honest form: every byte is well formed, the checksum is
+    /// right, and the only hostile thing about it is the number it declares.
+    fn png_claiming(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = png(1, 1);
+        // Signature is 8 bytes; then length(4), type(4) = "IHDR", data(13), crc(4).
+        // Width and height are big-endian u32 at the start of the data.
+        bytes[16..20].copy_from_slice(&width.to_be_bytes());
+        bytes[20..24].copy_from_slice(&height.to_be_bytes());
+        // The CRC covers the chunk type and its data: bytes 12..29.
+        let checksum = crc32(&bytes[12..29]);
+        bytes[29..33].copy_from_slice(&checksum.to_be_bytes());
+        bytes
+    }
+
     #[test]
     fn refuses_a_declared_size_that_would_exhaust_memory() {
-        // A decompression bomb: a tiny file that claims an enormous canvas. The check happens
-        // on the header, so nothing is allocated.
-        let mut header = png(1, 1);
-        // PNG IHDR width/height are big-endian u32 at offset 16 and 20.
-        header[16..20].copy_from_slice(&60_000u32.to_be_bytes());
-        header[20..24].copy_from_slice(&60_000u32.to_be_bytes());
+        // A decompression bomb: a tiny file that claims an enormous canvas. The check happens on
+        // the header, so nothing is allocated.
+        //
+        // The fixture's checksum is recomputed, which matters more than it looks. The earlier
+        // version patched the dimensions and left the CRC stale, then accepted *either*
+        // `TooManyPixels` or `Undecodable` — so it would have passed with the pixel ceiling
+        // removed entirely, as long as the decoder noticed the broken checksum first. It was
+        // asserting that a corrupt file is refused, which nobody doubted.
+        let bomb = png_claiming(60_000, 60_000);
 
-        match probe(&header) {
-            Err(MediaError::TooManyPixels { limit, .. }) => assert_eq!(limit, MAX_PIXELS),
-            // A corrupted CRC may make the header unreadable first, which is also a refusal.
-            Err(MediaError::Undecodable(_)) => {}
-            other => panic!("a 60000x60000 image must not be accepted: {other:?}"),
+        match probe(&bomb) {
+            Err(MediaError::TooManyPixels {
+                width,
+                height,
+                pixels,
+                limit,
+            }) => {
+                assert_eq!((width, height), (60_000, 60_000));
+                assert_eq!(pixels, 3_600_000_000);
+                assert_eq!(limit, MAX_PIXELS);
+            }
+            other => panic!("a 60000x60000 image must be refused for its size: {other:?}"),
         }
+
+        // The control that makes the above mean something: the same construction at a sane size
+        // produces a file this build reads happily, so the refusal is about the number.
+        assert_eq!(probe(&png_claiming(8, 8)).unwrap().width, 8);
+    }
+
+    #[test]
+    fn the_pixel_ceiling_is_a_maximum_rather_than_a_strict_bound() {
+        // 10_000 × 10_000 is exactly MAX_PIXELS; one more row is not.
+        assert_eq!(probe(&png_claiming(10_000, 10_000)).unwrap().height, 10_000);
+        assert!(matches!(
+            probe(&png_claiming(10_000, 10_001)),
+            Err(MediaError::TooManyPixels { .. })
+        ));
     }
 
     #[test]

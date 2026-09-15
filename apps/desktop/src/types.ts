@@ -317,6 +317,7 @@ export interface Inspected {
 export type ImportError =
   | { kind: 'not-a-folder' }
   | { kind: 'folder-is-a-link' }
+  | { kind: 'folder-not-chosen' }
   | { kind: 'no-document' }
   | { kind: 'document-is-a-link' }
   | { kind: 'document-too-large'; size: number; max: number }

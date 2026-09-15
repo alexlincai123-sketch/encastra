@@ -1,0 +1,31 @@
+{
+  "purpose": "One table of addresses, replayed through both implementations of the permission parser. The editor reads an address to build the prompt a person answers (apps/desktop/src/url.ts); the runtime reads the same address to decide whether the request is allowed (crates/encastra-builtins/src/net.rs). Two parsers for one string is a deliberate duplication — the editor cannot call into the runtime — and what makes it safe is that they agree. Nothing was checking that they did. An `authority` of null means the address is refused: there is nothing to ask permission for.",
+  "cases": [
+    { "url": "https://api.example.com/v1/things?x=1", "authority": "api.example.com", "why": "the ordinary case" },
+    { "url": "HTTPS://Example.COM/path", "authority": "example.com", "why": "scheme and host are case-insensitive, and one spelling must not become two grants" },
+    { "url": "https://example.com:443/x", "authority": "example.com", "why": "the scheme's own port is not a different address" },
+    { "url": "http://example.com:80/x", "authority": "example.com", "why": "the same, for http" },
+    { "url": "https://example.com:8443/x", "authority": "example.com:8443", "why": "a port that is not the default is part of what gets reached" },
+    { "url": "https://internal.example:22/", "authority": "internal.example:22", "why": "a grant for a web service must not also admit ssh on the same host" },
+    { "url": "http://localhost:5173", "authority": "localhost:5173", "why": "a development server is an ordinary non-default port" },
+    { "url": "https://example.com./x", "authority": "example.com", "why": "a trailing dot is the same name to DNS" },
+    { "url": "http://[::1]/", "authority": "::1", "why": "an IPv6 literal is a host, not a colon" },
+    { "url": "http://[::1]:8080/", "authority": "::1:8080", "why": "a bracketed literal with a port" },
+    { "url": "https://[2001:db8::1]/x", "authority": "2001:db8::1", "why": "a full IPv6 literal" },
+    { "url": "https://allowed.example/redirect?to=https://evil.example", "authority": "allowed.example", "why": "the host is what precedes the first slash, not anything later in the path" },
+    { "url": "https://allowed.example#https://evil.example", "authority": "allowed.example", "why": "nor anything after a fragment" },
+
+    { "url": "", "authority": null, "why": "nothing to ask about" },
+    { "url": "   ", "authority": null, "why": "still nothing" },
+    { "url": "example.com", "authority": null, "why": "no scheme means this is not an address yet" },
+    { "url": "https://", "authority": null, "why": "a scheme with no host" },
+    { "url": "https:///path", "authority": null, "why": "an empty authority" },
+    { "url": "ftp://example.com", "authority": null, "why": "the runtime makes http requests and nothing else" },
+    { "url": "file:///etc/passwd", "authority": null, "why": "a scheme that would read the disk is not a network permission" },
+    { "url": "javascript:alert(1)", "authority": null, "why": "not a scheme this parses at all" },
+    { "url": "https://user:hunter2@example.com/", "authority": null, "why": "credentials would land in the journal and in the prompt" },
+    { "url": "https://example.com:eighty/", "authority": null, "why": "a port that is not a number is refused rather than ignored" },
+    { "url": "https://example.com:99999/", "authority": null, "why": "a port outside the range" },
+    { "url": "http://[::1/", "authority": null, "why": "an IPv6 literal with no closing bracket" }
+  ]
+}

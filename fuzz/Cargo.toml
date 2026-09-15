@@ -1,0 +1,62 @@
+# libFuzzer targets for the parsers that read input from strangers.
+#
+# Its own workspace on purpose (the bare `[workspace]` below detaches it): `cargo-fuzz` builds
+# with a nightly toolchain and sanitiser flags, and the main workspace is pinned to stable 1.98.1.
+# Keeping them apart means `cargo build` at the repository root never tries to compile this, and
+# `cargo deny`/`cargo clippy` never see libfuzzer-sys in the dependency tree.
+#
+# See fuzz/README.md for how to run these. What runs in CI on stable is the deterministic sweep
+# in crates/encastra-project/tests/fuzz_smoke.rs, which is a different and lesser thing.
+
+[package]
+name = "encastra-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+encastra-core = { path = "../crates/encastra-core" }
+encastra-project = { path = "../crates/encastra-project" }
+encastra-protocol = { path = "../crates/encastra-protocol" }
+encastra-builtins = { path = "../crates/encastra-builtins" }
+
+[profile.release]
+debug = true
+
+# Each target is one entry point that reads untrusted bytes. `test = false` and `doc = false`
+# because these are not tests and have no documentation; `bench = false` because they are not
+# benchmarks either, and cargo would otherwise try to build them as all three.
+
+[[bin]]
+name = "project_from_bytes"
+path = "fuzz_targets/project_from_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "graph_parse"
+path = "fuzz_targets/graph_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "manifest_parse"
+path = "fuzz_targets/manifest_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "permission_authority"
+path = "fuzz_targets/permission_authority.rs"
+test = false
+doc = false
+bench = false

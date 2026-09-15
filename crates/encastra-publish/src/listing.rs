@@ -214,36 +214,11 @@ pub const MAX_LISTING_ID_CHARS: usize = 200;
 /// moment a publication is written to disk. Empty segments are refused here, which is what makes
 /// `..` unrepresentable.
 pub fn is_listing_id(text: &str) -> bool {
-    if text.chars().count() > MAX_LISTING_ID_CHARS {
-        return false;
-    }
-
-    let mut segments = text.split('.');
-    let Some(first) = segments.next() else {
-        return false;
-    };
-
-    let mut opening = first.chars();
-    let Some(head) = opening.next() else {
-        return false;
-    };
-    if !head.is_ascii_lowercase() || !opening.all(is_listing_id_char) {
-        return false;
-    }
-
-    let mut tail = 0_usize;
-    for segment in segments {
-        tail += 1;
-        if segment.is_empty() || !segment.chars().all(is_listing_id_char) {
-            return false;
-        }
-    }
-    // A bare `dev` is a namespace, not a name inside one.
-    tail >= 1
-}
-
-fn is_listing_id_char(c: char) -> bool {
-    c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'
+    // The product has one identifier grammar — a component id and a listing id are the same
+    // shape — and it lives in the protocol crate. A second grammar here would drift from it, and
+    // two sessions once wrote two. This adds only the ceiling.
+    text.chars().count() <= MAX_LISTING_ID_CHARS
+        && encastra_protocol::manifest::validate_identifier(text).is_ok()
 }
 
 /// Whether `candidate` is a newer version than `current`, both semver.

@@ -13,8 +13,35 @@ describe('hostOf', () => {
     expect(hostOf('https://api.example.com/v1/things?x=1')).toBe('api.example.com');
   });
 
-  it('ignores the port, which a grant does not name', () => {
-    expect(hostOf('https://api.example.com:8443/v1')).toBe('api.example.com');
+  it('keeps a port that is not the default, because a grant has to name it', () => {
+    // A grant for "internal.example" that also admitted :22 and :5432 would not be permission to
+    // talk to a web service — it would be permission to reach every service on that machine, and
+    // the prompt would be describing neither. The runtime's parser draws the same line.
+    expect(hostOf('https://api.example.com:8443/v1')).toBe('api.example.com:8443');
+    expect(hostOf('https://internal.example:22/')).toBe('internal.example:22');
+  });
+
+  it('drops the port when it is the default, so one address is one grant', () => {
+    expect(hostOf('https://example.com:443/x')).toBe('example.com');
+    expect(hostOf('http://example.com:80/x')).toBe('example.com');
+  });
+
+  it('reads an IPv6 literal as a host rather than as a colon', () => {
+    // Cutting at the last colon regardless turned "[::1]" into ":", so an IPv6 address could
+    // never be granted and never matched.
+    expect(hostOf('http://[::1]/')).toBe('::1');
+    expect(hostOf('http://[::1]:8080/')).toBe('::1:8080');
+    expect(hostOf('https://[2001:db8::1]/x')).toBe('2001:db8::1');
+    expect(hostOf('http://[::1/')).toBe('');
+  });
+
+  it('offers nothing for a port that is not one', () => {
+    expect(hostOf('https://example.com:eighty/')).toBe('');
+    expect(hostOf('https://example.com:99999/')).toBe('');
+  });
+
+  it('treats a trailing dot as the same host, so both parsers spell it one way', () => {
+    expect(hostOf('https://example.com./x')).toBe('example.com');
   });
 
   it('accepts a scheme in any case, because the runtime does', () => {

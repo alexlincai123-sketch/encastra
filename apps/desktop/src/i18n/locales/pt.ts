@@ -376,6 +376,8 @@ const pt: Messages = {
         'Isso não é uma pasta. Uma publicação é uma pasta com um projeto e o documento que o descreve.',
       folderIsALink:
         'Essa pasta é uma ligação para outro sítio. O Encastra não a segue, porque então o que lesse e o que escolheu não seriam a mesma coisa. Escolha a própria pasta.',
+      folderNotChosen:
+        'Essa pasta não foi escolhida nesta sessão. Selecione-a com o seletor de pastas, para que o que o Encastra lê seja o que você apontou.',
       noDocument:
         'Não há publication.json nessa pasta, por isso nada diz o que é. Isso é uma pasta de ficheiros, não uma publicação.',
       documentIsALink:

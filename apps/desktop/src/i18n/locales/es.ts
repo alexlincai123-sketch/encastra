@@ -378,6 +378,8 @@ const es: Messages = {
         'Eso no es una carpeta. Una publicación es una carpeta con un proyecto y el documento que lo describe.',
       folderIsALink:
         'Esa carpeta es un enlace a otro sitio. Encastra no lo sigue, porque entonces lo que leería y lo que tú elegiste no serían lo mismo. Elige la carpeta en sí.',
+      folderNotChosen:
+        'Esa carpeta no se eligió en esta sesión. Selecciónala con el selector de carpetas, para que lo que Encastra lee sea lo que tú señalaste.',
       noDocument:
         'No hay ningún publication.json en esa carpeta, así que nada dice qué es. Eso es una carpeta con archivos, no una publicación.',
       documentIsALink:

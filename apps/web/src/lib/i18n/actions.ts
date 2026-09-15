@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { isLocale, LOCALE_COOKIE } from './locale';
+import { isPathOnThisSite } from './redirect-path';
 
 /**
  * Sets the locale cookie and sends the visitor back to the page they were on.
@@ -36,5 +37,5 @@ export async function setLocaleAction(formData: FormData): Promise<void> {
   // Falls back to the home page for anything that does not look like a path on this site — a
   // missing field, or a stray absolute URL nobody is meant to be able to submit through this
   // form in the first place.
-  redirect(typeof path === 'string' && path.startsWith('/') ? path : '/');
+  redirect(typeof path === 'string' && isPathOnThisSite(path) ? path : '/');
 }

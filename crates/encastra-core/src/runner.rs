@@ -21,6 +21,19 @@ use crate::registry::ComponentRegistry;
 use crate::validate::Validation;
 use crate::value::{Handle, HandleKind, Value};
 
+/// The longest a single run may take before it is stopped.
+///
+/// Not a per-node timeout — see the module note above for why that has to wait for a host that
+/// can actually interrupt a running component. This is the outer bound, checked between nodes,
+/// and it exists because duration is the one dimension of a run that validation does not already
+/// bound. Cycles are refused, so the step count cannot exceed the node ceiling; but a chain of
+/// `Delay` nodes is a legal graph, and ten thousand nodes each waiting an hour is a thread
+/// occupied for longer than anybody is watching.
+///
+/// An hour is far beyond any run this product is for, and a session with a trigger is unaffected:
+/// the bound is per run, and a watcher starts a new one per file.
+pub const MAX_RUN_DURATION: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
 /// A first-party component, compiled into the host.
 ///
 /// Being in-process buys speed and native crates; it buys **no** extra authority. Everything
@@ -395,6 +408,16 @@ fn execute(
     }
     const NO_EDGES: &[&Edge] = &[];
 
+    // A run is bounded in wall-clock time as well as in steps.
+    //
+    // Nothing in a graph can loop — cycles are refused by validation — so the step count is
+    // already bounded by the node ceiling. Duration is not: a chain of Delay nodes is a
+    // perfectly legitimate shape, and ten thousand nodes each waiting an hour is a graph that
+    // occupies a thread until somebody notices. Past the deadline the run is cancelled exactly
+    // as if Stop had been pressed, so there is one mechanism for "this run ended early" and one
+    // way it appears in the journal.
+    let started_at = std::time::Instant::now();
+
     for node_id in &validation.order {
         let Some(node) = graph.node(node_id) else {
             continue;
@@ -407,6 +430,11 @@ fn execute(
         let record = 'step: {
             let mut record = NodeRecord::new(node.component.to_string());
 
+            let overran = started_at.elapsed() > MAX_RUN_DURATION;
+            if overran {
+                cancel.store(true, Ordering::Relaxed);
+            }
+
             if node.disabled {
                 record.status = NodeStatus::Disabled;
                 if let Some(observer) = observer {
@@ -417,6 +445,17 @@ fn execute(
 
             if cancel.load(Ordering::Relaxed) {
                 record.status = NodeStatus::Cancelled;
+                if overran {
+                    // Cancelled by the clock rather than by a person, which is a different thing
+                    // to read in a journal six hours later.
+                    record.error = Some(NodeError::new(
+                        "run-too-long",
+                        format!(
+                            "This run passed the {} minute limit and was stopped.",
+                            MAX_RUN_DURATION.as_secs() / 60
+                        ),
+                    ));
+                }
                 if let Some(observer) = observer {
                     observer.node_finished(run_id, node_id, &record);
                 }

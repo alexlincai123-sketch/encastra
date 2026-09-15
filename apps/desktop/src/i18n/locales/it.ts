@@ -377,6 +377,8 @@ const it: Messages = {
         'Quella non è una cartella. Una pubblicazione è una cartella con dentro un progetto e il documento che lo descrive.',
       folderIsALink:
         'Quella cartella è un collegamento a un altro posto. Encastra non lo segue, perché altrimenti quello che legge e quello che hai scelto non sarebbero la stessa cosa. Scegli la cartella vera.',
+      folderNotChosen:
+        'Quella cartella non è stata scelta in questa sessione. Selezionala con il selettore di cartelle, così che ciò che Encastra legge sia ciò che hai indicato.',
       noDocument:
         'In quella cartella non c’è nessun publication.json, quindi niente dice che cosa sia. È una cartella di file, non una pubblicazione.',
       documentIsALink:

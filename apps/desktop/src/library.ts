@@ -113,6 +113,7 @@ export function decideRemoval(entry: LibraryEntry, deleteCopy: boolean): Removal
 export const IMPORT_ERROR_KEYS: Record<ImportError['kind'], string> = {
   'not-a-folder': 'import.errors.notAFolder',
   'folder-is-a-link': 'import.errors.folderIsALink',
+  'folder-not-chosen': 'import.errors.folderNotChosen',
   'no-document': 'import.errors.noDocument',
   'document-is-a-link': 'import.errors.documentIsALink',
   'document-too-large': 'import.errors.documentTooLarge',

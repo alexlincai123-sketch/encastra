@@ -74,6 +74,11 @@ pub enum ImportError {
     NotAFolder,
     #[error("that folder is a link to somewhere else")]
     FolderIsALink,
+    /// The folder did not come from the native chooser this session. The crate itself never
+    /// raises this — it has no notion of a chooser — but the desktop application does, and the
+    /// refusal belongs in the same vocabulary as every other one so an interface can name it.
+    #[error("that folder was not chosen in this session; pick it with the folder chooser")]
+    FolderNotChosen,
     #[error("there is no publication.json in that folder, so there is nothing saying what it is")]
     NoDocument,
     #[error("publication.json is a link to another file rather than a file")]

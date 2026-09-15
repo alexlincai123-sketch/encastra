@@ -379,6 +379,8 @@ const fr: Messages = {
         'Ce n’est pas un dossier. Une publication est un dossier contenant un projet et le document qui le décrit.',
       folderIsALink:
         'Ce dossier est un lien vers un autre endroit. Encastra ne le suit pas, sinon ce qu’il lirait et ce que vous avez choisi ne seraient pas la même chose. Choisissez le dossier lui-même.',
+      folderNotChosen:
+        "Ce dossier n'a pas été choisi pendant cette session. Sélectionnez-le avec le sélecteur de dossiers, pour que ce qu'Encastra lit soit bien ce que vous avez désigné.",
       noDocument:
         'Il n’y a pas de publication.json dans ce dossier : rien n’y dit ce que c’est. C’est un dossier de fichiers, pas une publication.',
       documentIsALink:

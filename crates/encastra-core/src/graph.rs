@@ -119,9 +119,46 @@ pub struct Graph {
     pub edges: Vec<Edge>,
 }
 
+/// The most nodes a graph may contain.
+///
+/// A graph is drawn by a person on a canvas, and a workflow with ten thousand steps is not one
+/// anybody drew. The limit is not there for them — it is there because a graph arrives inside a
+/// project file somebody was sent, and every node is work the validator, the editor and the
+/// runner each do. A file declaring a million of them costs all three before anybody sees it.
+pub const MAX_NODES: usize = 10_000;
+
+/// The most edges a graph may contain.
+///
+/// Higher than the node ceiling because a legitimate graph fans out, and low enough that the
+/// repeated passes over edges in validation stay cheap.
+pub const MAX_EDGES: usize = 40_000;
+
 impl Graph {
     pub fn parse(json: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json)
+        let graph: Graph = serde_json::from_str(json)?;
+        graph.within_limits().map_err(serde::de::Error::custom)?;
+        Ok(graph)
+    }
+
+    /// Whether this graph is within the sizes this build will work on.
+    ///
+    /// Public because a graph does not only arrive through [`parse`](Self::parse): the project
+    /// container deserialises one straight out of an archive entry, and a limit that guards only
+    /// one of the two doors guards neither.
+    pub fn within_limits(&self) -> Result<(), String> {
+        if self.nodes.len() > MAX_NODES {
+            return Err(format!(
+                "this graph has {} nodes, and this build works on at most {MAX_NODES}",
+                self.nodes.len()
+            ));
+        }
+        if self.edges.len() > MAX_EDGES {
+            return Err(format!(
+                "this graph has {} connections, and this build works on at most {MAX_EDGES}",
+                self.edges.len()
+            ));
+        }
+        Ok(())
     }
 
     /// Stable JSON: sorted keys, so saving an unchanged graph produces identical bytes and a
@@ -228,5 +265,72 @@ mod tests {
         let g = Graph::parse(json).unwrap();
         let d = g.descendants(&NodeId("a".into()));
         assert_eq!(d.len(), 2);
+    }
+
+    fn an_edge() -> Edge {
+        Edge {
+            from: PortRef {
+                node: NodeId("a".into()),
+                port: "out".into(),
+            },
+            to: PortRef {
+                node: NodeId("b".into()),
+                port: "in".into(),
+            },
+        }
+    }
+
+    fn a_node() -> Node {
+        Node {
+            component: crate::ComponentRef::parse("a.b@1.0.0").unwrap(),
+            label: None,
+            config: BTreeMap::new(),
+            position: Position { x: 0.0, y: 0.0 },
+            disabled: false,
+        }
+    }
+
+    #[test]
+    fn a_graph_is_bounded_in_both_nodes_and_edges() {
+        // Both ceilings, at the boundary. `MAX_NODES` is exercised end-to-end through the
+        // project container; `MAX_EDGES` had no test at all, and a limit nothing checks is a
+        // comment. Asserted here on `within_limits` because that is the one gate both doors
+        // into a graph — `parse` and the archive reader — are required to call.
+        let mut graph = Graph::default();
+
+        for i in 0..MAX_NODES {
+            graph.nodes.insert(NodeId(format!("n{i}")), a_node());
+        }
+        assert!(
+            graph.within_limits().is_ok(),
+            "exactly the ceiling is allowed; it is a maximum, not a strict bound"
+        );
+
+        graph.nodes.insert(NodeId("one-too-many".into()), a_node());
+        let refused = graph.within_limits().unwrap_err();
+        assert!(refused.contains("nodes"), "{refused}");
+
+        let mut graph = Graph {
+            nodes: BTreeMap::new(),
+            edges: vec![an_edge(); MAX_EDGES],
+        };
+        assert!(graph.within_limits().is_ok());
+
+        graph.edges.push(an_edge());
+        let refused = graph.within_limits().unwrap_err();
+        assert!(refused.contains("connections"), "{refused}");
+    }
+
+    #[test]
+    fn parsing_applies_the_same_ceilings() {
+        // `within_limits` being right is no use if the door does not call it.
+        let graph = Graph {
+            nodes: BTreeMap::new(),
+            edges: vec![an_edge(); MAX_EDGES + 1],
+        };
+
+        let error = Graph::parse(&graph.to_json())
+            .expect_err("a graph past the edge ceiling must not parse");
+        assert!(error.to_string().contains("connections"), "{error}");
     }
 }

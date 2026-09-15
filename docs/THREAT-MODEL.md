@@ -65,6 +65,7 @@ unverified.
  (T5) browser                ──►  website / API           DESIGNED, NOT BUILT
  (T6) admin operator         ──►  admin plane             DESIGNED, NOT BUILT
  (T7) host runtime           ──►  OS (files, network, clipboard, notifications)      BUILT
+ (T8) editor (webview)       ──►  privileged runtime (Tauri IPC)                     BUILT
 ```
 
 Everything below is organised by boundary. Each threat gets: vector → control → residual risk.
@@ -273,6 +274,41 @@ keystore integration, and nothing substitutes a reference at the point of use. S
 
 ---
 
+## T8 — Editor (webview) → privileged runtime
+
+This boundary was missing from earlier revisions of this document, and that omission is where the
+2026-09-15 offensive audit found most of what it found. T7 asks what the runtime may do to the
+operating system. T8 asks a different question: **who decided it should.**
+
+The editor is a webview. It renders strings that come out of a `.encastra` file — node
+configuration, labels, component names — and a `.encastra` file is written by whoever sent it. It
+is also the thing that tells the runtime what a person agreed to. Treating it as part of the
+application rather than as a surface is defensible right up to the moment a project file supplies
+the text in a permission prompt.
+
+No XSS sink was found in the editor: every project-controlled string reaches React as a text
+child, never as markup, and the CSP has no `unsafe-eval`. The threats below do not need one.
+
+| Threat | Vector | Control | Residual risk |
+|---|---|---|---|
+| **Spoofing a decision** — a grant for a folder nobody chose | A hostile project puts `C:\` in a node's `config.folder`. The prompt displays it accurately. The person clicks Allow. | The runtime opens the folder chooser itself (`choose_folder`) and records what the OS returned. A folder grant is admitted only for a path in that record, which the editor cannot add to. | A person can still choose an unwise folder deliberately. Informed consent, not prevented consent. |
+| **Spoofing what the prompt says** | Unicode bidirectional overrides and zero-width characters in a project-supplied path reorder or hide what is displayed, so the string read is not the string granted. | `safe-text.ts` strips bidi controls, zero-width characters and C0/C1 controls once, at the point the value is computed, so the string on the button and the string in the grant are the same string. | The prompt is still drawn by the webview. Only its *content* is constrained, not its rendering. |
+| **Elevation via an undeclared capability** | A grant naming a capability the component's manifest never declares. | `GrantSet::grant_declared` refuses it. The dialog is built from the manifest, so a grant for something not in the manifest did not come from a question anybody was asked. | None known. Defence in depth: there is no UI path that produces one today. |
+| **Elevation via an over-wide scope** | A grant naming a drive root, the system directory, the profile root, or the folder that decides what runs at login. | `resolve_grant_directory` canonicalises and refuses those, the startup folder as a whole tree. | It is a list, not a rule. `C:\Windows\System32` is not on it (the app runs unelevated), nor is every unwise destination. |
+| **Elevation via port** | A grant given for `internal.example`'s web API also reaching `:22` or `:5432`. | The port is part of the permission identity in **both** parsers, and a shared conformance table asserts they agree. | None known. |
+| **Arbitrary write via a save path** | `save_project` writing bytes to any path the renderer names. | The destination must be a `.encastra` file. | Still any `.encastra` path the user's account can write. `open_project` and `restore_version` still take an arbitrary path to *read*. |
+| **Denial of service** | A component panics; the workflow thread unwinds past the bookkeeping that says a run has finished. | The work is wrapped in `catch_unwind`; cleanup runs either way and the status bar says the run stopped. | A panicking node still ends its run. |
+
+### What this boundary still rests on
+
+**The prompt is rendered by the webview.** The runtime now refuses grants that are forged,
+undeclared, over-wide, or for a folder nobody picked — but the sentence a person reads before
+clicking Allow is still produced in the renderer. Closing that means the consent dialog being
+drawn by the privileged side, which is a design change and not a patch. It is the largest open
+item on this boundary.
+
+---
+
 ## 2. Secrets
 
 **What is true today:** a secret value cannot reach a `.encastra` file. `Variable` records that
@@ -387,11 +423,29 @@ An earlier revision of this table listed all four as things that run. They do no
 3. **No timeout, fuel ceiling or memory ceiling on a node.** Cancellation is a cooperative flag
    checked between nodes and by components that choose to check it. A component that loops
    without checking is not stopped, and the run cannot be forced to end.
-4. **The broker has no sensitive-location deny-list.** It checks containment within a granted
-   root; it does not judge whether that root is somewhere it should refuse. A user who grants a
-   system directory gets a grant over a system directory. The allow-list is the stronger
-   control of the two, but it is not a substitute for the front ends asking for narrow scopes —
-   the broker can only be as careful as the scope it is handed.
+   *Since 2026-09-15:* a **run** has a wall-clock ceiling (`MAX_RUN_DURATION`, one hour), checked
+   between nodes, after which it is cancelled as if Stop had been pressed. That bounds a chain of
+   `Delay` nodes. It does not bound one node that never returns, which still needs the
+   WebAssembly host and epoch interruption.
+4. **The broker's deny-list of locations is a list, not a rule.**
+   *This item used to read "the broker has no sensitive-location deny-list", which is no longer
+   true.* `resolve_grant_directory` now refuses a drive root, the system and program directories,
+   the profile root and its container, and the startup folder as a whole tree — and, at the T8
+   boundary, refuses any folder the person did not choose in the native chooser. What remains is
+   that a list of known-bad destinations can never be complete: `C:\Windows\System32` is not on
+   it (the application runs unelevated and cannot write there anyway), and neither is every other
+   unwise choice. The allow-list containment check is still the stronger of the two controls.
+4b. **Hard links cannot be detected.** On Windows, somebody who can already write into a granted
+   folder can hard-link a file from elsewhere on the same volume into it. Canonicalisation cannot
+   see this: a hard link has no target path, it *is* the file. The symlink and junction cases are
+   closed; this one has no known mitigation short of checking file identity against the granted
+   subtree, which NTFS does not make cheap.
+4c. **Aggregate memory across a run is bounded by the graph's width, not its length.** Each
+   file is capped at 512 MB and each image at 100 megapixels, and a value is released the
+   moment its last consumer has finished — so a chain of twenty thousand steps holds one
+   document, not twenty thousand (measured: 3.9 GB → 67 MB). What is *not* bounded is width:
+   twenty producers feeding one consumer are twenty values held at once, each under its own
+   cap. That is the shape a person drew, and there is no number that would be right for it.
 5. **Secrets are declared and never resolved.** No keystore integration exists. The invariant
    that a secret value cannot reach the project file is real and tested; the mechanism that
    would make a secret usable is not built.
@@ -409,4 +463,18 @@ An earlier revision of this table listed all four as things that run. They do no
     make this informed; it cannot make it impossible.
 11. **This model has not been externally audited.** Encastra has been reviewed by the people who
     wrote it, which is not the same thing. An external audit is a prerequisite for a production
-    marketplace launch, not for this beta.
+    marketplace launch, not for this beta. An offensive audit was carried out on 2026-09-15
+    (`docs/audits/2026-09-15-offensive-audit.md`) and found, among other things, a hostile-input
+    test that had been green since the day it was written without ever reaching the code it
+    claimed to test. That is the kind of thing a second reader finds and a first one does not,
+    and it is the argument for the external audit rather than against it.
+12. **The consent prompt is rendered by the webview.** See T8. The runtime independently refuses
+    grants that are forged, undeclared, over-wide, or for a folder nobody chose — but the
+    sentence a person reads before agreeing is produced in the renderer. This is the largest open
+    design item in the built part of the system.
+13. **Every command that takes a project path takes the same thing.** `open_project`,
+    `restore_version`, `compare_versions`, `review_publication` and `prepare_publication` now go
+    through the one `project_path` guard `save_project` had: the name must end in `.encastra`.
+    That is a shape check, not a trust boundary — the path still comes from a dialog the person
+    drove and `Project::open` is where a file that is not a project is found out — but the
+    application no longer reads a shape it would refuse to write.

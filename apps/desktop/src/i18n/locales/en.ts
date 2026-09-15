@@ -392,6 +392,8 @@ const en: Messages = {
         'That is not a folder. A publication is a folder holding a project and the document that describes it.',
       folderIsALink:
         'That folder is a link to somewhere else. Encastra will not follow it, because then what it read and what you chose would not be the same thing. Pick the folder itself.',
+      folderNotChosen:
+        'That folder was not picked in this session. Choose it with the folder chooser, so that what Encastra reads is what you pointed at.',
       noDocument:
         'There is no publication.json in that folder, so nothing in it says what it is. That is a folder of files, not a publication.',
       documentIsALink:

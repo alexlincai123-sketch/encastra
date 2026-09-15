@@ -130,9 +130,21 @@ class TauriIpc implements Ipc {
     return typeof chosen === 'string' ? chosen : null;
   }
 
+  /**
+   * Choosing a folder goes through the runtime, not through the dialog plugin.
+   *
+   * Every other chooser here opens in this process and hands the path back as a string. For a
+   * folder that is not good enough: the path becomes a permission, and a string produced on this
+   * side is indistinguishable from one a `.encastra` file supplied. A project written by somebody
+   * else could put `C:\` in a node's configuration, the prompt would display it accurately, and
+   * clicking Allow would grant the drive.
+   *
+   * `choose_folder` opens the chooser on the privileged side, so the runtime learns the path from
+   * the operating system rather than from here, and refuses a folder grant it has no record of.
+   * The editor cannot add to that record, which is the point.
+   */
   async pickFolder(): Promise<string | null> {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const chosen = await open({ multiple: false, directory: true });
+    const chosen = await this.invoke<string | null>('choose_folder');
     return typeof chosen === 'string' ? chosen : null;
   }
 

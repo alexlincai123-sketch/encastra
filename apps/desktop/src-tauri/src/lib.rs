@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use encastra_core::broker::{Broker, GrantScope, GrantSet};
+use encastra_core::broker::{Broker, GrantScope, GrantSet, resolve_grant_directory};
 use encastra_core::graph::{Graph, NodeId, PortRef};
 use encastra_core::journal::NodeRecord;
 use encastra_core::journal::RunJournal;
@@ -39,6 +39,20 @@ struct Runtime {
     registry: InMemoryRegistry,
     components: CoreComponentSet,
     triggers: TriggerSet,
+    /// Folders the person actually chose in a native chooser, this session.
+    ///
+    /// The one piece of state that makes a folder grant mean anything. A grant arrives from the
+    /// webview carrying a path, and until this existed the runtime had no way to tell a path a
+    /// person picked from a path a project file supplied — and a project file is written by
+    /// whoever sent it. The prompt would say the truth about a folder nobody chose.
+    ///
+    /// Populated only by [`choose_folder`], which opens the chooser here rather than in the
+    /// editor, so the path is known to the privileged side before it is ever a grant.
+    ///
+    /// Canonical paths, so what is compared later is what was compared here. Per session, not
+    /// persisted: a remembered choice that survived a restart would be a grant nobody made
+    /// today, sitting in a file the editor could read.
+    chosen_folders: Mutex<BTreeSet<PathBuf>>,
     /// The workflow currently running, if any. One at a time: two workflows writing into the
     /// same folders at once is a surprise nobody asked for, and the editor shows one graph.
     running: Mutex<Option<Running>>,
@@ -96,6 +110,60 @@ enum RunResult {
     Ran { journal: RunJournal },
 }
 
+/// Opens the native folder chooser, and remembers what came back.
+///
+/// The chooser used to be opened by the editor, through the dialog plugin, and the path went
+/// straight into the node's configuration. That made the whole folder-permission story rest on
+/// the editor being honest about where a string came from — and the string it hands back is
+/// indistinguishable from one a `.encastra` file supplied. A project written by somebody else
+/// could put `C:\` in a node's config, the prompt would display it accurately, and a person
+/// clicking Allow would grant the drive.
+///
+/// Opening it here fixes the direction of trust: the privileged side learns the path from the
+/// operating system, not from the renderer, and nothing else can add to that record.
+///
+/// The scope is checked at the moment of choosing rather than at the moment of granting, so a
+/// person picking something absurd is told immediately instead of finding out when a run is
+/// refused.
+///
+/// Async so it runs off the main thread; the chooser is modal and blocking it would hang the
+/// window it is modal to.
+#[tauri::command]
+async fn choose_folder(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Runtime>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let handle = app.clone();
+    let picked =
+        tauri::async_runtime::spawn_blocking(move || handle.dialog().file().blocking_pick_folder())
+            .await
+            .map_err(|_| "The folder chooser did not return.".to_owned())?;
+
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+
+    let path = picked
+        .into_path()
+        .map_err(|_| "That is not a folder on this machine.".to_owned())?;
+
+    let resolved = resolve_grant_directory(&path)
+        .map_err(|why| format!("That folder cannot be used: {why}."))?;
+
+    state
+        .chosen_folders
+        .lock()
+        .map_err(|_| "The runtime is busy.".to_owned())?
+        .insert(resolved.clone());
+
+    // The resolved path is what is returned, so the string the editor shows and later sends back
+    // as a grant is the same string this side recorded. Returning what the chooser gave and
+    // recording something else would put the comparison back where it started.
+    Ok(Some(resolved.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 fn list_components(state: tauri::State<'_, Runtime>) -> Vec<ComponentManifest> {
     state.registry.list().into_iter().cloned().collect()
@@ -129,41 +197,20 @@ fn run_graph(
     inputs: Vec<InputSpec>,
     grants: Vec<GrantSpec>,
 ) -> Result<RunResult, String> {
-    let mut grant_set = GrantSet::new();
-
-    // Input-handle scopes come from the manifest and need no dialog: they grant nothing the
-    // user has not already said by drawing an edge.
-    for (id, node) in &graph.nodes {
-        if let Some(manifest) = state.registry.get(&node.component) {
-            grant_set.allow_declared_input_handles(id, manifest);
-        }
-    }
-
-    // Everything else is here because a person answered a question.
-    for grant in &grants {
-        let node = NodeId(grant.node.clone());
-        let scope = match (&grant.folder, &grant.hosts) {
-            (Some(folder), _) => GrantScope::Directory(PathBuf::from(folder)),
-            (None, Some(hosts)) => GrantScope::HttpHosts(hosts.clone()),
-            (None, None) => GrantScope::Allowed,
-        };
-        grant_set.grant(&node, &grant.kind, scope);
+    let (allowed, refused) = grant_set(&graph, &state.registry, &grants, &chosen_folders(&state)?);
+    // Said before the run rather than discovered during it. A permission the person answered yes
+    // to and that did not take effect is the one thing they must not find out about by reading a
+    // journal afterwards.
+    if !refused.is_empty() {
+        return Err(refused.join("\n"));
     }
 
     let run_id = format!("run-{}", encastra_core::journal::now_ms());
     let run_dir = std::env::temp_dir().join("encastra").join(&run_id);
-    let mut broker = Broker::new(run_dir.clone(), grant_set)
+    let mut broker = Broker::new(run_dir.clone(), allowed)
         .map_err(|e| format!("Could not prepare a working folder: {e}"))?;
 
-    let mut seed: BTreeMap<PortRef, Value> = BTreeMap::new();
-    for input in &inputs {
-        let path = PathBuf::from(&input.path);
-        let absolute = std::fs::canonicalize(&path)
-            .map_err(|e| format!("Could not open {}: {}", path.display(), e.kind()))?;
-        let kind = kind_for(&absolute);
-        let handle = broker.import_file(absolute, kind);
-        seed.insert(input.port_ref(), Value::Handle(handle));
-    }
+    let seed = seed_for(&mut broker, &inputs)?;
 
     let result = match run_seeded(
         &graph,
@@ -475,23 +522,98 @@ fn announce(app: &tauri::AppHandle, status: Status) {
 
 /// Assembles the grants for a run: declared input-handle scopes, plus whatever the user said
 /// yes to. A manifest asking for something never grants it.
-fn grant_set(graph: &Graph, registry: &InMemoryRegistry, grants: &[GrantSpec]) -> GrantSet {
+///
+/// The one place grants are built. There used to be a second copy of this inside `run_graph`,
+/// which is the way two security checks become one security check and one historical artefact.
+///
+/// Every grant arriving here came over IPC from the webview, and is treated accordingly:
+///
+/// * a grant for a node that is not in the graph is nothing;
+/// * a grant for a capability the component's manifest never declared is nothing, because the
+///   dialog that supposedly produced it is built from that manifest — see
+///   [`GrantSet::grant_declared`];
+/// * a folder is resolved and sanity-checked before it becomes a scope, so "the user picked a
+///   folder" cannot arrive as "the user picked the C drive".
+///
+/// * a folder is refused unless the person chose it in the native chooser this session, which
+///   is what [`choose_folder`] records — a path the editor merely *says* somebody picked is a
+///   path a project file could have supplied.
+///
+/// A refused grant is dropped rather than failing the run, and the reason is returned alongside
+/// so the caller can say something useful. The component then asks the broker for the capability,
+/// is denied, and the denial appears in the journal against the node that wanted it — which is
+/// where somebody debugging would look, and is a record the editor cannot edit.
+fn grant_set(
+    graph: &Graph,
+    registry: &InMemoryRegistry,
+    grants: &[GrantSpec],
+    chosen_folders: &BTreeSet<PathBuf>,
+) -> (GrantSet, Vec<String>) {
     let mut set = GrantSet::new();
+    let mut refused: Vec<String> = Vec::new();
+
     for (id, node) in &graph.nodes {
         if let Some(manifest) = registry.get(&node.component) {
             set.allow_declared_input_handles(id, manifest);
         }
     }
+
     for grant in grants {
         let node = NodeId(grant.node.clone());
+
+        // The component this grant is about, by way of the graph. No node, no manifest, no
+        // grant: there is nothing for it to be a decision about.
+        let Some(manifest) = graph
+            .nodes
+            .get(&node)
+            .and_then(|n| registry.get(&n.component))
+        else {
+            continue;
+        };
+
         let scope = match (&grant.folder, &grant.hosts) {
-            (Some(folder), _) => GrantScope::Directory(PathBuf::from(folder)),
+            (Some(folder), _) => {
+                let resolved = match resolve_grant_directory(Path::new(folder)) {
+                    Ok(resolved) => resolved,
+                    Err(why) => {
+                        refused.push(format!(
+                            "{}: that folder cannot be used — {why}.",
+                            grant.node
+                        ));
+                        continue;
+                    }
+                };
+                if !chosen_folders.contains(&resolved) {
+                    refused.push(format!(
+                        "{}: choose that folder with the Choose button before allowing it.",
+                        grant.node
+                    ));
+                    continue;
+                }
+                GrantScope::Directory(resolved)
+            }
             (None, Some(hosts)) => GrantScope::HttpHosts(hosts.clone()),
             (None, None) => GrantScope::Allowed,
         };
-        set.grant(&node, &grant.kind, scope);
+
+        if !set.grant_declared(&node, manifest, &grant.kind, scope) {
+            refused.push(format!(
+                "{}: this component does not ask for {}.",
+                grant.node, grant.kind
+            ));
+        }
     }
-    set
+
+    (set, refused)
+}
+
+/// The folders chosen this session, as the grant builder needs them.
+fn chosen_folders(state: &tauri::State<'_, Runtime>) -> Result<BTreeSet<PathBuf>, String> {
+    state
+        .chosen_folders
+        .lock()
+        .map(|set| set.clone())
+        .map_err(|_| "The runtime is busy.".to_owned())
 }
 
 fn seed_for(broker: &mut Broker, inputs: &[InputSpec]) -> Result<BTreeMap<PortRef, Value>, String> {
@@ -531,9 +653,14 @@ fn start_workflow(
     let components = state.components.clone();
     let triggers = state.triggers.clone();
 
+    let (allowed, refused) = grant_set(&graph, &registry, &grants, &chosen_folders(&state)?);
+    if !refused.is_empty() {
+        return Err(refused.join("\n"));
+    }
+
     let run_id = format!("session-{}", encastra_core::journal::now_ms());
     let run_dir = std::env::temp_dir().join("encastra").join(&run_id);
-    let mut broker = Broker::new(run_dir.clone(), grant_set(&graph, &registry, &grants))
+    let mut broker = Broker::new(run_dir.clone(), allowed)
         .map_err(|e| format!("Could not prepare a working folder: {e}"))?;
 
     let seed = seed_for(&mut broker, &inputs)?;
@@ -571,67 +698,80 @@ fn start_workflow(
             };
             let mut session = session;
 
-            if watching {
-                while !session.is_stopped() {
-                    let tick = session.tick(&registry, &mut broker, Some(&observer));
-                    let (pending, dropped) = session.backlog();
+            // The work is isolated from the bookkeeping that follows it.
+            //
+            // `panic = "abort"` is deliberately not set (see Cargo.toml), so that a component
+            // which panics is a bug in one node rather than the end of the application. That
+            // intent was only half true here: the panic unwound this thread, which meant every
+            // line *after* this block was skipped — including the one that sets `state.running`
+            // back to `None`. The application stayed up and never ran another workflow, because
+            // it believed one was still running, until it was restarted.
+            //
+            // So: catch it, and let the cleanup below run either way. A panicking node now ends
+            // the run, says so, and leaves the runtime able to start another one.
+            let work = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if watching {
+                    while !session.is_stopped() {
+                        let tick = session.tick(&registry, &mut broker, Some(&observer));
+                        let (pending, dropped) = session.backlog();
 
-                    let message = tick
-                        .trigger_errors
-                        .first()
-                        .map(|(node, error)| format!("{node}: {error}"))
-                        .or_else(|| {
-                            (tick.dropped > 0).then(|| {
-                                format!("{} event(s) dropped — too many at once.", tick.dropped)
-                            })
-                        });
+                        let message = tick
+                            .trigger_errors
+                            .first()
+                            .map(|(node, error)| format!("{node}: {error}"))
+                            .or_else(|| {
+                                (tick.dropped > 0).then(|| {
+                                    format!("{} event(s) dropped — too many at once.", tick.dropped)
+                                })
+                            });
 
-                    announce(
-                        &thread_app,
-                        Status {
-                            running: true,
-                            watching: true,
-                            runs: session.runs_completed(),
-                            pending,
-                            dropped,
-                            message,
-                        },
-                    );
+                        announce(
+                            &thread_app,
+                            Status {
+                                running: true,
+                                watching: true,
+                                runs: session.runs_completed(),
+                                pending,
+                                dropped,
+                                message,
+                            },
+                        );
 
-                    // Sleeping for the whole interval would make Stop feel slow; a short cap
-                    // keeps it immediate without polling the folder any harder.
-                    let wait = session.quiet_for().min(Duration::from_millis(200));
-                    if !wait.is_zero() {
-                        std::thread::sleep(wait);
+                        // Sleeping for the whole interval would make Stop feel slow; a short cap
+                        // keeps it immediate without polling the folder any harder.
+                        let wait = session.quiet_for().min(Duration::from_millis(200));
+                        if !wait.is_zero() {
+                            std::thread::sleep(wait);
+                        }
+                    }
+                } else {
+                    let request = RunRequest {
+                        graph: &graph,
+                        registry: &registry,
+                        components: &components,
+                        cancel: &stop,
+                        run_id: &run_id,
+                        seed,
+                        observer: Some(&observer),
+                    };
+                    if let Err(validation) = execute_request(request, &mut broker) {
+                        announce(
+                            &thread_app,
+                            Status {
+                                running: false,
+                                watching: false,
+                                runs: 0,
+                                pending: 0,
+                                dropped: 0,
+                                message: Some(format!(
+                                    "Nothing ran: {} problem(s) to fix first.",
+                                    validation.errors().count()
+                                )),
+                            },
+                        );
                     }
                 }
-            } else {
-                let request = RunRequest {
-                    graph: &graph,
-                    registry: &registry,
-                    components: &components,
-                    cancel: &stop,
-                    run_id: &run_id,
-                    seed,
-                    observer: Some(&observer),
-                };
-                if let Err(validation) = execute_request(request, &mut broker) {
-                    announce(
-                        &thread_app,
-                        Status {
-                            running: false,
-                            watching: false,
-                            runs: 0,
-                            pending: 0,
-                            dropped: 0,
-                            message: Some(format!(
-                                "Nothing ran: {} problem(s) to fix first.",
-                                validation.errors().count()
-                            )),
-                        },
-                    );
-                }
-            }
+            }));
 
             // Scratch space belongs to the run. Anything worth keeping was copied into a folder
             // the user allowed, by a component that asked.
@@ -645,7 +785,11 @@ fn start_workflow(
                     runs: session.runs_completed(),
                     pending: 0,
                     dropped: session.backlog().1,
-                    message: None,
+                    // A panic is not an ordinary component failure, and saying "finished" would
+                    // be a lie. The panic itself has already been printed by the default hook.
+                    message: work.is_err().then(|| {
+                        "This workflow stopped unexpectedly. You can start it again.".to_owned()
+                    }),
                 },
             );
 
@@ -783,13 +927,33 @@ fn prepare_publication(
     )
     .map_err(|e| e.to_string())?;
 
+    // The destination is resolved and has to be a folder the person chose in the native chooser,
+    // for the same reason a folder grant does: `into` arrives as a string from the webview, and a
+    // string from the webview is not evidence that anybody picked anything. The Publish panel
+    // already opens the chooser, so this costs a legitimate flow nothing.
+    let destination = resolve_grant_directory(Path::new(&into))
+        .map_err(|why| format!("That folder cannot be used: {why}."))?;
+    if !chosen_folders(&state)?.contains(&destination) {
+        return Err(
+            "Choose the folder to publish into with the Choose button before preparing.".to_owned(),
+        );
+    }
+
     // One folder per version, named after what is in it, so a second version does not land on
     // top of the first.
-    let folder = PathBuf::from(&into).join(format!(
+    //
+    // Built from the resolved destination, and from a listing id that `PublicationBundle::prepare`
+    // has already checked against the identifier grammar — so it holds no separator and no `..`.
+    // The assertion below is the second half of that: a name is only safe as a path component if
+    // the result actually stays under the folder it was joined to.
+    let folder = destination.join(format!(
         "{id}-{version}",
         id = bundle.draft.listing_id,
         version = bundle.draft.version
     ));
+    if !folder.starts_with(&destination) {
+        return Err("That publication cannot be written where it was asked to go.".to_owned());
+    }
     let document = folder.join("publication.json");
     if document.exists() {
         return Err(format!(
@@ -966,16 +1130,30 @@ fn library_id(text: &str) -> String {
 /// it is a link to somewhere else, and whether it holds what a publication holds are the
 /// crate's questions to answer, and it refuses each of them by name rather than by a message
 /// this file would have to keep in step.
+/// The source folder of a publication has to be one the person picked in the native chooser
+/// this session — the same rule a folder grant follows, for the same reason: `folder` arrives
+/// from the webview as a string, and a string is not a decision. The crate then refuses links,
+/// non-folders and everything else about the folder's contents on its own.
+fn chosen_publication_folder(
+    state: &tauri::State<'_, Runtime>,
+    folder: &str,
+) -> Result<PathBuf, ImportError> {
+    let resolved =
+        resolve_grant_directory(Path::new(folder)).map_err(|_| ImportError::NotAFolder)?;
+    let chosen = chosen_folders(state).map_err(|reason| ImportError::Io { reason })?;
+    if !chosen.contains(&resolved) {
+        return Err(ImportError::FolderNotChosen);
+    }
+    Ok(resolved)
+}
+
 #[tauri::command]
 fn inspect_publication(
     state: tauri::State<'_, Runtime>,
     folder: String,
 ) -> Result<Inspected, ImportError> {
-    encastra_publish::import::inspect(
-        Path::new(&folder),
-        &state.registry,
-        encastra_core::RUNTIME_VERSION,
-    )
+    let folder = chosen_publication_folder(&state, &folder)?;
+    encastra_publish::import::inspect(&folder, &state.registry, encastra_core::RUNTIME_VERSION)
 }
 
 /// Takes a publication in, and does nothing else with it.
@@ -988,8 +1166,9 @@ fn import_publication(
     state: tauri::State<'_, Runtime>,
     folder: String,
 ) -> Result<Entry, ImportError> {
+    let folder = chosen_publication_folder(&state, &folder)?;
     let imported = encastra_publish::import::import(
-        Path::new(&folder),
+        &folder,
         &state.registry,
         encastra_core::RUNTIME_VERSION,
         &state.library.root,
@@ -1107,11 +1286,13 @@ pub fn run() {
                 components: installed.components,
                 triggers: installed.triggers,
                 running: Mutex::new(None),
+                chosen_folders: Mutex::new(BTreeSet::new()),
                 library: LibraryHandle::open(library_root),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            choose_folder,
             list_components,
             type_graph,
             validate_graph,
@@ -1192,5 +1373,170 @@ mod tests {
         );
         assert_eq!(library_id(path).len(), 16);
         assert_ne!(library_id(path), library_id(&format!("{path}.encastra")));
+    }
+
+    /// A component that reads and writes files, so a grant for either is something it declares.
+    fn manifest() -> ComponentManifest {
+        ComponentManifest::parse(
+            &serde_json::json!({
+                "schema": 1, "id": "test.saver", "version": "1.0.0", "name": "Saver",
+                "runtime": ">=0.1.0", "kind": "core",
+                "ports": {
+                    "inputs": { "in": { "type": "file" } },
+                    "outputs": { "out": { "type": "file" } }
+                },
+                "capabilities": [
+                    { "kind": "fs.read", "scope": "input-handles", "reason": "It reads what you connect." },
+                    { "kind": "fs.write", "scope": "folder", "reason": "It saves the result where you say." }
+                ]
+            })
+            .to_string(),
+        )
+        .expect("the fixture manifest must be valid, or nothing below means anything")
+    }
+
+    fn fixture() -> (Graph, InMemoryRegistry) {
+        let mut registry = InMemoryRegistry::new();
+        registry.insert(manifest()).expect("one component");
+
+        let graph = Graph::parse(
+            &serde_json::json!({
+                "nodes": {
+                    "save": { "component": "test.saver@1.0.0", "position": { "x": 0, "y": 0 } }
+                },
+                "edges": []
+            })
+            .to_string(),
+        )
+        .expect("the fixture graph must parse");
+
+        (graph, registry)
+    }
+
+    fn folder_grant(path: &Path) -> GrantSpec {
+        GrantSpec {
+            node: "save".into(),
+            kind: "fs.write".into(),
+            folder: Some(path.to_string_lossy().into_owned()),
+            hosts: None,
+        }
+    }
+
+    /// A temporary directory that cleans up after itself.
+    fn temp_dir(tag: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("encastra-lib-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&path).expect("temp dir");
+        path
+    }
+
+    #[test]
+    fn the_fixture_grants_when_the_folder_was_actually_chosen() {
+        // The control. Every refusal below has to be about the thing it names, and that argument
+        // only holds if the same shapes are admitted when the condition is met.
+        let dir = temp_dir("chosen");
+        let (graph, registry) = fixture();
+        let resolved = std::fs::canonicalize(&dir).unwrap();
+        let chosen = BTreeSet::from([resolved.clone()]);
+
+        let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&dir)], &chosen);
+
+        assert!(refused.is_empty(), "{refused:?}");
+        assert!(set.has(&NodeId("save".into()), "fs.write"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_the_person_never_chose_is_not_granted_however_it_arrived() {
+        // The finding this closes. A `.encastra` file written by somebody else supplies the
+        // string in a node's config; the editor shows it accurately and sends it back when a
+        // person clicks Allow. Nothing in that chain tells the runtime whether anybody ever
+        // picked it — so the runtime keeps its own record, and this is what that record is for.
+        let dir = temp_dir("unchosen");
+        let (graph, registry) = fixture();
+
+        let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&dir)], &BTreeSet::new());
+
+        assert!(!set.has(&NodeId("save".into()), "fs.write"));
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("Choose"), "{}", refused[0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn choosing_one_folder_does_not_grant_a_different_one() {
+        // The record is of specific folders, not of the act of having chosen at all.
+        let chosen_dir = temp_dir("a");
+        let other_dir = temp_dir("b");
+        let (graph, registry) = fixture();
+        let chosen = BTreeSet::from([std::fs::canonicalize(&chosen_dir).unwrap()]);
+
+        let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&other_dir)], &chosen);
+
+        assert!(!set.has(&NodeId("save".into()), "fs.write"));
+        assert_eq!(refused.len(), 1);
+        let _ = std::fs::remove_dir_all(&chosen_dir);
+        let _ = std::fs::remove_dir_all(&other_dir);
+    }
+
+    #[test]
+    fn a_drive_root_is_refused_even_if_it_somehow_got_into_the_record() {
+        // Two independent checks, and the order matters: the scope is refused for being a root
+        // before the record is consulted, so a bug that let something into the record cannot
+        // turn into a grant for the whole drive.
+        let root = PathBuf::from(if cfg!(windows) { "C:\\" } else { "/" });
+        let (graph, registry) = fixture();
+        let chosen = BTreeSet::from([std::fs::canonicalize(&root).unwrap_or(root.clone())]);
+
+        let (set, refused) = grant_set(&graph, &registry, &[folder_grant(&root)], &chosen);
+
+        assert!(!set.has(&NodeId("save".into()), "fs.write"));
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("cannot be used"), "{}", refused[0]);
+    }
+
+    #[test]
+    fn a_capability_the_component_never_declared_is_refused_and_named() {
+        let (graph, registry) = fixture();
+        let grant = GrantSpec {
+            node: "save".into(),
+            kind: "system.clipboard".into(),
+            folder: None,
+            hosts: None,
+        };
+
+        let (set, refused) = grant_set(&graph, &registry, &[grant], &BTreeSet::new());
+
+        assert!(!set.has(&NodeId("save".into()), "system.clipboard"));
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("does not ask for"), "{}", refused[0]);
+    }
+
+    #[test]
+    fn a_grant_for_a_node_that_is_not_in_the_graph_is_nothing() {
+        let (graph, registry) = fixture();
+        let grant = GrantSpec {
+            node: "ghost".into(),
+            kind: "fs.write".into(),
+            folder: None,
+            hosts: None,
+        };
+
+        let (set, refused) = grant_set(&graph, &registry, &[grant], &BTreeSet::new());
+
+        assert!(!set.has(&NodeId("ghost".into()), "fs.write"));
+        // Silent: there is no node for it to be a decision about, so there is nothing to tell
+        // the person that they would recognise.
+        assert!(refused.is_empty(), "{refused:?}");
+    }
+
+    #[test]
+    fn a_project_is_saved_only_as_a_project() {
+        assert!(is_project_path(Path::new("C:/work/report.encastra")));
+        assert!(is_project_path(Path::new("C:/work/report.ENCASTRA")));
+        assert!(!is_project_path(Path::new(
+            "C:/Users/me/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/x.bat"
+        )));
+        assert!(!is_project_path(Path::new("C:/work/report")));
+        assert!(!is_project_path(Path::new("C:/work/report.encastra.exe")));
     }
 }

@@ -181,6 +181,7 @@ describe('what a Remove is allowed to delete', () => {
 const EVERY_KIND: ImportError['kind'][] = [
   'not-a-folder',
   'folder-is-a-link',
+  'folder-not-chosen',
   'no-document',
   'document-is-a-link',
   'document-too-large',
