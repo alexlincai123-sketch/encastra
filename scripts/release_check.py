@@ -167,7 +167,11 @@ def check_dependencies(skip: bool) -> list[Check]:
         return [Check("deps.cargo_deny", NOT_VERIFIED, "skipped"), Check("deps.npm_audit", NOT_VERIFIED, "skipped")]
     out = []
     deny = run(["cargo", "deny", "check", "advisories", "bans", "licenses", "sources"])
-    summary = [line.strip() for line in (deny.stdout + deny.stderr).splitlines() if " ok" in line or "FAILED" in line or "error" in line.lower()]
+    summary = [
+        line.strip()
+        for line in (deny.stdout + deny.stderr).splitlines()
+        if line.startswith(("advisories", "bans", "licenses", "sources")) or "FAILED" in line or line.startswith("error")
+    ]
     out.append(Check("deps.cargo_deny", PASS if deny.returncode == 0 else FAIL, " | ".join(summary[-4:]) or tail(deny.stdout + deny.stderr, 2)))
     audit = run(["npm", "audit", "--audit-level=high"])
     out.append(Check("deps.npm_audit", PASS if audit.returncode == 0 else FAIL, tail(audit.stdout + audit.stderr, 2)))
