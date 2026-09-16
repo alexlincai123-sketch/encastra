@@ -932,7 +932,7 @@ const it: Messages = {
     windowWouldNotClose: 'La finestra non si è chiusa. Il tuo lavoro è ancora qui.',
     io: 'Qualcosa su questo computer ha rifiutato l’operazione ({reason}).',
     status: {
-      triggerError: '{node} ha smesso di sorvegliare i cambiamenti ({reason}).',
+      triggerError: '{node} ha smesso di sorvegliare i cambiamenti. {reason}',
       eventsDropped: {
         one: 'È stato scartato {count} evento: arrivava più in fretta di quanto si potesse gestire.',
         other:
@@ -943,6 +943,71 @@ const it: Messages = {
         one: 'In esecuzione da {seconds} secondo.',
         other: 'In esecuzione da {seconds} secondi.',
       },
+    },
+    // Perché un passaggio di un'esecuzione è fallito, nella lingua di chi legge.
+    // L'elenco dei codici vive in `crates/encastra-core/src/journal.rs`.
+    node: {
+      missingInput: 'A questo passaggio manca un ingresso. Collega un passaggio che lo produca.',
+      wrongInput:
+        'Questo passaggio ha ricevuto un tipo di valore che non sa gestire. Controlla che cosa è collegato.',
+      missingConfig:
+        'Manca un’impostazione obbligatoria di questo passaggio. Compilala nel passaggio stesso.',
+      missingHandle:
+        'Il valore consegnato a questo passaggio non è più disponibile. Esegui di nuovo il flusso.',
+      notText:
+        'Quel file non è testo leggibile da questa versione. Collegalo invece a un passaggio che lavora con i byte.',
+      notAnImage:
+        'Quel file non è stato letto come immagine. Verifica che ciò che è collegato lo sia davvero.',
+      conversionFailed:
+        'Non è stato possibile convertire un valore in ciò che si aspetta il passaggio successivo. Collega tipi compatibili, oppure aggiungi un passaggio che li converta.',
+      conversionUnavailable:
+        'Questa versione non sa ancora fare quella conversione. Le serve un componente non ancora pubblicato.',
+      invalidJson: 'Quel testo non è JSON valido, quindi non c’è nulla da leggerci.',
+      invalidCsv:
+        'Quel file non è stato letto come tabella. Una riga o l’intestazione non rispetta il separatore indicato in questo passaggio.',
+      badSeparator:
+        'Il separatore deve essere un solo carattere: una virgola, un punto e virgola o una tabulazione.',
+      csvTooLarge:
+        'Quella tabella ha più righe o celle di quante questa versione ne trasformi in dati. Dividi il file, oppure filtralo prima di questo passaggio.',
+      encodeFailed: 'Il risultato non è stato scritto nel formato prodotto da questo passaggio.',
+      resizeFailed:
+        'Non è stato possibile ridimensionare quell’immagine. Potrebbe essere danneggiata, o più grande di quanto questa versione gestisca.',
+      unsupportedFormat:
+        'Questa versione non sa scrivere quel formato di immagine. Scegli PNG, JPEG o WebP.',
+      badUrl:
+        'Quell’indirizzo non è utilizzabile. Deve somigliare a https://esempio.com/percorso, senza nome utente né password.',
+      insecureUrl:
+        'Quell’indirizzo usa http in chiaro, che lungo il percorso può essere letto e modificato. Usa https, oppure attiva «Consenti http in chiaro» se sai che l’indirizzo è sicuro.',
+      unsupportedMethod: 'Questo passaggio non invia quel tipo di richiesta.',
+      requestFailed:
+        'La richiesta non è arrivata. Controlla l’indirizzo e che questa macchina possa raggiungerlo.',
+      responseTooLarge:
+        'La risposta era più grande di quanto legga questa versione. Le risposte oltre 16 MB vengono rifiutate.',
+      denied:
+        'Questo passaggio ha chiesto qualcosa che non gli è consentito. Concedilo nei permessi del passaggio, poi esegui di nuovo.',
+      readFailed:
+        'Qualcosa su questo computer non è stato letto. Potrebbe essere stato spostato, o la macchina non lo consente.',
+      writeFailed:
+        'Il risultato non è stato scritto su questo computer. Verifica che la cartella esista e che tu possa scriverci.',
+      moveIncomplete:
+        'Il file è stato copiato, ma l’originale non è stato rimosso. Nella destinazione ora c’è una copia: elimina tu l’originale se volevi spostarlo.',
+      tooLarge:
+        'Quel file è più grande di quanto legga questa versione. Non è stato letto nulla. Usa un file più piccolo, oppure dividilo prima di questo passaggio.',
+      clipboardUnavailable:
+        'Qui non ci sono appunti da usare. Succede su macchine senza sessione desktop, come un server di build.',
+      clipboardFailed:
+        'Gli appunti non hanno accettato ciò che questo passaggio voleva metterci. Non è stato copiato nulla.',
+      cancelled: 'Questo passaggio è stato fermato prima di finire.',
+      runTooLong:
+        'L’esecuzione ha superato il limite di tempo ed è stata fermata. Ciò che era finito è nel registro.',
+      runMemoryBudget:
+        'Questo passaggio porterebbe l’esecuzione oltre quanto può trattenere insieme, perciò è stato rifiutato. Lavora i file uno alla volta, oppure passali così come sono invece di leggerli come testo.',
+      componentMissing:
+        'Il componente usato da questo passaggio non è installato. Importalo, oppure rimuovi il passaggio.',
+      noImplementation:
+        'Quel componente si descrive ma non ha codice in questa versione. I componenti in sandbox non sono ancora eseguibili.',
+      contractBroken:
+        'Il componente ha prodotto qualcosa di diverso da ciò che dichiara, perciò il risultato non è stato trasmesso.',
     },
     grant: {
       folderUnusable: '{node}: quella cartella non può essere usata ({reason}).',

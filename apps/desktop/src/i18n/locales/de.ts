@@ -946,7 +946,7 @@ const de: Messages = {
     windowWouldNotClose: 'Das Fenster ließ sich nicht schließen. Ihre Arbeit ist noch da.',
     io: 'Etwas auf diesem Computer hat den Vorgang verweigert ({reason}).',
     status: {
-      triggerError: '{node} beobachtet keine Änderungen mehr ({reason}).',
+      triggerError: '{node} beobachtet keine Änderungen mehr. {reason}',
       eventsDropped: {
         one: '{count} Ereignis wurde verworfen — es kam schneller, als es bearbeitet werden konnte.',
         other:
@@ -958,6 +958,73 @@ const de: Messages = {
         one: 'Läuft seit {seconds} Sekunde.',
         other: 'Läuft seit {seconds} Sekunden.',
       },
+    },
+    // Warum ein Schritt eines Laufs fehlgeschlagen ist, in der Sprache des Lesers.
+    // Die Liste der Codes steht in `crates/encastra-core/src/journal.rs`.
+    node: {
+      missingInput:
+        'Diesem Schritt fehlt eine Eingabe. Verbinden Sie einen Schritt, der sie erzeugt.',
+      wrongInput:
+        'Dieser Schritt hat einen Werttyp erhalten, mit dem er nicht arbeiten kann. Prüfen Sie, was mit ihm verbunden ist.',
+      missingConfig:
+        'Eine notwendige Einstellung dieses Schritts fehlt. Tragen Sie sie am Schritt selbst ein.',
+      missingHandle:
+        'Der Wert, den dieser Schritt bekommen hat, ist nicht mehr vorhanden. Starten Sie den Ablauf erneut.',
+      notText:
+        'Diese Datei ist kein Text, den dieser Build lesen kann. Verbinden Sie sie stattdessen mit einem Schritt für Bytes.',
+      notAnImage:
+        'Diese Datei ließ sich nicht als Bild lesen. Prüfen Sie, ob das Verbundene wirklich eines ist.',
+      conversionFailed:
+        'Ein Wert ließ sich nicht in das umwandeln, was der nächste Schritt erwartet. Verbinden Sie passende Typen, oder fügen Sie einen umwandelnden Schritt ein.',
+      conversionUnavailable:
+        'Dieser Build kann diese Umwandlung noch nicht. Dafür fehlt eine Komponente, die es noch nicht gibt.',
+      invalidJson: 'Dieser Text ist kein gültiges JSON, also lässt sich nichts daraus lesen.',
+      invalidCsv:
+        'Diese Datei ließ sich nicht als Tabelle lesen. Eine Zeile oder die Kopfzeile folgt nicht dem angegebenen Trennzeichen.',
+      badSeparator:
+        'Das Trennzeichen muss ein einzelnes Zeichen sein, etwa ein Komma, ein Semikolon oder ein Tabulator.',
+      csvTooLarge:
+        'Diese Tabelle hat mehr Zeilen oder Zellen, als dieser Build in Daten umwandelt. Teilen Sie die Datei, oder filtern Sie sie vor diesem Schritt.',
+      encodeFailed:
+        'Das Ergebnis ließ sich nicht in dem Format schreiben, das dieser Schritt erzeugt.',
+      resizeFailed:
+        'Dieses Bild ließ sich nicht skalieren. Es ist womöglich beschädigt oder größer, als dieser Build verarbeiten kann.',
+      unsupportedFormat:
+        'Dieser Build kann dieses Bildformat nicht schreiben. Wählen Sie PNG, JPEG oder WebP.',
+      badUrl:
+        'Diese Adresse ist nicht verwendbar. Sie sollte wie https://beispiel.de/pfad aussehen, ohne Benutzernamen und Passwort darin.',
+      insecureUrl:
+        'Diese Adresse nutzt einfaches http, das unterwegs mitgelesen und verändert werden kann. Verwenden Sie https, oder schalten Sie „Einfaches http erlauben“ ein, wenn Sie die Adresse für sicher halten.',
+      unsupportedMethod: 'Dieser Schritt sendet diese Art von Anfrage nicht.',
+      requestFailed:
+        'Die Anfrage kam nicht durch. Prüfen Sie die Adresse und ob dieser Rechner sie erreichen kann.',
+      responseTooLarge:
+        'Die Antwort war größer, als dieser Build liest. Antworten über 16 MB werden abgelehnt.',
+      denied:
+        'Dieser Schritt wollte etwas tun, das ihm nicht erlaubt ist. Erlauben Sie es in den Berechtigungen des Schritts und starten Sie erneut.',
+      readFailed:
+        'Etwas auf diesem Computer ließ sich nicht lesen. Es wurde vielleicht verschoben, oder dieser Rechner erlaubt es nicht.',
+      writeFailed:
+        'Das Ergebnis ließ sich nicht auf diesen Computer schreiben. Prüfen Sie, ob der Ordner da ist und Sie hineinschreiben dürfen.',
+      moveIncomplete:
+        'Die Datei wurde kopiert, das Original ließ sich aber nicht entfernen. Am Ziel liegt nun eine Kopie; löschen Sie das Original selbst, wenn Sie verschieben wollten.',
+      tooLarge:
+        'Diese Datei ist größer, als dieser Build liest. Es wurde nichts gelesen. Nehmen Sie eine kleinere Datei, oder teilen Sie sie vor diesem Schritt.',
+      clipboardUnavailable:
+        'Hier gibt es keine Zwischenablage. Das passiert auf Rechnern ohne Desktop-Sitzung, etwa auf einem Build-Server.',
+      clipboardFailed:
+        'Die Zwischenablage nahm nicht an, was dieser Schritt hineinlegen wollte. Es wurde nichts kopiert.',
+      cancelled: 'Dieser Schritt wurde vor dem Ende angehalten.',
+      runTooLong:
+        'Der Lauf hat das Zeitlimit überschritten und wurde angehalten. Was bis dahin fertig war, steht im Protokoll.',
+      runMemoryBudget:
+        'Dieser Schritt würde den Lauf über die Menge bringen, die er gleichzeitig halten darf, und wurde abgelehnt. Arbeiten Sie Dateien einzeln ab, oder reichen Sie sie weiter, statt sie als Text einzulesen.',
+      componentMissing:
+        'Die Komponente dieses Schritts ist nicht installiert. Importieren Sie sie, oder entfernen Sie den Schritt.',
+      noImplementation:
+        'Diese Komponente beschreibt sich selbst, hat in diesem Build aber keinen Code. Komponenten in der Sandbox sind noch nicht ausführbar.',
+      contractBroken:
+        'Die Komponente hat etwas anderes erzeugt, als sie angibt, deshalb wurde das Ergebnis nicht weitergereicht.',
     },
     grant: {
       folderUnusable: '{node}: Dieser Ordner kann nicht verwendet werden ({reason}).',

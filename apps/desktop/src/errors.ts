@@ -38,6 +38,8 @@ import type {
   GrantRefusal,
   ImportError,
   LibraryError,
+  NodeError,
+  NodeErrorCode,
   ProjectError,
   StatusMessage,
 } from './types';
@@ -140,6 +142,54 @@ export const STATUS_MESSAGE_KEYS: Record<StatusMessage['kind'], string> = {
 };
 
 /**
+ * Why a step of a run failed, which is the vocabulary the run journal speaks.
+ *
+ * Not a command refusal — nobody asked for anything and nothing was rejected — but the same
+ * problem and the same answer. A failed step used to reach the Run panel and the Inspector as the
+ * English sentence the runtime had built, so the one panel somebody reads *while debugging* was
+ * the one panel that stayed English. `NodeErrorCode` in `crates/encastra-core/src/journal.rs` is
+ * the pinned list, written into `test/fixtures/error-kinds.json` by a Rust test; this is a total
+ * `Record` over its mirror, so a code added there and not given a key here stops the build.
+ */
+export const NODE_ERROR_KEYS: Record<NodeErrorCode, string> = {
+  'missing-input': 'errors.node.missingInput',
+  'wrong-input': 'errors.node.wrongInput',
+  'missing-config': 'errors.node.missingConfig',
+  'missing-handle': 'errors.node.missingHandle',
+  'not-text': 'errors.node.notText',
+  'not-an-image': 'errors.node.notAnImage',
+  'conversion-failed': 'errors.node.conversionFailed',
+  'conversion-unavailable': 'errors.node.conversionUnavailable',
+  'invalid-json': 'errors.node.invalidJson',
+  'invalid-csv': 'errors.node.invalidCsv',
+  'bad-separator': 'errors.node.badSeparator',
+  'csv-too-large': 'errors.node.csvTooLarge',
+  'encode-failed': 'errors.node.encodeFailed',
+  'resize-failed': 'errors.node.resizeFailed',
+  'unsupported-format': 'errors.node.unsupportedFormat',
+  'bad-url': 'errors.node.badUrl',
+  'insecure-url': 'errors.node.insecureUrl',
+  'unsupported-method': 'errors.node.unsupportedMethod',
+  'request-failed': 'errors.node.requestFailed',
+  'response-too-large': 'errors.node.responseTooLarge',
+  denied: 'errors.node.denied',
+  'read-failed': 'errors.node.readFailed',
+  'write-failed': 'errors.node.writeFailed',
+  'move-incomplete': 'errors.node.moveIncomplete',
+  'too-large': 'errors.node.tooLarge',
+  'clipboard-unavailable': 'errors.node.clipboardUnavailable',
+  'clipboard-failed': 'errors.node.clipboardFailed',
+  cancelled: 'errors.node.cancelled',
+  'run-too-long': 'errors.node.runTooLong',
+  'run-memory-budget': 'errors.node.runMemoryBudget',
+  'component-missing': 'errors.node.componentMissing',
+  'no-implementation': 'errors.node.noImplementation',
+  'contract-broken': 'errors.node.contractBroken',
+};
+
+export const NODE_ERROR_CODES = Object.keys(NODE_ERROR_KEYS) as NodeErrorCode[];
+
+/**
  * The sentence for a refusal this build has never heard of.
  *
  * Reachable only if a future runtime refuses for a reason this interface predates. Saying so
@@ -200,6 +250,33 @@ function kilobytes(t: Translate, bytes: number): string {
 /** A field name the runtime quotes, in the reader's language where there is a word for it. */
 function token(t: Translate, name: string): string {
   return TRANSLATED_TOKENS.has(name) ? t(`import.tokens.${name}`) : name;
+}
+
+/**
+ * Why a step failed, in the reader's language.
+ *
+ * Two outcomes, and the second one is the point:
+ *
+ * - **A code this build knows** resolves to a sentence written in six languages, and that
+ *   sentence is what the reader sees. The runtime's own English `message` is not shown, and
+ *   neither is its English `hint` — the six sentences are written to say both what happened and
+ *   what to do, so the advice the hint carried is inside them rather than beside them in another
+ *   language. What is lost is the runtime's free text (a serde parse position, an operating-system
+ *   error, the name of the missing component); the Inspector still shows the `code`, and turning
+ *   that free text into parameters of the sentence is the next step, not this one.
+ * - **A code this build has never heard of** — a component with a vocabulary of its own, or a
+ *   journal from a newer runtime — falls through to `message`, which is the only words anybody
+ *   has for it. `hint` is shown alongside for the same reason. Nothing is invented and nothing
+ *   is blanked.
+ */
+export function describeNodeError(error: NodeError, t: Translate = translate): string {
+  const key = NODE_ERROR_KEYS[error.code as NodeErrorCode];
+  return key ? t(key) : error.message;
+}
+
+/** Whether the sentence above came from a translation rather than from the runtime's own words. */
+export function isKnownNodeError(error: NodeError): boolean {
+  return error.code in NODE_ERROR_KEYS;
 }
 
 function describeProject(error: ProjectError, t: Translate): string {
@@ -274,10 +351,11 @@ export function describeStatusMessage(
 
   switch (message.kind) {
     case 'trigger-error':
-      // The `code` is the part a later build can translate; until then the reason is quoted
-      // verbatim inside a sentence the reader can read, which is what the rest of this file does
-      // with free text from an operating system.
-      return t(key, { node: message.node, reason: message.error.message });
+      // The reason is translated too, rather than being an English sentence quoted inside a
+      // translated one — which is what this was until the node vocabulary existed, and which
+      // made the status bar half-readable in five languages. A code from outside this build
+      // still falls through to the words the component supplied; see `describeNodeError`.
+      return t(key, { node: message.node, reason: describeNodeError(message.error, t) });
     case 'events-dropped':
       return t(key, { count: message.count });
     case 'nothing-ran':

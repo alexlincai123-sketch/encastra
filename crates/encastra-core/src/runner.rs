@@ -16,7 +16,9 @@ use encastra_protocol::manifest::ComponentManifest;
 use crate::broker::Broker;
 use crate::convert::apply_ops;
 use crate::graph::{Edge, Graph, NodeId, PortRef};
-use crate::journal::{LogLevel, LogLine, NodeError, NodeRecord, NodeStatus, RunJournal, now_ms};
+use crate::journal::{
+    LogLevel, LogLine, NodeError, NodeErrorCode, NodeRecord, NodeStatus, RunJournal, now_ms,
+};
 use crate::registry::ComponentRegistry;
 use crate::validate::Validation;
 use crate::value::{Handle, HandleKind, Value};
@@ -146,7 +148,7 @@ impl<'a> NodeContext<'a> {
     pub fn read_text(&mut self, handle: Handle) -> Result<String, NodeError> {
         let bytes = self.read(handle)?;
         String::from_utf8(bytes).map_err(|_| {
-            NodeError::new("not-text", "This file is not valid UTF-8 text.")
+            NodeError::new(NodeErrorCode::NotText, "This file is not valid UTF-8 text.")
                 .with_hint("Connect it to a component that works with bytes instead.")
         })
     }
@@ -615,7 +617,7 @@ fn execute(
                     // Cancelled by the clock rather than by a person, which is a different thing
                     // to read in a journal six hours later.
                     record.error = Some(NodeError::new(
-                        "run-too-long",
+                        NodeErrorCode::RunTooLong,
                         format!(
                             "This run passed the {} minute limit and was stopped.",
                             MAX_RUN_DURATION.as_secs() / 60
@@ -642,7 +644,7 @@ fn execute(
             let Some(manifest) = registry.get(&node.component) else {
                 record.status = NodeStatus::Failed;
                 record.error = Some(NodeError::new(
-                    "component-missing",
+                    NodeErrorCode::ComponentMissing,
                     format!("{} is not installed.", node.component),
                 ));
                 break 'step record;
@@ -687,7 +689,7 @@ fn execute(
                 record.status = NodeStatus::Failed;
                 record.error = Some(
                     NodeError::new(
-                        "no-implementation",
+                        NodeErrorCode::NoImplementation,
                         format!(
                             "{} has a manifest but no code in this build.",
                             node.component
@@ -739,8 +741,7 @@ fn execute(
                         // process that vanished.
                         record.status = NodeStatus::Failed;
                         record.error = Some(
-                            NodeError::new(
-                                "run-memory-budget",
+                            NodeError::new(NodeErrorCode::RunMemoryBudget,
                                 format!(
                                     "This step would take the run past its limit of {budget} bytes of values held at once; it is already holding {live_bytes} and this step adds {produces}."
                                 ),
@@ -904,7 +905,7 @@ fn check_outputs(
     for (port, value) in &produced {
         let Some(declared) = manifest.ports.outputs.get(port) else {
             return Err(NodeError::new(
-                "contract-broken",
+                NodeErrorCode::ContractBroken,
                 format!(
                     "{} produced an output called \"{port}\", which it does not declare.",
                     manifest.name
@@ -926,7 +927,7 @@ fn check_outputs(
         );
         if !compatible {
             return Err(NodeError::new(
-                "contract-broken",
+                NodeErrorCode::ContractBroken,
                 format!(
                     "{} declares \"{port}\" as {}, but produced {actual}.",
                     manifest.name, declared.type_

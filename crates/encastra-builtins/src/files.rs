@@ -7,7 +7,7 @@
 
 use std::sync::{Arc, LazyLock};
 
-use encastra_core::journal::{LogLevel, NodeError};
+use encastra_core::journal::{LogLevel, NodeError, NodeErrorCode};
 use encastra_core::runner::{CoreComponent, NodeContext};
 use encastra_core::value::{HandleKind, Value};
 use encastra_protocol::manifest::ComponentManifest;
@@ -210,7 +210,7 @@ fn target_name(
         Some(name) => name.to_owned(),
         None => ctx.source_name(handle).ok_or_else(|| {
             NodeError::new(
-                "missing-config",
+                NodeErrorCode::MissingConfig,
                 "This file has no name, so one has to be set.",
             )
             .with_hint("Set a file name on this node.")
@@ -363,7 +363,7 @@ impl CoreComponent for Rename {
                         .replace("{ext}", &extension),
                     None => {
                         return Err(NodeError::new(
-                            "missing-config",
+                            NodeErrorCode::MissingConfig,
                             "This node needs either a name pattern or something connected to \"name\".",
                         ));
                     }

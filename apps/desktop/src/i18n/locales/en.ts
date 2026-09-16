@@ -988,7 +988,7 @@ const en: Messages = {
     // What the status bar is told while a workflow runs. `nothing-ran` is not here: it reuses
     // `messages.nothingRanProblems`, which said exactly this before the tag existed.
     status: {
-      triggerError: '{node} stopped watching for changes ({reason}).',
+      triggerError: '{node} stopped watching for changes. {reason}',
       eventsDropped: {
         one: '{count} event was dropped — they arrived faster than they could be handled.',
         other: '{count} events were dropped — they arrived faster than they could be handled.',
@@ -998,6 +998,75 @@ const en: Messages = {
         one: 'Running for {seconds} second.',
         other: 'Running for {seconds} seconds.',
       },
+    },
+    // Why a step of a run failed, in the reader's language.
+    //
+    // `NodeErrorCode` in `crates/encastra-core/src/journal.rs` is the pinned list these
+    // are keyed by, and `errors.ts` camel-cases a code into one of the keys below. Before
+    // this existed the run journal's own sentence was shown as the runtime had built it,
+    // which meant the Run panel was English whatever language the rest of the window was.
+    // Each sentence says what happened and what to do about it, because the runtime's
+    // English `hint` is not shown once a code is recognised.
+    node: {
+      missingInput: 'Something this step needs is not connected. Connect a step that produces it.',
+      wrongInput:
+        'This step received a kind of value it cannot work with. Check what is connected to it.',
+      missingConfig:
+        'Something this step has to be told is not set. Fill it in on the step itself.',
+      missingHandle:
+        'The value this step was given is no longer available. Run the workflow again.',
+      notText:
+        'That file is not text this build can read. Connect it to a step that works with bytes instead.',
+      notAnImage:
+        'That file could not be read as an image. Check that what is connected really is one.',
+      conversionFailed:
+        'A value could not be turned into what the next step expects. Connect kinds that match, or add a step that converts them.',
+      conversionUnavailable:
+        'This build cannot yet make that conversion. It needs a component that has not shipped.',
+      invalidJson: 'That text is not valid JSON, so there is nothing to read from it.',
+      invalidCsv:
+        'That file could not be read as a table. A row or the header does not follow the separator this step was given.',
+      badSeparator: 'The separator has to be one character, such as a comma, a semicolon or a tab.',
+      csvTooLarge:
+        'That table has more rows or cells than this build turns into data. Split the file, or filter it before this step.',
+      encodeFailed: 'The result could not be written out in the format this step produces.',
+      resizeFailed:
+        'That image could not be resized. It may be damaged, or larger than this build can work with.',
+      unsupportedFormat: 'This build cannot write that image format. Choose PNG, JPEG or WebP.',
+      badUrl:
+        'That address cannot be used. It should look like https://example.com/path, with no user name or password in it.',
+      insecureUrl:
+        'That address uses plain http, which can be read and changed in transit. Use https, or turn on “Allow plain http” if you know the address is safe.',
+      unsupportedMethod: 'This step does not send that kind of request.',
+      requestFailed:
+        'The request did not get through. Check the address, and that this machine can reach it.',
+      responseTooLarge:
+        'The answer was larger than this build reads. Responses above 16 MB are refused.',
+      denied:
+        'This step asked for something it was not allowed to do. Grant it in the permissions for this step, then run again.',
+      readFailed:
+        'Something on this computer refused to be read. It may have been moved, or this machine may not allow it.',
+      writeFailed:
+        'The result could not be written to this computer. Check that the folder is there and that you can write into it.',
+      moveIncomplete:
+        'The file was copied, but the original could not be removed. The destination now has a copy; remove the original yourself if you meant to move it.',
+      tooLarge:
+        'That file is larger than this build reads. Nothing was read. Use a smaller file, or split it before this step.',
+      clipboardUnavailable:
+        'There is no clipboard to use here. This happens on a machine with no desktop session, such as a build server.',
+      clipboardFailed:
+        'The clipboard would not take what this step tried to put on it. Nothing was copied.',
+      cancelled: 'This step was stopped before it finished.',
+      runTooLong:
+        'The run passed the time limit and was stopped. What had finished by then is in the journal.',
+      runMemoryBudget:
+        'This step would take the run past what it may hold at once, so it was refused. Work through files one at a time, or pass them along as they are instead of reading them into text.',
+      componentMissing:
+        'The component this step uses is not installed. Import it, or remove the step.',
+      noImplementation:
+        'That component describes itself but has no code in this build. Sandboxed components are not runnable yet.',
+      contractBroken:
+        'The component produced something other than what it declares, so the result was not passed on.',
     },
     grant: {
       folderUnusable: '{node}: that folder cannot be used ({reason}).',

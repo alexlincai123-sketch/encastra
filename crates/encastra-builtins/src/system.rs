@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, LazyLock};
 
-use encastra_core::journal::{LogLevel, NodeError};
+use encastra_core::journal::{LogLevel, NodeError, NodeErrorCode};
 use encastra_core::runner::{CoreComponent, NodeContext};
 use encastra_core::value::Value;
 use encastra_protocol::manifest::ComponentManifest;
@@ -120,13 +120,17 @@ impl CoreComponent for Clipboard {
         ctx.use_clipboard(&format!("{} characters", text.chars().count()))?;
 
         let mut clipboard = arboard::Clipboard::new().map_err(|e| {
-            NodeError::new("clipboard-unavailable", describe_clipboard_error(&e)).with_hint(
+            NodeError::new(
+                NodeErrorCode::ClipboardUnavailable,
+                describe_clipboard_error(&e),
+            )
+            .with_hint(
                 "This can happen on a machine with no desktop session, such as a build server.",
             )
         })?;
-        clipboard
-            .set_text(text.clone())
-            .map_err(|e| NodeError::new("clipboard-failed", describe_clipboard_error(&e)))?;
+        clipboard.set_text(text.clone()).map_err(|e| {
+            NodeError::new(NodeErrorCode::ClipboardFailed, describe_clipboard_error(&e))
+        })?;
 
         ctx.log(
             LogLevel::Info,

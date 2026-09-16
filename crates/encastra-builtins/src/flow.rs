@@ -8,7 +8,7 @@
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
-use encastra_core::journal::{LogLevel, NodeError};
+use encastra_core::journal::{LogLevel, NodeError, NodeErrorCode};
 use encastra_core::runner::{CoreComponent, NodeContext};
 use encastra_core::value::Value;
 use encastra_protocol::manifest::ComponentManifest;
@@ -136,13 +136,13 @@ impl CoreComponent for Switch {
             Some(Value::Text(t)) => t.trim().to_owned(),
             Some(Value::Absent) | None => {
                 return Err(NodeError::new(
-                    "missing-input",
+                    NodeErrorCode::MissingInput,
                     "Nothing is connected to \"match\".",
                 ));
             }
             Some(other) => {
                 return Err(NodeError::new(
-                    "wrong-input",
+                    NodeErrorCode::WrongInput,
                     format!("\"match\" expected text but received {}.", other.summary()),
                 ));
             }
@@ -229,7 +229,10 @@ impl CoreComponent for Delay {
         // close an application rather than trust it.
         while Instant::now() < deadline {
             if ctx.is_cancelled() {
-                return Err(NodeError::new("cancelled", "The wait was stopped."));
+                return Err(NodeError::new(
+                    NodeErrorCode::Cancelled,
+                    "The wait was stopped.",
+                ));
             }
             std::thread::sleep(Duration::from_millis(50));
         }

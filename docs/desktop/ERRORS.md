@@ -115,9 +115,32 @@ Three of those name a plural tree rather than a leaf, because the count is part 
 counts zero and one together in French, and a hand-written check gets that wrong.
 
 `trigger-error` carries the whole `NodeError`, not just its sentence, because it holds a stable
-`code`. Today the interface quotes `message` verbatim inside a translated sentence — the rule free
-text follows everywhere else here — and the `code` travels so a later build can translate the
-reason itself without changing this payload again.
+`code` — and that `code` is now what the sentence is built from, so the reason is translated too
+rather than being an English sentence quoted inside a translated one.
+
+## Why a step failed
+
+A command that is refused and a step that fails are different events, and for a while only the
+first was translated. A failed step put the sentence the runtime had built into the run journal,
+and the Run panel, the Inspector and the `trigger-error` status line all showed it — which made
+the panel somebody reads *while debugging* the last English one in the window.
+
+The codes are a pinned vocabulary, `NodeErrorCode` in `crates/encastra-core/src/journal.rs`.
+`NodeError::new` takes a member rather than a string, so a new reason to fail cannot be invented
+at a call site; `NodeErrorCode::ALL` is written into the fixture's `node` section by the same Rust
+test that writes every other vocabulary, and `errors.ts` maps each code to
+`errors.node.<camelCode>`.
+
+`describeNodeError` resolves it. For a code this build knows, the six sentences say both what
+happened and what to do, so the runtime's English `hint` is **not** shown beside them. What is
+lost is the runtime's free text — a parse position, an operating-system error, the name of the
+missing component — which `NodeError` has no named fields to carry as parameters; the Inspector
+still shows the `code`, and giving `NodeError` those fields is the next step.
+
+`CoreComponent` is public, so a component this build did not write is entitled to a vocabulary of
+its own: `NodeError::from_component` keeps `code` open, and a code with no sentence falls through
+to the words the component supplied, `hint` included. That is the same rule as `errors.unknown`,
+applied one level down.
 
 ### The vocabularies, by size
 
@@ -130,8 +153,9 @@ reason itself without changing this payload again.
 | `LibraryError` | 5 | `errors.library.*` |
 | `BundleError` | 9 | `errors.bundle.*` |
 | `ImportError` | 27 | `import.errors.*` |
+| `NodeErrorCode` | 33 | `errors.node.*` |
 
-88 tags, each with a sentence in six languages.
+121 tags, each with a sentence in six languages.
 
 ## Rules worth keeping
 

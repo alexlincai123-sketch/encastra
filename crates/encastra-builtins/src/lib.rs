@@ -22,7 +22,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use encastra_core::journal::NodeError;
+use encastra_core::journal::{NodeError, NodeErrorCode};
 use encastra_core::registry::InMemoryRegistry;
 use encastra_core::runner::{CoreComponent, CoreComponentSet, NodeContext};
 use encastra_core::session::TriggerSet;
@@ -177,14 +177,14 @@ pub(crate) fn json_input(
 
 fn missing(port: &str) -> NodeError {
     NodeError::new(
-        "missing-input",
+        NodeErrorCode::MissingInput,
         format!("Nothing is connected to \"{port}\"."),
     )
 }
 
 fn wrong_kind(port: &str, expected: &str, got: &Value) -> NodeError {
     NodeError::new(
-        "wrong-input",
+        NodeErrorCode::WrongInput,
         format!(
             "\"{port}\" expected {expected} but received {}.",
             got.summary()
@@ -198,7 +198,7 @@ pub(crate) fn required_config(ctx: &NodeContext<'_>, key: &str) -> Result<String
         .map(str::to_owned)
         .ok_or_else(|| {
             NodeError::new(
-                "missing-config",
+                NodeErrorCode::MissingConfig,
                 format!("\"{key}\" is not set on this node."),
             )
         })

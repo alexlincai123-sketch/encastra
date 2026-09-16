@@ -927,7 +927,7 @@ const es: Messages = {
     windowWouldNotClose: 'La ventana no se ha cerrado. Tu trabajo sigue aquí.',
     io: 'Algo en este equipo rechazó la operación ({reason}).',
     status: {
-      triggerError: '{node} dejó de vigilar los cambios ({reason}).',
+      triggerError: '{node} dejó de vigilar los cambios. {reason}',
       eventsDropped: {
         one: 'Se descartó {count} evento: llegó más rápido de lo que se podía atender.',
         other: 'Se descartaron {count} eventos: llegaron más rápido de lo que se podían atender.',
@@ -937,6 +937,70 @@ const es: Messages = {
         one: 'En marcha desde hace {seconds} segundo.',
         other: 'En marcha desde hace {seconds} segundos.',
       },
+    },
+    // Por qué ha fallado un paso de una ejecución, en el idioma de quien lee.
+    // La lista de códigos vive en `crates/encastra-core/src/journal.rs`.
+    node: {
+      missingInput: 'Falta conectar algo que este paso necesita. Conecta un paso que lo produzca.',
+      wrongInput:
+        'Este paso ha recibido un tipo de valor con el que no puede trabajar. Revisa qué tiene conectado.',
+      missingConfig: 'Falta un ajuste obligatorio de este paso. Complétalo en el propio paso.',
+      missingHandle:
+        'El valor que recibió este paso ya no está disponible. Vuelve a ejecutar el flujo.',
+      notText:
+        'Ese archivo no es texto que esta versión pueda leer. Conéctalo a un paso que trabaje con bytes.',
+      notAnImage:
+        'Ese archivo no se ha podido leer como imagen. Comprueba que lo que está conectado realmente lo sea.',
+      conversionFailed:
+        'No se ha podido convertir un valor a lo que espera el paso siguiente. Conecta tipos que encajen o añade un paso que los convierta.',
+      conversionUnavailable:
+        'Esta versión todavía no puede hacer esa conversión. Necesita un componente que aún no se ha publicado.',
+      invalidJson: 'Ese texto no es JSON válido, así que no hay nada que leer en él.',
+      invalidCsv:
+        'Ese archivo no se ha podido leer como tabla. Una fila o la cabecera no sigue el separador indicado en este paso.',
+      badSeparator:
+        'El separador tiene que ser un solo carácter: una coma, un punto y coma o un tabulador.',
+      csvTooLarge:
+        'Esa tabla tiene más filas o celdas de las que esta versión convierte en datos. Divide el archivo o fíltralo antes de este paso.',
+      encodeFailed: 'El resultado no se ha podido escribir en el formato que produce este paso.',
+      resizeFailed:
+        'No se ha podido redimensionar esa imagen. Puede estar dañada o ser mayor de lo que esta versión admite.',
+      unsupportedFormat:
+        'Esta versión no puede escribir ese formato de imagen. Elige PNG, JPEG o WebP.',
+      badUrl:
+        'Esa dirección no se puede usar. Tiene que ser del estilo https://ejemplo.com/ruta, sin usuario ni contraseña dentro.',
+      insecureUrl:
+        'Esa dirección usa http sin cifrar, que se puede leer y modificar por el camino. Usa https, o activa «Permitir http sin cifrar» si sabes que la dirección es segura.',
+      unsupportedMethod: 'Este paso no envía ese tipo de petición.',
+      requestFailed:
+        'La petición no ha llegado. Comprueba la dirección y que este equipo pueda alcanzarla.',
+      responseTooLarge:
+        'La respuesta era mayor de lo que lee esta versión. Se rechazan las respuestas de más de 16 MB.',
+      denied:
+        'Este paso ha pedido algo que no tiene permitido. Concédelo en los permisos del paso y vuelve a ejecutar.',
+      readFailed:
+        'Algo de este equipo no se ha podido leer. Puede haberse movido, o el sistema no lo permite.',
+      writeFailed:
+        'El resultado no se ha podido escribir en este equipo. Comprueba que la carpeta existe y que puedes escribir en ella.',
+      moveIncomplete:
+        'El archivo se ha copiado, pero no se ha podido borrar el original. El destino ya tiene una copia; borra tú el original si querías moverlo.',
+      tooLarge:
+        'Ese archivo es mayor de lo que lee esta versión. No se ha leído nada. Usa un archivo más pequeño o divídelo antes de este paso.',
+      clipboardUnavailable:
+        'Aquí no hay portapapeles que usar. Ocurre en equipos sin sesión de escritorio, como un servidor de compilación.',
+      clipboardFailed:
+        'El portapapeles no ha aceptado lo que este paso intentaba poner en él. No se ha copiado nada.',
+      cancelled: 'Este paso se ha detenido antes de terminar.',
+      runTooLong:
+        'La ejecución ha superado el límite de tiempo y se ha detenido. Lo que ya había terminado está en el registro.',
+      runMemoryBudget:
+        'Este paso llevaría la ejecución más allá de lo que puede retener a la vez, así que se ha rechazado. Procesa los archivos de uno en uno, o pásalos tal cual en vez de leerlos como texto.',
+      componentMissing:
+        'El componente que usa este paso no está instalado. Impórtalo o elimina el paso.',
+      noImplementation:
+        'Ese componente se describe a sí mismo, pero no tiene código en esta versión. Los componentes en sandbox todavía no se pueden ejecutar.',
+      contractBroken:
+        'El componente ha producido algo distinto de lo que declara, así que el resultado no se ha transmitido.',
     },
     grant: {
       folderUnusable: '{node}: esa carpeta no se puede usar ({reason}).',

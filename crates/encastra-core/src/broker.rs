@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::graph::NodeId;
-use crate::journal::{CapabilityCall, NodeError, now_ms};
+use crate::journal::{CapabilityCall, NodeError, NodeErrorCode, now_ms};
 use crate::value::{Handle, HandleKind};
 use encastra_protocol::manifest::{ComponentManifest, SCOPE_INPUT_HANDLES};
 
@@ -247,7 +247,7 @@ impl Broker {
     pub fn host_read(&self, handle: Handle) -> Result<Vec<u8>, NodeError> {
         let Some(entry) = self.handles.get(&handle.id) else {
             return Err(NodeError::new(
-                "missing-handle",
+                NodeErrorCode::MissingHandle,
                 "That value is no longer available.",
             ));
         };
@@ -350,7 +350,7 @@ impl Broker {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
                 NodeError::new(
-                    "write-failed",
+                    NodeErrorCode::WriteFailed,
                     format!("Could not prepare scratch space ({}).", e.kind()),
                 )
             })?;
@@ -404,7 +404,7 @@ impl Broker {
         let path = entry.path.clone();
         std::fs::write(&path, bytes).map_err(|e| {
             NodeError::new(
-                "write-failed",
+                NodeErrorCode::WriteFailed,
                 format!("Could not write the result ({}).", e.kind()),
             )
         })?;
@@ -507,7 +507,7 @@ impl Broker {
 
         std::fs::copy(&source, &destination).map_err(|e| {
             NodeError::new(
-                "write-failed",
+                NodeErrorCode::WriteFailed,
                 format!("Could not save the result ({}).", e.kind()),
             )
         })?;
@@ -565,8 +565,7 @@ impl Broker {
         // The copy succeeded, so the file exists in both places. If the removal fails the
         // result is a copy rather than a move — reported, not silently accepted.
         std::fs::remove_file(&source).map_err(|e| {
-            NodeError::new(
-                "move-incomplete",
+            NodeError::new(NodeErrorCode::MoveIncomplete,
                 format!("The file was copied but the original could not be removed ({}).", e.kind()),
             )
             .with_hint("The destination now has a copy. Remove the original yourself if you meant to move it.")
@@ -649,7 +648,7 @@ impl Broker {
 
         let entries = std::fs::read_dir(&resolved).map_err(|e| {
             NodeError::new(
-                "read-failed",
+                NodeErrorCode::ReadFailed,
                 format!("Could not read the folder ({}).", e.kind()),
             )
         })?;
@@ -845,7 +844,7 @@ impl Broker {
                 denied_because: Some(because.to_owned()),
             });
         NodeError::new(
-            "denied",
+            NodeErrorCode::Denied,
             format!("This component tried to use {kind} and was not allowed: {because}."),
         )
     }
@@ -1053,7 +1052,7 @@ fn read_bounded_to(path: &Path, limit: u64) -> Result<Vec<u8>, NodeError> {
     let size = std::fs::metadata(path)
         .map_err(|e| {
             NodeError::new(
-                "read-failed",
+                NodeErrorCode::ReadFailed,
                 format!("Could not read the file ({}).", e.kind()),
             )
         })?
@@ -1061,7 +1060,7 @@ fn read_bounded_to(path: &Path, limit: u64) -> Result<Vec<u8>, NodeError> {
 
     if size > limit {
         return Err(NodeError::new(
-            "too-large",
+            NodeErrorCode::TooLarge,
             format!("That file is {size} bytes, and this build reads at most {limit}."),
         )
         .with_hint("Nothing was read. Use a smaller file, or split it before this step."));
@@ -1069,7 +1068,7 @@ fn read_bounded_to(path: &Path, limit: u64) -> Result<Vec<u8>, NodeError> {
 
     std::fs::read(path).map_err(|e| {
         NodeError::new(
-            "read-failed",
+            NodeErrorCode::ReadFailed,
             format!("Could not read the file ({}).", e.kind()),
         )
     })
