@@ -40,7 +40,13 @@ Report (Test-Path $shortcut) "Start Menu shortcut" $shortcut
 $acl = (icacls $installDir | Select-Object -First 3) -join ' | '
 "install dir ACL: $acl"
 
-# First run of the installed copy.
+# First run of the installed copy, left running for whatever drives it next.
+#
+# Start-Process hands the child this process's environment, so when the caller has set
+# WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 the application comes up with
+# the DevTools protocol open and scripts/verify/gui_journeys.ps1 can observe the canvas through the
+# page itself. Nothing here sets that variable: it is test-only, the workflow step that calls this
+# script sets it, and what an open debugging port exposes is in docs/security/AI-AGENT-SURFACE.md.
 $run = Start-Process -FilePath $exe -PassThru
 Start-Sleep 6
 $run.Refresh()

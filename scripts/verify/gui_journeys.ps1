@@ -60,12 +60,43 @@
 # code is 1 if anything failed and 2 if anything was skipped, because a skipped journey leaves
 # B5 without the evidence it was asking for and a skip that exits 0 is a pass wearing a hat.
 #
+#   * The canvas is the one thing here that is NOT asked of UI Automation, and the reason is not a
+#     preference. Chromium publishes a div with no ARIA role as role `generic` with an empty name,
+#     and it does not publish that element's `id` as an AutomationId at all: a dump of the whole
+#     accessibility tree of the Builder contains zero nodes referencing `node-*`. So the check this
+#     file used to make - wait for an element whose AutomationId is `node-<id>` - was waiting for
+#     something that cannot exist in the tree it was waiting in, and its permanent negative was a
+#     measurement artefact, not a product failure. React Flow's `onlyRenderVisibleElements` is the
+#     second half of it: `addNode` places each step at `rightmost.x + 260`, so from the third step
+#     on a node is inserted into the DOM and unmounted again about three milliseconds later, and
+#     only Fit View brings it back. The canvas is therefore observed through the page itself, over
+#     the DevTools protocol - see scripts/verify/cdp.mjs and "the canvas, through the page itself"
+#     below. Everything native stays on UI Automation, which is what UI Automation is for.
+#
+# -Repeat n runs the whole suite n times, each iteration on its own sandbox and its own empty
+# project, and suffixes every line with `[iteration k/n]`. A journey that passes once and fails the
+# second time has not passed; CI asks for three. -SelfTest exercises only the CDP side of this
+# file - connectivity and the canvas oracle - and touches no UI Automation at all, so it is safe to
+# run on a desktop somebody is sitting at.
+#
 # This file is deliberately pure ASCII, so it is safe with or without a BOM (this repo has been
 # bitten by Spanish and CJK literals arriving mangled from a BOM-less file). Where a Spanish
 # string carries an accent the pattern spells it with `.` - `Qu. dice que es`, `bot.n Elegir`.
 # The native dialog's own button names come from the *Windows* display language, not from the
 # application's, which is why both languages are matched there too.
 
+param(
+    # How many times the whole suite runs. A chooser that works once and not twice works by
+    # accident, and B5 is asking whether these paths work - so CI passes 3 and the SUMMARY line
+    # carries the number, which scripts/release_check.py reads and refuses to call verified below 3.
+    [int]$Repeat = 1,
+    # Only the part of this file that talks to the page: connectivity, and the canvas oracle driven
+    # by DOM clicks. No UI Automation, no native dialog, nothing that needs the desktop to itself.
+    [switch]$SelfTest,
+    # Where the application publishes the DevTools protocol. Test-only, and only there because the
+    # application was launched with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port.
+    [int]$CdpPort = 9222
+)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -188,12 +219,16 @@ function OneLine($s) {
     if ($null -eq $s) { return '' }
     return ((([string]$s) -replace '\r?\n', ' / ') -replace '\s{3,}', '  ')
 }
+# Which run of the suite a line belongs to. Appended at the END of the line on purpose: what
+# release_check.py reads is the `^PASS` / `^FAIL` / `^SKIP` at the start, and a suffix cannot move
+# it. Empty until the loop at the bottom sets it.
+$script:iteration = ''
 function Report($ok, $what, $observed) {
     if ($ok) { $script:passed++ } else { $script:failed++ }
-    "{0}  {1}  -> {2}" -f ($(if ($ok) { 'PASS' } else { 'FAIL' }), (OneLine $what), (OneLine $observed))
+    "{0}  {1}  -> {2}{3}" -f ($(if ($ok) { 'PASS' } else { 'FAIL' }), (OneLine $what), (OneLine $observed), $script:iteration)
 }
-function Skip($what, $why) { $script:skipped++; "SKIP  {0}  -> {1}" -f (OneLine $what), (OneLine $why) }
-function Note($text) { "note  $(OneLine $text)" }
+function Skip($what, $why) { $script:skipped++; "SKIP  {0}  -> {1}{2}" -f (OneLine $what), (OneLine $why), $script:iteration }
+function Note($text) { "note  $(OneLine $text)$script:iteration" }
 # How every journey ends, including badly. A journey that could not be driven - a control that was
 # not on screen, a button the application had greyed out, a prerequisite another journey failed to
 # produce - raises `throw 'SKIP: reason'` and is reported as SKIP, with the reason. Anything else
@@ -460,6 +495,140 @@ function AccRole($acc, $child) {
     try { return [string]$acc.GetType().InvokeMember('accRole', 'GetProperty', $null, $acc, @($child)) } catch { return '' }
 }
 
+# --- the canvas, through the page itself ------------------------------------------------------
+#
+# Everything above asks UI Automation. These ask the page, over the DevTools protocol, because the
+# canvas is not in the accessibility tree to be asked about: see the note at the top of this file
+# and the header of scripts/verify/cdp.mjs. Three rules hold for everything below.
+#
+#   * No double quote ever appears in an expression. PowerShell hands a native command its
+#     arguments as a command line, and a double quote inside one is the one character that does not
+#     survive that reliably. JavaScript has single quotes; these use them. The check is enforced
+#     rather than remembered.
+#   * A PowerShell variable interpolated into one of these strings is never followed by `?`. In a
+#     double-quoted string `$beforeCount?c:0` is not "the variable, then a ternary": PowerShell
+#     reads on past the `?` and the `:` and expands the whole of it to nothing, so
+#     `return c>$beforeCount?c:0;` reaches the page as `return c>;`, the page answers with a
+#     SyntaxError, and the harness reports "the step count did not move" about an expression that
+#     was never valid. It cost an hour once. Interpolations here are followed by `;`, `)` or a
+#     space, and the ternaries that are left have no variable in front of them.
+#   * These functions return values and print nothing, for the reason given above Report: a
+#     function that writes to the success stream cannot also hand a value back. What went wrong is
+#     left in $script:cdpError for the caller to report.
+$script:cdpError = ''
+$script:cdpHelper = Join-Path $PSScriptRoot 'cdp.mjs'
+$script:nodeExe = $null
+try { $script:nodeExe = (Get-Command node -ErrorAction Stop).Source } catch { $script:nodeExe = $null }
+
+function CdpRun($mode, $expression, $timeoutMs) {
+    $script:cdpError = ''
+    if (-not $script:nodeExe) {
+        $script:cdpError = 'node is not on PATH, so the page cannot be asked anything'
+        return $null
+    }
+    if ($expression -like '*"*') {
+        $script:cdpError = "the expression contains a double quote, which does not survive the command line: $expression"
+        return $null
+    }
+    $out = ''
+    try {
+        if ($mode -eq 'wait') {
+            $out = & $script:nodeExe $script:cdpHelper '--port' "$CdpPort" 'wait' $expression '--timeout-ms' "$timeoutMs" '--interval-ms' '100'
+        } else {
+            $out = & $script:nodeExe $script:cdpHelper '--port' "$CdpPort" 'eval' $expression
+        }
+    } catch {
+        $script:cdpError = "$($_.Exception.GetType().Name): $($_.Exception.Message)"
+        return $null
+    }
+    $text = ($out -join '').Trim()
+    if ($LASTEXITCODE -ne 0) {
+        $script:cdpError = if ($text) { $text } else { "cdp.mjs exited $LASTEXITCODE with no output" }
+        return $null
+    }
+    if ($text -eq '') { $script:cdpError = 'cdp.mjs printed nothing'; return $null }
+    try { return (ConvertFrom-Json $text) } catch {
+        $script:cdpError = "cdp.mjs printed something that is not JSON: $text"
+        return $null
+    }
+}
+# One evaluation. $null back means either the expression evaluated to null or it could not be
+# evaluated at all, and $script:cdpError is what tells those apart - they are different answers.
+function Cdp-Eval($expression) { return (CdpRun 'eval' $expression 0) }
+# Polls until the expression is truthy. This is what replaces a fixed sleep: the condition itself
+# is what is waited on, so a fast machine does not wait and a slow one is not cut off.
+function Cdp-Wait($expression, $timeoutMs) { return (CdpRun 'wait' $expression $timeoutMs) }
+
+# The store's own count of steps, read off the status bar. App.tsx renders it from `nodes.length`
+# into the FIRST span of `footer.statusbar`; the spans after it are run counts and messages, so the
+# first one is asked for by name rather than the bar being scraped whole. Immune to the culling
+# that makes the DOM lie about how many nodes are mounted. -1 means the bar was not on screen.
+$CDP_STEP_COUNT = "(()=>{const s=document.querySelector('footer.statusbar > span');if(!s)return -1;const m=s.innerText.match(/[0-9]+/);return m?Number(m[0]):-1;})()"
+function CdpStepCount { return (Cdp-Eval $CDP_STEP_COUNT) }
+# Every step React Flow currently has mounted, by the id the store gave it.
+$CDP_CANVAS_IDS = "[...document.querySelectorAll('.react-flow__node[data-id]')].map(e=>e.getAttribute('data-id'))"
+function CdpCanvasIds { return @(Cdp-Eval $CDP_CANVAS_IDS) }
+# Fit View, so that a step placed outside the viewport is mounted again before it is looked for.
+$CDP_FIT_VIEW = "(()=>{const b=document.querySelector('.react-flow__controls-fitview');if(!b)return false;b.click();return true;})()"
+function CdpFitView { return (Cdp-Eval $CDP_FIT_VIEW) }
+# The WHOLE graph, not the part of it that happens to be in view.
+#
+# This is the only way the canvas may be read, and the reason is a real wrong answer. Taking a
+# before-set while two steps were culled and an after-set once Fit View had mounted them again
+# made the set difference {write-3, write-4, json-5} and the harness named `write-3` as the step
+# just placed - a step that had been on the canvas the whole time. Both sides of every comparison
+# are read through here, so both are the same graph.
+#
+# What says Fit View has finished is not a delay: it is the DOM agreeing with the store about how
+# many steps there are. The two disagree exactly while something is culled.
+function CdpFittedCanvasIds {
+    [void](CdpFitView)
+    [void](Cdp-Wait "(()=>{const s=document.querySelector('footer.statusbar > span');if(!s)return false;const m=s.innerText.match(/[0-9]+/);const want=m?Number(m[0]):-1;const have=document.querySelectorAll('.react-flow__node[data-id]').length;return want>=0&&have===want;})()" 6000)
+    return @(CdpCanvasIds)
+}
+function CdpInspectorText { return (Cdp-Eval "(document.querySelector('.panel--inspector')||{innerText:''}).innerText") }
+# The assertion that the oracle is not reading the thing it is meant to be checking. The palette
+# item carries the component reference in its own title, so an oracle that read the palette would
+# report the reference back whether or not anything was placed - which is exactly the mistake this
+# harness made once before (`FindText '(Parse JSON)'` matching the button that had just been
+# pressed). Answers 'clean', or names what is wrong.
+$CDP_ORACLE_IS_CLEAN = "(()=>{const p=document.querySelector('.panel--palette');if(!p)return 'the palette panel is not on screen at all';const roots={statusbar:document.querySelector('footer.statusbar > span'),inspector:document.querySelector('.panel--inspector'),canvas:document.querySelector('.react-flow')};for(const k of Object.keys(roots)){const r=roots[k];if(!r)continue;if(p.contains(r)||r.contains(p))return 'the palette and the '+k+' are the same region';if(r.querySelectorAll('.palette-item').length>0)return 'the '+k+' contains palette items';}return 'clean';})()"
+function CdpOracleIsClean { return (Cdp-Eval $CDP_ORACLE_IS_CLEAN) }
+# What id the store will give a step of this component. `makeId` (store.ts) takes the reference,
+# drops the version, takes the last dotted segment and appends a counter - so a step of
+# `encastra.data.json@1.0.0` is `json-1`, `json-2`, and a step of `encastra.file.save@1.0.0` is
+# `save-1`. That is not decoration: it is what lets the canvas be asked whether the step that
+# appeared is the step that was asked for, rather than merely a step.
+function StepIdPattern($componentId) { return ('^' + (($componentId -split '\.')[-1]) + '-[0-9]+$') }
+# The one place the canvas is asked "did exactly the step I asked for appear". Shared by PlaceStep
+# and by the self test so that the two cannot drift, which is how the culled before-set got past a
+# reviewer once already. Prints its line; the answer is in $script:freshStep.
+#
+# Three things, and all three are needed. One new id, because two would mean this cannot say which
+# one was placed. The id matching the pattern the store derives from the reference that was
+# activated, because "some step appeared" is not "this step appeared". And a real rectangle for its
+# `#node-<id>`, because a node in the DOM with no box is not on the canvas in any sense a person
+# would recognise.
+$script:freshStep = $null
+function ReportFreshStep($what, $beforeIds, $componentId) {
+    $script:freshStep = $null
+    $expected = StepIdPattern $componentId
+    $afterIds = CdpFittedCanvasIds
+    $fresh = @($afterIds | Where-Object { $beforeIds -notcontains $_ })
+    $named = ($fresh.Count -eq 1 -and $fresh[0] -match $expected)
+    $drawn = $false
+    if ($named) {
+        $drawn = ((Cdp-Wait "(()=>{for(const w of document.querySelectorAll('.react-flow__node[data-id]')){if(w.getAttribute('data-id')!=='$($fresh[0])')continue;const e=w.querySelector('[id^=node-]');if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;}return false;})()" 6000) -eq $true)
+    }
+    if ($named -and $drawn) { $script:freshStep = $fresh[0] }
+    Report ($named -and $drawn) "$what exactly one new step is on the canvas and it is a step of $componentId" ("new ids [" + ($fresh -join ', ') + "] against $expected, which is what makeId derives from the reference that was activated; drawn=$drawn; the whole graph after Fit View is [" + ($afterIds -join ', ') + "], and it was [" + ($beforeIds -join ', ') + "] before - both read after Fit View, so nothing that was merely culled can count as new")
+}
+# Whether the sidebar says this is the view we are on. `aria-current='page'` is the interface's own
+# statement about that, which is a better thing to wait for than a fixed number of milliseconds.
+function CdpOnView($jsPattern) {
+    return (Cdp-Wait "(()=>{const i=[...document.querySelectorAll('.sidebar__item')].find(e=>new RegExp('$jsPattern').test(e.innerText.trim()));return i?i.getAttribute('aria-current')==='page':false;})()" 8000)
+}
+
 # Is the Inspector configuring a step of this component? `Inspector()` returns the empty panel
 # unless `selectedNodeId` names a node that is really in `nodes` (Inspector.tsx:516), and when it
 # does not it prints the component reference - `encastra.data.json@1.0.0` - into a `<dd>`. So a
@@ -477,19 +646,6 @@ function InspectorShows($pattern) {
         }
     } catch { }
     return $null
-}
-# The two independent answers to "did a step get placed", polled together: a new id on the canvas,
-# and the Inspector configuring the step. Returns them both rather than printing, so the caller
-# can report which one it got.
-function StepEvidence($before, $refPattern, $ticks) {
-    $fresh = @(); $shown = $null
-    for ($i = 0; $i -lt $ticks; $i++) {
-        $fresh = @(@(PlacedStepIds) | Where-Object { $before -notcontains $_ })
-        $shown = InspectorShows $refPattern
-        if ($fresh.Count -gt 0 -or $shown) { break }
-        Start-Sleep -Milliseconds 300
-    }
-    return @{ Ids = $fresh; Shown = $shown }
 }
 
 # The three ways to activate a control, most ordinary first. Each writes a note saying what it did
@@ -567,74 +723,115 @@ function ActivateRoute($item, $n, $what) {
 # `FindText '(Parse JSON)'` matches the palette button that was just pressed, so it would have
 # said "a step is on the canvas" with an empty canvas.
 #
-# Asking the first question honestly then failed every time, in every run, which leaves two
-# possibilities and the run has to say which:
+# Asking the first question through UI Automation then failed in every run, and the negative was a
+# measurement artefact rather than a product failure: Chromium publishes a div with no ARIA role as
+# role `generic` with an empty name and no AutomationId, so an element whose AutomationId is
+# `node-<id>` cannot exist in that tree at all. That is now established rather than suspected - a
+# dump of the whole accessibility tree of the Builder references `node-*` nowhere - and it is why
+# the oracle below asks the page instead. PlacedStepIds is kept, but only as the diagnostic it
+# always was: what UI Automation can and cannot see about the canvas.
 #
-#   * nothing was placed - the click never reached React, or `addNode` returned early on a
-#     manifest that is not in the map (store.ts:328); or
-#   * a step was placed and the canvas does not publish it. ComponentNode gives each step
-#     `id="node-<id>"` and, deliberately, no ARIA role (ComponentNode.tsx:131 and the comment
-#     above it), and a div with no role is a generic container Chromium is free to leave out of
-#     the accessibility tree altogether - in which case the id exists in the page and no client
-#     can see it, and `aria-activedescendant` points at something nothing can reach.
+# Three things have to hold, and all three are asked of the store or of the page, never of the
+# palette. The palette item is the ROUTE - the button that gets pressed - and the pass criterion is
+# the oracle, so a route that works is not evidence and a route that does not is not a failure.
 #
-# Those are different findings with different owners, so they are reported as different lines and
-# the second one is not allowed to masquerade as the first. The Inspector is what tells them
-# apart: it renders the empty panel unless `selectedNodeId` names a node that is really in `nodes`
-# (Inspector.tsx:516), and `addNode` selects what it placed (store.ts:355). So the Inspector
-# showing this component's reference is the store stating that a node was added - which is the
-# precondition journeys 2, 4 and 5 actually need, whether or not the canvas publishes an id.
+#   1. the store's own step count, off the status bar, is exactly one higher than before. This is
+#      the culling-immune witness: React Flow unmounts nodes outside the viewport, so the DOM can
+#      be honest and still not hold the node.
+#   2. exactly one `.react-flow__node[data-id]` that was not there before, carrying the id the
+#      store derives from the reference that was activated (`json-5` for `encastra.data.json`),
+#      with a real rectangle for its inner `#node-<id>`. Fit View is clicked before BOTH readings,
+#      because `addNode` places each step at `rightmost.x + 260` and React Flow unmounts what falls
+#      outside the viewport: a before-set read while two steps were culled and an after-set read
+#      once Fit View had brought them back differ by three ids, only one of which is new, and the
+#      harness named the wrong one. See CdpFittedCanvasIds.
+#   3. the Inspector is configuring what was placed - the component reference, in the panel, seen
+#      twice over: by the page (`.panel--inspector` innerText) and by UI Automation (the Text
+#      element InspectorShows finds). Two independent observers of one fact; a disagreement between
+#      them is itself worth knowing.
 #
-# Prints its own results and leaves the answers in $script: variables rather than returning them,
-# for the reason given above Report: a function that writes to the success stream cannot also hand
-# a value back.
-#
-#   $script:placedStep - the canvas id of the step, or $null if the canvas publishes none.
-#   $script:stepPlaced - a step was placed at all, by either witness. What the callers gate on.
+#   $script:placedStep - the canvas id of the step, for the journeys that have to target it.
+#   $script:stepPlaced - a step was placed: 1 and 2. Whether it is also SELECTED is 3, and journeys
+#                        4 and 5 check that for themselves, because it is their precondition.
 $script:placedStep = $null
 $script:stepPlaced = $false
-function PlaceStep($palettePattern, $what, $refPattern) {
+#
+# $componentId is the reference without its version - `encastra.data.json` - and everything the
+# oracle expects is derived from it: the id the store will make (`json-<n>`) and the reference the
+# Inspector has to be showing (`encastra.data.json@<version>`). Derived rather than passed
+# separately so that the two cannot be given a chance to disagree with each other.
+function PlaceStep($palettePattern, $what, $componentId) {
     $script:placedStep = $null
     $script:stepPlaced = $false
-    $before = @(PlacedStepIds)
-    # If the Inspector is already showing this component, the second witness cannot tell this
-    # placement from the last one, and it is not used. Said out loud rather than silently relied on.
-    $alreadyShown = InspectorShows $refPattern
+    $refPattern = [regex]::Escape($componentId) + '@'
+
+    # Before anything is claimed about the oracle, that the oracle is not reading the palette.
+    $clean = CdpOracleIsClean
+    Report ($clean -eq 'clean') "$what the oracle reads the store and the canvas, never the palette" "$clean$(if ($script:cdpError) { " ($script:cdpError)" })"
+
+    $beforeCount = CdpStepCount
+    $beforeIds = CdpFittedCanvasIds
+    if ($null -eq $beforeCount -or $beforeCount -lt 0) {
+        Report $false "$what the step count is readable before anything is placed" "the status bar answered '$beforeCount'$(if ($script:cdpError) { "; $script:cdpError" })"
+        return
+    }
+    Note "$what before: the store says $beforeCount step(s) and the canvas has mounted [$($beforeIds -join ', ')]"
+
     $item = Wait 'Button' $palettePattern 20
     if (-not $item) {
         throw "SKIP: the palette item matching $palettePattern never appeared. $(PaletteDump 30). Ids on screen: $(AutomationIdDump 40)"
     }
     Note "$what the palette item, as UI Automation sees it before it is touched: $(ElementFacts $item)"
     Note "$what $(PaletteDump 30)"
-    if ($alreadyShown) { Note "$what the Inspector was already showing '$alreadyShown' before anything was clicked, so only a new canvas id counts as evidence here" }
 
-    $ev = @{ Ids = @(); Shown = $null }
+    # Route 1 is what a client normally does. The other two are tried only if the count did not
+    # move, and only so that a run where nothing worked says which routes were even possible.
+    $grew = $null
     $used = ''
+    $waitTrouble = ''
     foreach ($n in 1, 2, 3) {
         ActivateRoute $item $n $what
-        $ev = StepEvidence $before $refPattern 24
-        if ($alreadyShown) { $ev.Shown = $null }
-        if ($ev.Ids.Count -gt 0 -or $ev.Shown) { $used = (RouteName $n); break }
-        Note "$what $(RouteName $n) placed nothing: no new canvas id, and the Inspector is saying $(if (InspectorShows '.') { 'something else' } else { 'nothing' })"
+        $grew = Cdp-Wait "(()=>{const s=document.querySelector('footer.statusbar > span');if(!s)return 0;const m=s.innerText.match(/[0-9]+/);const c=m?Number(m[0]):0;if(c>$beforeCount){return c;}return 0;})()" 8000
+        # Read out of $script:cdpError before anything else asks the page, because the next call
+        # clears it. A wait that failed for a reason is a different finding from a wait that
+        # honestly saw nothing, and the reason is gone by the end of the line otherwise.
+        $waitTrouble = $script:cdpError
+        if ($grew) { $used = (RouteName $n); break }
+        Note "$what $(RouteName $n) did not change the store's step count$(if ($waitTrouble) { " - $waitTrouble" }) (it still reads $(CdpStepCount))"
         # React re-renders the palette on every store change, which can leave the element this
         # loop is holding stale; the next route is given a fresh one where there is one.
         $again = Find (AppWindow) 'Button' $palettePattern
         if ($again) { $item = $again }
     }
+    $afterCount = CdpStepCount
+    $counted = ($grew -and $afterCount -eq ($beforeCount + 1))
+    Report $counted "$what the store's step count went up by exactly one" "$beforeCount -> $afterCount after $(if ($used) { $used } else { 'all three routes' })$(if ($waitTrouble) { "; the page said: $waitTrouble" })"
+    if (-not $counted) {
+        Report $false "$what a step is on the canvas" ("the palette item '$($item.Current.Name)' was activated by all three routes and the store never counted a step. The item now: " + (ElementFacts $item) + '. ' + (PaletteDump 30) + '; the interface is saying: ' + (AppNotices 4))
+        return
+    }
 
-    if ($ev.Ids.Count -gt 0) {
-        $script:placedStep = $ev.Ids[0]
+    ReportFreshStep $what $beforeIds $componentId
+    if ($script:freshStep) {
+        $script:placedStep = $script:freshStep
         $script:stepPlaced = $true
-        Report $true "$what a step is on the canvas" "the canvas publishes '$($script:placedStep)' after $used; every id on screen containing node-: $(NodeIdDump)"
-        return
+        Note "$what the canvas calls the step '$script:placedStep'; UI Automation publishes no node-* id for it, by construction: $(NodeIdDump)"
     }
-    if ($ev.Shown) {
-        $script:stepPlaced = $true
-        Report $true "$what the palette placed a step and the Inspector is configuring it" "'$($ev.Shown)' is on screen after $used, which Inspector.tsx:516 only renders for a selectedNodeId that names a node in the graph"
-        Report $false "$what a step is on the canvas, and the canvas says so to UI Automation" ("a step was placed - see the line above - and nothing on screen publishes a node-* automation id. ComponentNode.tsx:131 gives each step id='node-<id>' and the canvas points aria-activedescendant at it, so a client that cannot see the id cannot follow the selection. Ids containing node-: " + (NodeIdDump) + '; steps UI Automation can see: ' + (PlacedStepsDump))
-        return
-    }
-    Report $false "$what a step is on the canvas" ("the palette item '$($item.Current.Name)' was activated by all three routes and neither witness ever answered: no new node-* id, and the Inspector never showed $refPattern. The item now: " + (ElementFacts $item) + '. ' + (PaletteDump 30) + '. Ids containing node-: ' + (NodeIdDump) + '. Steps UI Automation can see: ' + (PlacedStepsDump) + '; the interface is saying: ' + (AppNotices 4))
+
+    # And the Inspector, twice over. `addNode` selects what it placed (store.ts:355) and
+    # Inspector.tsx renders the empty panel for anything else, so the reference in that panel is
+    # the store saying what it added and that it is the step now being configured.
+    #
+    # It is also the cross-check on the id above: this pattern and the id pattern are both built
+    # from $componentId, so a panel showing some other component's reference fails here even though
+    # a step did appear on the canvas. "Something was placed" and "this was placed" are different
+    # claims and the harness now has to make the second one twice.
+    $wantsRef = "$refPattern[0-9][0-9.]*"
+    $panelText = CdpInspectorText
+    $seenByPage = ''
+    if ($panelText -and ($panelText -match $wantsRef)) { $seenByPage = $Matches[0] }
+    $seenByUia = InspectorShows $refPattern
+    Report ($seenByPage -and $seenByUia) "$what the Inspector is configuring a step of $componentId, seen by the page and by UI Automation" "the page reads '$seenByPage' out of .panel--inspector and UI Automation reads '$(OneLine $seenByUia)'; wanted $wantsRef, the same reference the new id '$script:placedStep' was checked against; the panel currently says: $(OneLine $panelText)"
 }
 # The sentences the interface is showing. A failed save puts its reason in the status bar
 # (store.ts saveProject: `set({ message: { tone: 'error', text: describe(error) } })`), so when a
@@ -662,7 +859,11 @@ function DismissDiscardPrompt {
     if (-not $discard) { return }
     Note 'the application asked about unsaved changes; discarding them so the journey starts from a clean canvas'
     Click $discard
-    Start-Sleep -Milliseconds 900
+    # Waited on rather than slept through: the question is answered when the question is gone.
+    for ($i = 0; $i -lt 24; $i++) {
+        if (-not (Find (AppWindow) 'Button' '^(Descartar los cambios|Discard changes)$')) { break }
+        Start-Sleep -Milliseconds 100
+    }
 }
 # --- the first-run welcome -------------------------------------------------------------------
 #
@@ -704,7 +905,11 @@ function DismissWelcome($what) {
         # that would not go away is reported by the caller reading WelcomeShowing, not by an
         # exception thrown from the middle of the harness's own start-up.
         try { Click $skip } catch { }
-        Start-Sleep -Milliseconds 700
+        # Polled, not slept: what is being waited for is the card going away.
+        for ($j = 0; $j -lt 14; $j++) {
+            if (-not (WelcomeShowing)) { break }
+            Start-Sleep -Milliseconds 100
+        }
         if (-not (WelcomeShowing)) { break }
     }
 }
@@ -1291,67 +1496,170 @@ function ReportChooserClosed($what) {
     if ($left -gt 0) { ForceCloseDialogs }
 }
 
-# --- somewhere to work ------------------------------------------------------------------------
+# --- can the page be asked anything at all ----------------------------------------------------
+#
+# A harness precondition, not a journey. The canvas oracle is the whole point of this run, and
+# without the DevTools protocol there is no oracle - so this is reported as a FAIL and the run
+# stops. It is never a SKIP: a skip that exits 0 is a pass wearing a hat, and a skip on the one
+# check the rest of the file rests on would be worse than that.
+$cdpTitle = Cdp-Eval 'document.title'
+$cdpOk = ($null -ne $cdpTitle -and -not $script:cdpError)
+Report $cdpOk 'CDP reachable' $(if ($cdpOk) { "node $($script:nodeExe) is talking to the page titled '$cdpTitle' on 127.0.0.1:$CdpPort" } else { "$script:cdpError - the application has to be started with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=$CdpPort, and node has to be on PATH (found: $(if ($script:nodeExe) { $script:nodeExe } else { 'nothing' }))" })
+if (-not $cdpOk) {
+    "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  (the page could not be reached, so the canvas cannot be observed)"
+    exit 1
+}
 
+# --- the CDP half of this file, on its own -----------------------------------------------------
+#
+# -SelfTest exercises the parts that talk to the page and nothing else: no UI Automation, no native
+# dialog, no window raised. It is therefore safe on a desktop somebody is using, which is where the
+# rest of this file is not. It places one step by clicking the palette item in the DOM - the route
+# does not matter here, the oracle does - and reports what the oracle saw. It leaves that step on
+# whatever project is open.
+function RunSelfTest {
+    '--- self test: the page, the canvas oracle, and nothing native ---'
+    $wentTo = CdpOnView '^(Constructor|Builder)$'
+    Report ($wentTo -eq $true) 'self test: the Builder is the view on screen' "$(if ($wentTo) { 'the sidebar marks it aria-current=page' } else { "could not get there: $script:cdpError" })"
+    if (-not $wentTo) {
+        [void](Cdp-Eval "(()=>{const i=[...document.querySelectorAll('.sidebar__item')].find(e=>/Constructor|Builder/.test(e.innerText));if(i)i.click();return !!i;})()")
+        $wentTo = CdpOnView '^(Constructor|Builder)$'
+        Report ($wentTo -eq $true) 'self test: the Builder opened when the sidebar item was clicked' "aria-current=page: $wentTo"
+        if (-not $wentTo) { return }
+    }
+
+    $clean = CdpOracleIsClean
+    Report ($clean -eq 'clean') 'self test: the oracle reads the store and the canvas, never the palette' "$clean"
+
+    # Whatever the palette is offering first, taken from the page rather than assumed, so this runs
+    # against any build. The reference without its version is what everything downstream expects:
+    # the id the store will make and the reference the Inspector has to show.
+    $componentId = Cdp-Eval "(()=>{const b=document.querySelector('.palette-item');if(!b)return '';return (b.title||'').split('@')[0];})()"
+    Report ([bool]$componentId) 'self test: the palette is offering a component to place' "'$componentId'"
+    if (-not $componentId) { return }
+
+    $beforeCount = CdpStepCount
+    # Read after Fit View, exactly as PlaceStep does, so a culled step cannot turn up in the set
+    # difference later and be reported as the one just placed.
+    $beforeIds = CdpFittedCanvasIds
+    $ref = Cdp-Eval "(()=>{const b=document.querySelector('.palette-item');if(!b)return '';b.click();return b.title.split(String.fromCharCode(10))[0];})()"
+    Report ([bool]$ref) 'self test: a palette item was activated in the page' "'$ref' (this is the route, not the oracle)"
+    if (-not $ref) { return }
+
+    $grew = Cdp-Wait "(()=>{const s=document.querySelector('footer.statusbar > span');if(!s)return 0;const m=s.innerText.match(/[0-9]+/);const c=m?Number(m[0]):0;if(c>$beforeCount){return c;}return 0;})()" 8000
+    # The page's own complaint is read out before anything else asks the page anything: the next
+    # call clears it.
+    $waitTrouble = $script:cdpError
+    Report ($grew -eq ($beforeCount + 1)) 'self test: the store step count went up by exactly one' "the wait answered '$grew'$(if ($waitTrouble) { "; the page said: $waitTrouble" }); the bar went $beforeCount -> $(CdpStepCount)"
+
+    # The same function PlaceStep uses, not a copy of it. A copy is how the culled before-set
+    # survived being reviewed: it was fixed in one place and left standing in the other.
+    ReportFreshStep 'self test:' $beforeIds $componentId
+
+    $wantsRef = [regex]::Escape($componentId) + '@[0-9][0-9.]*'
+    $panelText = CdpInspectorText
+    $seen = ''
+    if ($panelText -and ($panelText -match $wantsRef)) { $seen = $Matches[0] }
+    Report ([bool]$seen) "self test: the Inspector is configuring a step of $componentId" "the panel reads '$seen'; wanted $wantsRef, the same reference the new id '$script:freshStep' was checked against. The panel currently says: $(OneLine $panelText)"
+}
+if ($SelfTest) {
+    RunSelfTest
+    "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=1  (self test: CDP only, no UI Automation)"
+    if ($script:failed -gt 0) { exit 1 }
+    if ($script:skipped -gt 0) { exit 2 }
+    exit 0
+}
+
+# --- somewhere to work ------------------------------------------------------------------------
+#
+# One of these per iteration, so that a second run of the suite cannot be reading the first run's
+# folders or importing the first run's publication and calling it evidence.
+#
 # Not under TEMP. A hosted runner hands the process `C:\Users\RUNNER~1\AppData\Local\Temp` - the
 # 8.3 short form - and every path the application gives back has been canonicalised, so the two
 # never match as strings. USERPROFILE has no short form to expand, and LongPath expands it anyway
 # if some other machine disagrees. SamePath is still what the journeys compare with; this only
 # stops the log being full of two spellings of the same folder.
-$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$sandbox = Join-Path (Join-Path (LongPath $env:USERPROFILE) 'encastra-journeys') $stamp
-$projectsLocation = Join-Path $sandbox 'projects-location'
-$publishInto = Join-Path $sandbox 'publish-into'
-$grantFolder = Join-Path $sandbox 'grant-to-component'
-$inputFolder = Join-Path $sandbox 'run-input'
-$junctionTarget = Join-Path $sandbox 'junction-target'
-$junction = Join-Path $sandbox 'junction-link'
-$missing = Join-Path $sandbox 'this-folder-does-not-exist'
-foreach ($d in @($sandbox, $projectsLocation, $publishInto, $grantFolder, $inputFolder, $junctionTarget)) {
-    New-Item -ItemType Directory -Force -Path $d | Out-Null
+function NewSandbox($tag) {
+    $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss') + $tag
+    $script:sandbox = Join-Path (Join-Path (LongPath $env:USERPROFILE) 'encastra-journeys') $stamp
+    $script:projectsLocation = Join-Path $script:sandbox 'projects-location'
+    $script:publishInto = Join-Path $script:sandbox 'publish-into'
+    $script:grantFolder = Join-Path $script:sandbox 'grant-to-component'
+    $script:inputFolder = Join-Path $script:sandbox 'run-input'
+    $script:junctionTarget = Join-Path $script:sandbox 'junction-target'
+    $script:junction = Join-Path $script:sandbox 'junction-link'
+    $script:missing = Join-Path $script:sandbox 'this-folder-does-not-exist'
+    foreach ($d in @($script:sandbox, $script:projectsLocation, $script:publishInto, $script:grantFolder, $script:inputFolder, $script:junctionTarget)) {
+        New-Item -ItemType Directory -Force -Path $d | Out-Null
+    }
+    $script:inputFile = Join-Path $script:inputFolder 'evidence.txt'
+    Set-Content -Path $script:inputFile -Value 'evidence for the run-input journey' -Encoding ASCII
+    $script:projectFile = Join-Path $script:sandbox 'journeys.encastra'
+    "sandbox $script:sandbox"
+    # Said out loud because everything the journeys compare rests on it: if a `~` survived here,
+    # the harness and the application would be spelling the same folder two ways.
+    Report (-not ($script:sandbox -like '*~*')) 'the sandbox path carries no 8.3 short name' "$script:sandbox"
+
+    $script:junctionMade = $false
+    try {
+        cmd /c mklink /J "$script:junction" "$script:junctionTarget" | Out-Null
+        $script:junctionMade = Test-Path $script:junction
+    } catch { $script:junctionMade = $false }
 }
-$inputFile = Join-Path $inputFolder 'evidence.txt'
-Set-Content -Path $inputFile -Value 'evidence for the run-input journey' -Encoding ASCII
-$projectFile = Join-Path $sandbox 'journeys.encastra'
-"sandbox $sandbox"
-# Said out loud because everything the journeys compare rests on it: if a `~` survived here, the
-# harness and the application would be spelling the same folder two ways.
-Report (-not ($sandbox -like '*~*')) 'the sandbox path carries no 8.3 short name' "$sandbox"
 
-$junctionMade = $false
-try {
-    cmd /c mklink /J "$junction" "$junctionTarget" | Out-Null
-    $junctionMade = Test-Path $junction
-} catch { $junctionMade = $false }
+# --- the state every iteration starts from -----------------------------------------------------
+#
+# The second iteration is the one that finds what the first one left: a project with a path, so
+# Save would not ask for one, and a canvas with journey 4's step still on it. The interface's own
+# New is what clears that - the same route journey 4 already uses, with the same discard question
+# answered the same way - and the store's own step count is what says it worked.
+function ResetProject($what) {
+    EnsureNoDialogs $what
+    DismissWelcome $what
+    [void](GoTo '^(Constructor|Builder)$' 'Builder')
+    $new = Wait 'Button' '^(Nuevo|New)$' 10
+    if ($new) { Click $new }
+    DismissDiscardPrompt
+    DismissWelcome "$what after the unsaved-changes question"
+    $empty = Cdp-Wait "(()=>{const s=document.querySelector('footer.statusbar > span');if(!s)return false;const m=s.innerText.match(/[0-9]+/);return m&&Number(m[0])===0;})()" 10000
+    Report ($empty -eq $true) "$what the canvas is empty before the journeys start" "the store says $(CdpStepCount) step(s)"
+}
 
-# A chooser left open by an earlier attempt would block everything below - it is modal to the
-# application, so every button underneath it reads as disabled.
-EnsureNoDialogs 'harness start'
+function HarnessStart {
+    # A chooser left open by an earlier attempt would block everything below - it is modal to the
+    # application, so every button underneath it reads as disabled.
+    EnsureNoDialogs 'harness start'
 
-$win = AppWindow
-Report ($null -ne $win) 'main window found' "$($win.Current.Name) class=$($win.Current.ClassName)"
-if ($win) { [void][W32]::SetForegroundWindow((Hwnd $win)) }
+    $win = AppWindow
+    Report ($null -ne $win) 'main window found' "$($win.Current.Name) class=$($win.Current.ClassName)"
+    if ($win) { [void][W32]::SetForegroundWindow((Hwnd $win)) }
 
-# Before anything is looked for, because while the first-run welcome has focus there is nothing
-# to look for: an aria-modal dialog takes the rest of the document out of the accessibility tree.
-# On a machine where the application has never been opened by hand - a hosted runner, every time
-# - this is what is on screen at start-up.
-DismissWelcome 'harness start'
-$welcomeCleared = -not (WelcomeShowing)
-Report $welcomeCleared 'the first-run welcome is not standing in front of the interface' $(if ($welcomeCleared) { 'not on screen' } else { 'still on screen, so nothing behind it is in the accessibility tree: ' + (AutomationIdDump 20) })
+    # Before anything is looked for, because while the first-run welcome has focus there is nothing
+    # to look for: an aria-modal dialog takes the rest of the document out of the accessibility
+    # tree. On a machine where the application has never been opened by hand - a hosted runner,
+    # every time - this is what is on screen at start-up.
+    DismissWelcome 'harness start'
+    $welcomeCleared = -not (WelcomeShowing)
+    Report $welcomeCleared 'the first-run welcome is not standing in front of the interface' $(if ($welcomeCleared) { 'not on screen' } else { 'still on screen, so nothing behind it is in the accessibility tree: ' + (AutomationIdDump 20) })
 
-$sidebarSettings = Wait 'Button' '^(Ajustes|Settings)$' 30
-Report ($null -ne $sidebarSettings) 'sidebar exposed to UI Automation' "settings item: '$($sidebarSettings.Current.Name)'"
-if (-not $sidebarSettings) {
-    "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  (harness could not reach the interface)"
-    exit 1
+    $sidebarSettings = Wait 'Button' '^(Ajustes|Settings)$' 30
+    Report ($null -ne $sidebarSettings) 'sidebar exposed to UI Automation' "settings item: '$($sidebarSettings.Current.Name)'"
+    if (-not $sidebarSettings) {
+        "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  (harness could not reach the interface)"
+        exit 1
+    }
 }
 
 function GoTo($pattern, $what) {
     $item = Wait 'Button' $pattern 15
     if (-not $item) { Report $false "navigate to $what" 'sidebar item not found'; return $false }
     Click $item
-    Start-Sleep -Milliseconds 900
+    # The interface's own statement that this is the view we are on - the sidebar item carries
+    # aria-current='page' - rather than a fixed 900ms and a hope. The navigation patterns in this
+    # file are alternations of two plain words, which is a regular expression JavaScript reads the
+    # same way PowerShell does.
+    [void](CdpOnView $pattern)
     return $true
 }
 
@@ -1361,76 +1669,78 @@ function GoTo($pattern, $what) {
 # First on purpose. This is the one purpose that has been driven before, and it gates nothing:
 # if it fails, the harness is broken rather than the feature.
 # =============================================================================================
-"--- journey 1: projects-location (Settings -> Projects -> Browse) ---"
-try {
-    EnsureNoDialogs 'j1 before'
-    DismissWelcome 'j1 before'
-    [void](GoTo '^(Ajustes|Settings)$' 'Settings')
-    $projectsNav = Wait 'Button' '^(Proyectos|Projects)' 10
-    Report ($null -ne $projectsNav) 'j1 Settings nav Projects found' "'$($projectsNav.Current.Name)'"
-    Click $projectsNav
-    Start-Sleep -Milliseconds 800
+function Journey1 {
+    "--- journey 1: projects-location (Settings -> Projects -> Browse) ---"
+    try {
+        EnsureNoDialogs 'j1 before'
+        DismissWelcome 'j1 before'
+        [void](GoTo '^(Ajustes|Settings)$' 'Settings')
+        $projectsNav = Wait 'Button' '^(Proyectos|Projects)' 10
+        Report ($null -ne $projectsNav) 'j1 Settings nav Projects found' "'$($projectsNav.Current.Name)'"
+        Click $projectsNav
+        Start-Sleep -Milliseconds 800
 
-    $field = ById 'pref-project-folder'
-    $before = ValueOf $field
-    $browse = Wait 'Button' '(Examinar|Browse)' 10
-    Report ($null -ne $browse -and -not $browse.Current.IsOffscreen) 'j1 Browse button on screen' "'$($browse.Current.Name)' enabled=$($browse.Current.IsEnabled)"
+        $field = ById 'pref-project-folder'
+        $before = ValueOf $field
+        $browse = Wait 'Button' '(Examinar|Browse)' 10
+        Report ($null -ne $browse -and -not $browse.Current.IsOffscreen) 'j1 Browse button on screen' "'$($browse.Current.Name)' enabled=$($browse.Current.IsEnabled)"
 
-    # Cancel: nothing chosen, nothing recorded, the preference untouched.
-    Click $browse
-    $dlg = WaitDialog 10
-    Report ($null -ne $dlg) 'j1 chooser opened for projects-location' "'$($dlg.Current.Name)'"
-    CancelChooser $dlg 'j1'
-    $afterCancel = ValueOf (ById 'pref-project-folder')
-    Report ($afterCancel -eq $before) 'j1 preference unchanged after Cancel' "'$afterCancel'"
-
-    # Confirm: the path comes back into the preference exactly.
-    Click (MustFind (Wait 'Button' '(Examinar|Browse)' 10) 'the Browse button did not come back after the cancelled chooser')
-    $dlg = WaitDialog 10
-    ConfirmChooser $dlg $projectsLocation 'j1' 'folder'
-    ReportChooserClosed 'j1'
-    Start-Sleep -Milliseconds 800
-    $after = ValueOf (ById 'pref-project-folder')
-    # SamePath, not `-eq`: the preference holds what `resolve_grant_directory` canonicalised, and
-    # the harness's own string may be a short-name spelling of the same folder. A different folder
-    # still fails - what is removed is the spelling, not the difference.
-    Report (SamePath $after $projectsLocation) 'j1 chosen folder became the projects preference' "'$after' (expected the same folder as '$projectsLocation')"
-
-    # Negative, junction: choose_folder canonicalises before it records (lib.rs, resolve_grant_
-    # directory), so a junction must come back as the folder it points at. If the link's own path
-    # came back, what was recorded and what the person chose would be two different places.
-    #
-    # Resolving the link to its target IS the pass condition, and the line below says so rather
-    # than leaving it to be inferred. Refusing the link outright is the other acceptable answer -
-    # both are the runtime declining to record one folder under another folder's name. The only
-    # failure is the link path coming back unresolved, or nothing being said at all.
-    if (-not $junctionMade) {
-        Skip 'j1 junction resolves to its target' 'mklink /J was refused on this machine'
-    } else {
-        Click (MustFind (Wait 'Button' '(Examinar|Browse)' 10) 'the Browse button was not on screen for the junction probe')
+        # Cancel: nothing chosen, nothing recorded, the preference untouched.
+        Click $browse
         $dlg = WaitDialog 10
-        ConfirmChooser $dlg $junction 'j1-junction' 'folder'
-        $closed = $script:chooserClosed
-        if (-not $closed) { ForceCloseDialogs }
-        Start-Sleep -Milliseconds 900
-        $afterLink = ValueOf (ById 'pref-project-folder')
-        $refusal = FindText '(cannot be used|no se puede usar|not a folder on this machine|no es una carpeta)' 2
-        if (-not $script:chooserConfirmed) {
-            Skip 'j1 junction resolves to its target' 'the chooser could not be driven, so the link was never offered to it'
-        } elseif (SamePath $afterLink $junctionTarget) {
-            Report $true 'j1 junction resolved to its target, not the link (resolving is the pass)' "the preference holds the target '$afterLink', not the link '$junction'"
-        } elseif (SamePath $afterLink $junction) {
-            Report $false 'j1 junction resolved to its target, not the link (resolving is the pass)' "the link path came back unresolved: '$afterLink'"
-        } elseif ($refusal) {
-            Report $true 'j1 junction refused rather than followed' "'$refusal'"
+        Report ($null -ne $dlg) 'j1 chooser opened for projects-location' "'$($dlg.Current.Name)'"
+        CancelChooser $dlg 'j1'
+        $afterCancel = ValueOf (ById 'pref-project-folder')
+        Report ($afterCancel -eq $before) 'j1 preference unchanged after Cancel' "'$afterCancel'"
+
+        # Confirm: the path comes back into the preference exactly.
+        Click (MustFind (Wait 'Button' '(Examinar|Browse)' 10) 'the Browse button did not come back after the cancelled chooser')
+        $dlg = WaitDialog 10
+        ConfirmChooser $dlg $projectsLocation 'j1' 'folder'
+        ReportChooserClosed 'j1'
+        Start-Sleep -Milliseconds 800
+        $after = ValueOf (ById 'pref-project-folder')
+        # SamePath, not `-eq`: the preference holds what `resolve_grant_directory` canonicalised, and
+        # the harness's own string may be a short-name spelling of the same folder. A different folder
+        # still fails - what is removed is the spelling, not the difference.
+        Report (SamePath $after $projectsLocation) 'j1 chosen folder became the projects preference' "'$after' (expected the same folder as '$projectsLocation')"
+
+        # Negative, junction: choose_folder canonicalises before it records (lib.rs, resolve_grant_
+        # directory), so a junction must come back as the folder it points at. If the link's own path
+        # came back, what was recorded and what the person chose would be two different places.
+        #
+        # Resolving the link to its target IS the pass condition, and the line below says so rather
+        # than leaving it to be inferred. Refusing the link outright is the other acceptable answer -
+        # both are the runtime declining to record one folder under another folder's name. The only
+        # failure is the link path coming back unresolved, or nothing being said at all.
+        if (-not $junctionMade) {
+            Skip 'j1 junction resolves to its target' 'mklink /J was refused on this machine'
         } else {
-            Report $false 'j1 junction resolved to its target, not the link (resolving is the pass)' "chooser closed=$closed, the preference now holds '$afterLink' - neither the target '$junctionTarget' nor the link '$junction' - and no refusal is on screen"
+            Click (MustFind (Wait 'Button' '(Examinar|Browse)' 10) 'the Browse button was not on screen for the junction probe')
+            $dlg = WaitDialog 10
+            ConfirmChooser $dlg $junction 'j1-junction' 'folder'
+            $closed = $script:chooserClosed
+            if (-not $closed) { ForceCloseDialogs }
+            Start-Sleep -Milliseconds 900
+            $afterLink = ValueOf (ById 'pref-project-folder')
+            $refusal = FindText '(cannot be used|no se puede usar|not a folder on this machine|no es una carpeta)' 2
+            if (-not $script:chooserConfirmed) {
+                Skip 'j1 junction resolves to its target' 'the chooser could not be driven, so the link was never offered to it'
+            } elseif (SamePath $afterLink $junctionTarget) {
+                Report $true 'j1 junction resolved to its target, not the link (resolving is the pass)' "the preference holds the target '$afterLink', not the link '$junction'"
+            } elseif (SamePath $afterLink $junction) {
+                Report $false 'j1 junction resolved to its target, not the link (resolving is the pass)' "the link path came back unresolved: '$afterLink'"
+            } elseif ($refusal) {
+                Report $true 'j1 junction refused rather than followed' "'$refusal'"
+            } else {
+                Report $false 'j1 junction resolved to its target, not the link (resolving is the pass)' "chooser closed=$closed, the preference now holds '$afterLink' - neither the target '$junctionTarget' nor the link '$junction' - and no refusal is on screen"
+            }
         }
+    } catch {
+        JourneyEnded $_ 'j1 projects-location journey ran to the end'
     }
-} catch {
-    JourneyEnded $_ 'j1 projects-location journey ran to the end'
+    EnsureNoDialogs 'j1 after'
 }
-EnsureNoDialogs 'j1 after'
 
 # =============================================================================================
 # JOURNEY 2 - publish-into (panels/Publish.tsx:108)
@@ -1440,116 +1750,120 @@ EnsureNoDialogs 'j1 after'
 # the journey has to build and save one first. One Parse JSON step: it asks for no capability,
 # so the review has nothing blocking to say and the chooser is what is under test.
 # =============================================================================================
-"--- journey 2: publish-into (Builder -> Publish -> Prepare) ---"
-$preparedFolder = $null
-try {
-    EnsureNoDialogs 'j2 before'
-    DismissWelcome 'j2 before'
-    [void](GoTo '^(Constructor|Builder)$' 'Builder')
-    # `FindText '(Parse JSON)'` used to stand here, and it matched the palette button that had
-    # just been pressed - so it would have reported "a step is on the canvas" with an empty
-    # canvas. What is asked instead is whether the canvas publishes a step of its own. Not fatal
-    # to this journey if it does not: what journey 2 exists for is downstream, and the save is
-    # what gates that.
-    PlaceStep '(Parse JSON|encastra\.data\.json)' 'j2' 'encastra\.data\.json@'
+function Journey2 {
+    "--- journey 2: publish-into (Builder -> Publish -> Prepare) ---"
+    # Set here and read by journey 3: the two are separate functions now, so it has to be
+    # script scope or journey 3 would be reading its own empty local.
+    $script:preparedFolder = $null
+    try {
+        EnsureNoDialogs 'j2 before'
+        DismissWelcome 'j2 before'
+        [void](GoTo '^(Constructor|Builder)$' 'Builder')
+        # `FindText '(Parse JSON)'` used to stand here, and it matched the palette button that had
+        # just been pressed - so it would have reported "a step is on the canvas" with an empty
+        # canvas. What is asked instead is the store's own count and the canvas's own node, neither
+        # of which the palette can answer for. Not fatal to this journey if the step does not
+        # arrive: what journey 2 exists for is downstream, and the save is what gates that.
+        PlaceStep '(Parse JSON|encastra\.data\.json)' 'j2' 'encastra.data.json'
 
-    # Save is armed by nothing but the store's `busy` flag (App.tsx: `disabled={busy}`) - not by a
-    # name, and not by the project being dirty, though the step just placed made it dirty anyway.
-    # So a Save that reads enabled is a Save that will run, and `saveProject` asks for a path
-    # whenever the project has none (store.ts:753) - which is this one.
-    #
-    # This chooser is NOT the one journeys 1 and 3 to 5 drive. Those go through the application's
-    # own `choose_folder` command, which runs `blocking_pick_folder` on the privileged side
-    # (src-tauri/src/lib.rs:374). Save and Open instead call `@tauri-apps/plugin-dialog` from the
-    # renderer (ipc.ts:214 and :223). Both end in tauri-plugin-dialog, so both should put an
-    # ordinary common dialog on screen - but they arrive by different routes and on different
-    # threads, and the first hosted run found no dialog at all here, so what is on screen is now
-    # asked of the window list rather than of the accessibility tree (see ProcWindows above).
-    $save = Wait 'Button' '^(Guardar|Save)$' 10
-    Report ($null -ne $save -and $save.Current.IsEnabled) 'j2 Save button found and armed' "'$($save.Current.Name)' enabled=$($save.Current.IsEnabled)"
-    Click $save
-    $dlg = WaitDialog 12
-    if (-not $dlg) {
-        # Which of the two it is, the log now says. `saveProject` sets busy on the way in and
-        # clears it in a finally, so a Save still greyed out means the promise has not settled -
-        # the chooser is up somewhere this harness cannot reach. A Save that has come back means
-        # the call returned or threw, and if it threw the sentence is already in the status bar.
-        $saveNow = Find (AppWindow) 'Button' '^(Guardar|Save)$'
-        $stillWaiting = ($null -ne $saveNow -and -not $saveNow.Current.IsEnabled)
-        Report $false 'j2 native save dialog opened' ("none on screen; every top-level window this process owns: " + (ProcWindowsDump) + "; Save is now enabled=$($saveNow.Current.IsEnabled) (still disabled means the save is waiting on a chooser that is not in the list above; enabled means the call returned or failed); the interface is saying: " + (AppNotices 6))
-        throw "SKIP: the save chooser never appeared (save still waiting=$stillWaiting), so nothing downstream of a saved project - publish-into included - can be driven"
-    }
-    Report $true 'j2 native save dialog opened' "'$($dlg.Current.Name)' class=$(HwndClass (Hwnd $dlg))"
-    ConfirmChooser $dlg $projectFile 'j2-save' 'file'
-    ReportChooserClosed 'j2-save'
-    Start-Sleep -Milliseconds 1500
-    $projectSaved = Test-Path $projectFile
-    Report $projectSaved 'j2 project saved to disk' "$projectFile exists=$projectSaved"
-    # Publish.tsx arms Prepare only for a saved project that matches the canvas. Without one the
-    # chooser under test never opens, and reporting the greyed-out button as a failure of
-    # publish-into would be reporting the save twice under another name.
-    if (-not $projectSaved) { throw 'SKIP: the project never reached disk, so the Publish panel cannot arm Prepare and publish-into cannot be driven' }
-
-    $publish = Wait 'Button' '^(Publicar|Publish)$' 10
-    Report ($null -ne $publish) 'j2 Publish button found' "'$($publish.Current.Name)'"
-    Click $publish
-    Start-Sleep -Milliseconds 900
-    Report ($null -ne (FindText '(Preparar una publicaci|Prepare a publication)' 8)) 'j2 publish panel opened' 'heading on screen'
-
-    $ns = ByIdSuffix '-namespace' 8
-    $summary = ByIdSuffix '-summary' 5
-    $title = ByIdSuffix '-title' 5
-    $version = ByIdSuffix '-version' 5
-    if (-not ($ns -and $summary -and $title -and $version)) { throw 'the publish draft fields are not exposed to UI Automation' }
-    $nsValue = SetValue $ns 'dev.encastra.journeys'
-    $titleValue = SetValue $title 'Journey evidence'
-    $sumValue = SetValue $summary 'A saved project used as evidence for the chooser journeys.'
-    $verValue = SetValue $version '1.0.0'
-    Report ($nsValue -eq 'dev.encastra.journeys' -and $titleValue.Length -gt 0 -and $sumValue.Length -ge 20 -and $verValue -eq '1.0.0') 'j2 draft fields accepted what was typed' "namespace='$nsValue' title='$titleValue' version='$verValue' summary=$($sumValue.Length) chars"
-
-    # The panel re-reviews on its own; give it a moment, then read whether Prepare is armed.
-    Start-Sleep -Milliseconds 1500
-    $prepare = Wait 'Button' '^(Preparar|Prepare)' 10
-    if (-not $prepare) { throw 'the Prepare button is not on screen' }
-    if (-not $prepare.Current.IsEnabled) {
-        $why = FindText '(Guarda el proyecto|Save the project first|Guarda los cambios|Save your changes first|necesita|needs a)' 2
-        Report $false 'j2 Prepare is armed for a clean saved project' "disabled; nearest sentence on screen: '$why'"
-    } else {
-        Report $true 'j2 Prepare is armed for a clean saved project' "enabled=$($prepare.Current.IsEnabled)"
-
-        # Negative: cancel. Nothing may be written and the panel must not claim it was.
-        Click $prepare
+        # Save is armed by nothing but the store's `busy` flag (App.tsx: `disabled={busy}`) - not by a
+        # name, and not by the project being dirty, though the step just placed made it dirty anyway.
+        # So a Save that reads enabled is a Save that will run, and `saveProject` asks for a path
+        # whenever the project has none (store.ts:753) - which is this one.
+        #
+        # This chooser is NOT the one journeys 1 and 3 to 5 drive. Those go through the application's
+        # own `choose_folder` command, which runs `blocking_pick_folder` on the privileged side
+        # (src-tauri/src/lib.rs:374). Save and Open instead call `@tauri-apps/plugin-dialog` from the
+        # renderer (ipc.ts:214 and :223). Both end in tauri-plugin-dialog, so both should put an
+        # ordinary common dialog on screen - but they arrive by different routes and on different
+        # threads, and the first hosted run found no dialog at all here, so what is on screen is now
+        # asked of the window list rather than of the accessibility tree (see ProcWindows above).
+        $save = Wait 'Button' '^(Guardar|Save)$' 10
+        Report ($null -ne $save -and $save.Current.IsEnabled) 'j2 Save button found and armed' "'$($save.Current.Name)' enabled=$($save.Current.IsEnabled)"
+        Click $save
         $dlg = WaitDialog 12
-        Report ($null -ne $dlg) 'j2 chooser opened for publish-into' "'$($dlg.Current.Name)'"
-        CancelChooser $dlg 'j2'
+        if (-not $dlg) {
+            # Which of the two it is, the log now says. `saveProject` sets busy on the way in and
+            # clears it in a finally, so a Save still greyed out means the promise has not settled -
+            # the chooser is up somewhere this harness cannot reach. A Save that has come back means
+            # the call returned or threw, and if it threw the sentence is already in the status bar.
+            $saveNow = Find (AppWindow) 'Button' '^(Guardar|Save)$'
+            $stillWaiting = ($null -ne $saveNow -and -not $saveNow.Current.IsEnabled)
+            Report $false 'j2 native save dialog opened' ("none on screen; every top-level window this process owns: " + (ProcWindowsDump) + "; Save is now enabled=$($saveNow.Current.IsEnabled) (still disabled means the save is waiting on a chooser that is not in the list above; enabled means the call returned or failed); the interface is saying: " + (AppNotices 6))
+            throw "SKIP: the save chooser never appeared (save still waiting=$stillWaiting), so nothing downstream of a saved project - publish-into included - can be driven"
+        }
+        Report $true 'j2 native save dialog opened' "'$($dlg.Current.Name)' class=$(HwndClass (Hwnd $dlg))"
+        ConfirmChooser $dlg $projectFile 'j2-save' 'file'
+        ReportChooserClosed 'j2-save'
+        Start-Sleep -Milliseconds 1500
+        $projectSaved = Test-Path $projectFile
+        Report $projectSaved 'j2 project saved to disk' "$projectFile exists=$projectSaved"
+        # Publish.tsx arms Prepare only for a saved project that matches the canvas. Without one the
+        # chooser under test never opens, and reporting the greyed-out button as a failure of
+        # publish-into would be reporting the save twice under another name.
+        if (-not $projectSaved) { throw 'SKIP: the project never reached disk, so the Publish panel cannot arm Prepare and publish-into cannot be driven' }
+
+        $publish = Wait 'Button' '^(Publicar|Publish)$' 10
+        Report ($null -ne $publish) 'j2 Publish button found' "'$($publish.Current.Name)'"
+        Click $publish
         Start-Sleep -Milliseconds 900
-        $doneSection = FindText '(D.nde ha quedado|Where it went)' 2
-        $wrote = @(Get-ChildItem -Force -Path $publishInto -ErrorAction SilentlyContinue)
-        Report ($null -eq $doneSection -and $wrote.Count -eq 0) 'j2 Cancel wrote nothing and claimed nothing' "'Where it went' shown=$($null -ne $doneSection); entries in the folder=$($wrote.Count)"
+        Report ($null -ne (FindText '(Preparar una publicaci|Prepare a publication)' 8)) 'j2 publish panel opened' 'heading on screen'
 
-        # Confirm, and then the thing the folder was chosen for actually happening.
-        Click (MustFind (Wait 'Button' '^(Preparar|Prepare)' 10) 'the Prepare button did not come back after the cancelled chooser')
-        $dlg = WaitDialog 12
-        ConfirmChooser $dlg $publishInto 'j2' 'folder'
-        ReportChooserClosed 'j2'
-        $done = FindText '(D.nde ha quedado|Where it went)' 15
-        $err = FindText '(no se puede usar|cannot be used|Elige la carpeta|Choose the folder to publish into)' 2
-        Report ($null -ne $done) 'j2 the application says where the publication went' "section='$done' refusal='$err'"
-        $written = @(Get-ChildItem -Force -Path $publishInto -Directory -ErrorAction SilentlyContinue)
-        if ($written.Count -eq 1) { $preparedFolder = $written[0].FullName }
-        $hasDoc = $false
-        if ($preparedFolder) { $hasDoc = (Test-Path (Join-Path $preparedFolder 'publication.json')) }
-        Report ($written.Count -eq 1 -and $hasDoc) 'j2 the chosen folder was actually published into' "folders=$($written.Count) prepared='$preparedFolder' publication.json=$hasDoc"
-        $shownPath = FindText ([regex]::Escape($publishInto)) 3
-        Report ($null -ne $shownPath) 'j2 the panel shows the path it wrote to' "'$shownPath'"
+        $ns = ByIdSuffix '-namespace' 8
+        $summary = ByIdSuffix '-summary' 5
+        $title = ByIdSuffix '-title' 5
+        $version = ByIdSuffix '-version' 5
+        if (-not ($ns -and $summary -and $title -and $version)) { throw 'the publish draft fields are not exposed to UI Automation' }
+        $nsValue = SetValue $ns 'dev.encastra.journeys'
+        $titleValue = SetValue $title 'Journey evidence'
+        $sumValue = SetValue $summary 'A saved project used as evidence for the chooser journeys.'
+        $verValue = SetValue $version '1.0.0'
+        Report ($nsValue -eq 'dev.encastra.journeys' -and $titleValue.Length -gt 0 -and $sumValue.Length -ge 20 -and $verValue -eq '1.0.0') 'j2 draft fields accepted what was typed' "namespace='$nsValue' title='$titleValue' version='$verValue' summary=$($sumValue.Length) chars"
+
+        # The panel re-reviews on its own; give it a moment, then read whether Prepare is armed.
+        Start-Sleep -Milliseconds 1500
+        $prepare = Wait 'Button' '^(Preparar|Prepare)' 10
+        if (-not $prepare) { throw 'the Prepare button is not on screen' }
+        if (-not $prepare.Current.IsEnabled) {
+            $why = FindText '(Guarda el proyecto|Save the project first|Guarda los cambios|Save your changes first|necesita|needs a)' 2
+            Report $false 'j2 Prepare is armed for a clean saved project' "disabled; nearest sentence on screen: '$why'"
+        } else {
+            Report $true 'j2 Prepare is armed for a clean saved project' "enabled=$($prepare.Current.IsEnabled)"
+
+            # Negative: cancel. Nothing may be written and the panel must not claim it was.
+            Click $prepare
+            $dlg = WaitDialog 12
+            Report ($null -ne $dlg) 'j2 chooser opened for publish-into' "'$($dlg.Current.Name)'"
+            CancelChooser $dlg 'j2'
+            Start-Sleep -Milliseconds 900
+            $doneSection = FindText '(D.nde ha quedado|Where it went)' 2
+            $wrote = @(Get-ChildItem -Force -Path $publishInto -ErrorAction SilentlyContinue)
+            Report ($null -eq $doneSection -and $wrote.Count -eq 0) 'j2 Cancel wrote nothing and claimed nothing' "'Where it went' shown=$($null -ne $doneSection); entries in the folder=$($wrote.Count)"
+
+            # Confirm, and then the thing the folder was chosen for actually happening.
+            Click (MustFind (Wait 'Button' '^(Preparar|Prepare)' 10) 'the Prepare button did not come back after the cancelled chooser')
+            $dlg = WaitDialog 12
+            ConfirmChooser $dlg $publishInto 'j2' 'folder'
+            ReportChooserClosed 'j2'
+            $done = FindText '(D.nde ha quedado|Where it went)' 15
+            $err = FindText '(no se puede usar|cannot be used|Elige la carpeta|Choose the folder to publish into)' 2
+            Report ($null -ne $done) 'j2 the application says where the publication went' "section='$done' refusal='$err'"
+            $written = @(Get-ChildItem -Force -Path $publishInto -Directory -ErrorAction SilentlyContinue)
+            if ($written.Count -eq 1) { $script:preparedFolder = $written[0].FullName }
+            $hasDoc = $false
+            if ($script:preparedFolder) { $hasDoc = (Test-Path (Join-Path $script:preparedFolder 'publication.json')) }
+            Report ($written.Count -eq 1 -and $hasDoc) 'j2 the chosen folder was actually published into' "folders=$($written.Count) prepared='$script:preparedFolder' publication.json=$hasDoc"
+            $shownPath = FindText ([regex]::Escape($publishInto)) 3
+            Report ($null -ne $shownPath) 'j2 the panel shows the path it wrote to' "'$shownPath'"
+        }
+
+        $close = Wait 'Button' '^(Cerrar|Close)$' 8
+        if ($close) { Click $close; Start-Sleep -Milliseconds 600 }
+    } catch {
+        JourneyEnded $_ 'j2 publish-into journey ran to the end'
     }
-
-    $close = Wait 'Button' '^(Cerrar|Close)$' 8
-    if ($close) { Click $close; Start-Sleep -Milliseconds 600 }
-} catch {
-    JourneyEnded $_ 'j2 publish-into journey ran to the end'
+    EnsureNoDialogs 'j2 after'
 }
-EnsureNoDialogs 'j2 after'
 
 # =============================================================================================
 # JOURNEY 3 - import-from (store.ts:863, panels/Import.tsx)
@@ -1560,134 +1874,136 @@ EnsureNoDialogs 'j2 after'
 # Settings, Publish and the Inspector all await it outside one. The two negative probes that
 # need a visible refusal therefore live here (see the report at the end of this file).
 # =============================================================================================
-"--- journey 3: import-from (Library -> Import) ---"
-try {
-    EnsureNoDialogs 'j3 before'
-    DismissWelcome 'j3 before'
-    [void](GoTo '^(Biblioteca|Library)$' 'Library')
-    # Both halves are the check. A chooser left open by an earlier journey is modal to the
-    # application, and every button underneath it - this one included - then reads as disabled;
-    # that is why `Import... enabled=False` was reported as a find and then threw out of Invoke.
-    #
-    # Waited on rather than read once. Library.tsx greys this button on exactly three things -
-    # `!ipc.live || busy || !canBeginImport(importState)` - and two of them are transient: `busy`
-    # is the store's own flag, raised by whatever ran last and lowered in a finally, and the
-    # import machine is only 'busy' while an import is actually in flight. The third is not
-    # transient at all, and the button's own tooltip is what tells them apart: it reads
-    # "Needs the desktop application" precisely when `ipc.live` is false.
-    $import = WaitEnabled 'Button' '^(Importar|Import)' 25
-    $importReady = ($null -ne $import -and $import.Current.IsEnabled)
-    Report $importReady 'j3 Import button is on screen and enabled' "'$($import.Current.Name)' enabled=$($import.Current.IsEnabled) tooltip='$(HelpTextOf $import)'"
-    if (-not $importReady) {
-        if (-not $import) {
-            throw ('SKIP: no Import button is on screen in the Library at all; the automation ids there are: ' + (AutomationIdDump 30))
-        }
-        $why = HelpTextOf $import
-        $live = -not ($why -match '(Needs the desktop application|Necesita la aplicaci)')
-        throw ("SKIP: the Import button stayed greyed out for 25s. Library.tsx disables it on !ipc.live || busy || importState.phase == 'busy'. Its tooltip reads '$why', so ipc.live=$live; with ipc.live true the remaining condition is the store's busy flag or an import already in flight - something earlier in this run has not settled. Windows on screen: " + (ProcWindowsDump) + '; the interface is saying: ' + (AppNotices 6))
-    }
-
-    # Negative: cancel. `dismissed` must leave the machine idle - no dialog, nothing taken in.
-    Click $import
-    $dlg = WaitDialog 12
-    Report ($null -ne $dlg) 'j3 chooser opened for import-from' "'$($dlg.Current.Name)'"
-    CancelChooser $dlg 'j3'
-    Start-Sleep -Milliseconds 1200
-    $panel = FindText '(Recibir una publicaci|Take in a publication)' 2
-    Report ($null -eq $panel) 'j3 Cancel took nothing in and opened no panel' "import panel on screen=$($null -ne $panel)"
-
-    # Negative: a path that is not there. Either the shell refuses to close on it, or the
-    # application refuses it - both are refusals, and both are reported with their own words.
-    Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button did not come back after the cancelled chooser')
-    $dlg = WaitDialog 12
-    if ($dlg) {
-        ConfirmChooser $dlg $missing 'j3-missing' 'folder'
-        if (-not $script:chooserConfirmed) {
-            Skip 'j3 a path that is not there was refused' 'the chooser could not be driven, so it was never asked to accept the path'
-            ForceCloseDialogs
-        } elseif (-not $script:chooserClosed) {
-            Report $true 'j3 a path that is not there was refused' "the chooser would not accept it: $(DialogTexts)"
-            ForceCloseDialogs
-        } else {
-            $refusal = FindText '(no es una carpeta|not a folder|no se puede usar|cannot be used|no se eligi|was not picked|No hay publication\.json|There is no publication\.json)' 10
-            if ($refusal) {
-                Report $true 'j3 a path that is not there was refused, in words' "'$refusal'"
-            } else {
-                Report $false 'j3 a path that is not there was refused, in words' 'the chooser closed and the application showed no refusal at all'
+function Journey3 {
+    "--- journey 3: import-from (Library -> Import) ---"
+    try {
+        EnsureNoDialogs 'j3 before'
+        DismissWelcome 'j3 before'
+        [void](GoTo '^(Biblioteca|Library)$' 'Library')
+        # Both halves are the check. A chooser left open by an earlier journey is modal to the
+        # application, and every button underneath it - this one included - then reads as disabled;
+        # that is why `Import... enabled=False` was reported as a find and then threw out of Invoke.
+        #
+        # Waited on rather than read once. Library.tsx greys this button on exactly three things -
+        # `!ipc.live || busy || !canBeginImport(importState)` - and two of them are transient: `busy`
+        # is the store's own flag, raised by whatever ran last and lowered in a finally, and the
+        # import machine is only 'busy' while an import is actually in flight. The third is not
+        # transient at all, and the button's own tooltip is what tells them apart: it reads
+        # "Needs the desktop application" precisely when `ipc.live` is false.
+        $import = WaitEnabled 'Button' '^(Importar|Import)' 25
+        $importReady = ($null -ne $import -and $import.Current.IsEnabled)
+        Report $importReady 'j3 Import button is on screen and enabled' "'$($import.Current.Name)' enabled=$($import.Current.IsEnabled) tooltip='$(HelpTextOf $import)'"
+        if (-not $importReady) {
+            if (-not $import) {
+                throw ('SKIP: no Import button is on screen in the Library at all; the automation ids there are: ' + (AutomationIdDump 30))
             }
-            $close = Wait 'Button' '^(Cerrar|Close)$' 5
-            if ($close) { Click $close; Start-Sleep -Milliseconds 500 }
+            $why = HelpTextOf $import
+            $live = -not ($why -match '(Needs the desktop application|Necesita la aplicaci)')
+            throw ("SKIP: the Import button stayed greyed out for 25s. Library.tsx disables it on !ipc.live || busy || importState.phase == 'busy'. Its tooltip reads '$why', so ipc.live=$live; with ipc.live true the remaining condition is the store's busy flag or an import already in flight - something earlier in this run has not settled. Windows on screen: " + (ProcWindowsDump) + '; the interface is saying: ' + (AppNotices 6))
         }
-    } else {
-        Report $false 'j3 chooser opened for the missing-path probe' 'no chooser appeared'
-    }
 
-    # Negative: a junction. The runtime resolves before it records, so what is read is the place
-    # the link points at and never the link - either it reads the target, or it says it will not
-    # follow the link. Silence would be the failure.
-    if (-not $junctionMade) {
-        Skip 'j3 a junction is resolved or refused, never followed blindly' 'mklink /J was refused on this machine'
-    } else {
-        Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button was not on screen for the junction probe')
+        # Negative: cancel. `dismissed` must leave the machine idle - no dialog, nothing taken in.
+        Click $import
+        $dlg = WaitDialog 12
+        Report ($null -ne $dlg) 'j3 chooser opened for import-from' "'$($dlg.Current.Name)'"
+        CancelChooser $dlg 'j3'
+        Start-Sleep -Milliseconds 1200
+        $panel = FindText '(Recibir una publicaci|Take in a publication)' 2
+        Report ($null -eq $panel) 'j3 Cancel took nothing in and opened no panel' "import panel on screen=$($null -ne $panel)"
+
+        # Negative: a path that is not there. Either the shell refuses to close on it, or the
+        # application refuses it - both are refusals, and both are reported with their own words.
+        Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button did not come back after the cancelled chooser')
         $dlg = WaitDialog 12
         if ($dlg) {
-            ConfirmChooser $dlg $junction 'j3-junction' 'folder'
+            ConfirmChooser $dlg $missing 'j3-missing' 'folder'
             if (-not $script:chooserConfirmed) {
-                Skip 'j3 a junction is resolved or refused, never followed blindly' 'the chooser could not be driven, so it was never asked to accept the link'
+                Skip 'j3 a path that is not there was refused' 'the chooser could not be driven, so it was never asked to accept the path'
                 ForceCloseDialogs
             } elseif (-not $script:chooserClosed) {
-                Report $true 'j3 a junction is resolved or refused, never followed blindly' "the chooser would not accept it: $(DialogTexts)"
+                Report $true 'j3 a path that is not there was refused' "the chooser would not accept it: $(DialogTexts)"
                 ForceCloseDialogs
             } else {
-                $link = FindText '(es una ligaz|es un enlace|is a link)' 6
-                $notPub = FindText '(No hay publication\.json|There is no publication\.json|no es una carpeta|not a folder)' 6
-                if ($link) {
-                    Report $true 'j3 a junction is resolved or refused, never followed blindly' "refused as a link: '$link'"
-                } elseif ($notPub) {
-                    Report $true 'j3 a junction is resolved or refused, never followed blindly' "read the target it points at, which holds no publication: '$notPub'"
+                $refusal = FindText '(no es una carpeta|not a folder|no se puede usar|cannot be used|no se eligi|was not picked|No hay publication\.json|There is no publication\.json)' 10
+                if ($refusal) {
+                    Report $true 'j3 a path that is not there was refused, in words' "'$refusal'"
                 } else {
-                    Report $false 'j3 a junction is resolved or refused, never followed blindly' 'the chooser closed and the application said nothing about it'
+                    Report $false 'j3 a path that is not there was refused, in words' 'the chooser closed and the application showed no refusal at all'
                 }
                 $close = Wait 'Button' '^(Cerrar|Close)$' 5
                 if ($close) { Click $close; Start-Sleep -Milliseconds 500 }
             }
         } else {
-            Report $false 'j3 chooser opened for the junction probe' 'no chooser appeared'
+            Report $false 'j3 chooser opened for the missing-path probe' 'no chooser appeared'
         }
-    }
 
-    # The round trip: read back the folder journey 2 wrote.
-    if (-not $preparedFolder) {
-        Skip 'j3 the prepared publication can be imported' 'journey 2 produced no folder to import from'
-    } else {
-        Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button was not on screen for the round trip')
-        $dlg = WaitDialog 12
-        ConfirmChooser $dlg $preparedFolder 'j3' 'folder'
-        ReportChooserClosed 'j3'
-        $what = FindText '(Qu. dice que es|What this says it is)' 20
-        $refused = FindText '(no se ha recibido nada|Nothing was taken in|no se eligi|was not picked)' 2
-        if ($what) {
-            Report $true 'j3 the chosen folder was read as a publication' "section='$what'"
-            $named = FindText '(Journey evidence)' 5
-            Report ($null -ne $named) 'j3 the report names what was prepared in journey 2' "'$named'"
-            $confirm = Wait 'Button' '^(Importar|Import)$' 8
-            if ($confirm -and $confirm.Current.IsEnabled) {
-                Click $confirm
-                $taken = FindText '(Recibido Journey evidence|Imported Journey evidence)' 25
-                Report ($null -ne $taken) 'j3 importing put it in the library' "'$taken'"
-            } else {
-                Report $false 'j3 the Import button is armed for a folder that was read' "enabled=$($confirm.Current.IsEnabled)"
-            }
+        # Negative: a junction. The runtime resolves before it records, so what is read is the place
+        # the link points at and never the link - either it reads the target, or it says it will not
+        # follow the link. Silence would be the failure.
+        if (-not $junctionMade) {
+            Skip 'j3 a junction is resolved or refused, never followed blindly' 'mklink /J was refused on this machine'
         } else {
-            Report $false 'j3 the chosen folder was read as a publication' "no report on screen; refusal: '$refused'"
-            $close = Wait 'Button' '^(Cerrar|Close)$' 5
-            if ($close) { Click $close }
+            Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button was not on screen for the junction probe')
+            $dlg = WaitDialog 12
+            if ($dlg) {
+                ConfirmChooser $dlg $junction 'j3-junction' 'folder'
+                if (-not $script:chooserConfirmed) {
+                    Skip 'j3 a junction is resolved or refused, never followed blindly' 'the chooser could not be driven, so it was never asked to accept the link'
+                    ForceCloseDialogs
+                } elseif (-not $script:chooserClosed) {
+                    Report $true 'j3 a junction is resolved or refused, never followed blindly' "the chooser would not accept it: $(DialogTexts)"
+                    ForceCloseDialogs
+                } else {
+                    $link = FindText '(es una ligaz|es un enlace|is a link)' 6
+                    $notPub = FindText '(No hay publication\.json|There is no publication\.json|no es una carpeta|not a folder)' 6
+                    if ($link) {
+                        Report $true 'j3 a junction is resolved or refused, never followed blindly' "refused as a link: '$link'"
+                    } elseif ($notPub) {
+                        Report $true 'j3 a junction is resolved or refused, never followed blindly' "read the target it points at, which holds no publication: '$notPub'"
+                    } else {
+                        Report $false 'j3 a junction is resolved or refused, never followed blindly' 'the chooser closed and the application said nothing about it'
+                    }
+                    $close = Wait 'Button' '^(Cerrar|Close)$' 5
+                    if ($close) { Click $close; Start-Sleep -Milliseconds 500 }
+                }
+            } else {
+                Report $false 'j3 chooser opened for the junction probe' 'no chooser appeared'
+            }
         }
+
+        # The round trip: read back the folder journey 2 wrote.
+        if (-not $script:preparedFolder) {
+            Skip 'j3 the prepared publication can be imported' 'journey 2 produced no folder to import from'
+        } else {
+            Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button was not on screen for the round trip')
+            $dlg = WaitDialog 12
+            ConfirmChooser $dlg $script:preparedFolder 'j3' 'folder'
+            ReportChooserClosed 'j3'
+            $what = FindText '(Qu. dice que es|What this says it is)' 20
+            $refused = FindText '(no se ha recibido nada|Nothing was taken in|no se eligi|was not picked)' 2
+            if ($what) {
+                Report $true 'j3 the chosen folder was read as a publication' "section='$what'"
+                $named = FindText '(Journey evidence)' 5
+                Report ($null -ne $named) 'j3 the report names what was prepared in journey 2' "'$named'"
+                $confirm = Wait 'Button' '^(Importar|Import)$' 8
+                if ($confirm -and $confirm.Current.IsEnabled) {
+                    Click $confirm
+                    $taken = FindText '(Recibido Journey evidence|Imported Journey evidence)' 25
+                    Report ($null -ne $taken) 'j3 importing put it in the library' "'$taken'"
+                } else {
+                    Report $false 'j3 the Import button is armed for a folder that was read' "enabled=$($confirm.Current.IsEnabled)"
+                }
+            } else {
+                Report $false 'j3 the chosen folder was read as a publication' "no report on screen; refusal: '$refused'"
+                $close = Wait 'Button' '^(Cerrar|Close)$' 5
+                if ($close) { Click $close }
+            }
+        }
+    } catch {
+        JourneyEnded $_ 'j3 import-from journey ran to the end'
     }
-} catch {
-    JourneyEnded $_ 'j3 import-from journey ran to the end'
+    EnsureNoDialogs 'j3 after'
 }
-EnsureNoDialogs 'j3 after'
 
 # =============================================================================================
 # JOURNEYS 4 and 5 - grant-to-component and run-input (panels/Inspector.tsx:101 and :163)
@@ -1698,179 +2014,223 @@ EnsureNoDialogs 'j3 after'
 # which is what makes the negative below expressible: the run is the only place the runtime
 # gets to say no.
 # =============================================================================================
-"--- journeys 4 and 5: grant-to-component and run-input (Inspector) ---"
-$folderField = $null
-try {
-    EnsureNoDialogs 'j4/j5 before'
-    DismissWelcome 'j4/j5 before'
-    [void](GoTo '^(Constructor|Builder)$' 'Builder')
-    $new = Wait 'Button' '^(Nuevo|New)$' 10
-    if ($new) { Click $new; Start-Sleep -Milliseconds 900 }
-    # New does not start a new project while there is unsaved work: it puts the discard question
-    # on screen instead (store.ts:677) and waits. That question is an in-page alertdialog, not a
-    # window, so nothing in the dialog handling above sees it - and the step journey 2 left on the
-    # canvas is exactly what makes it appear here. Answered, so this journey starts on its own
-    # canvas rather than on top of journey 2's.
-    DismissDiscardPrompt
-    # And answering that question is exactly where this journey lost the interface. The prompt
-    # declares `aria-modal="true"` and traps focus, and a11y/focus.ts hands focus back to whatever
-    # had it when the prompt opened - which, on a machine where the first-run welcome has never
-    # been dismissed, is the welcome card. The welcome is also `aria-modal="true"`, so from that
-    # moment Chromium leaves the whole interface out of the accessibility tree, the step placed
-    # next is invisible rather than absent, and the Inspector is looked for on a canvas nothing
-    # can see. `ids on screen: ... welcome-title(Text)` was the whole of it.
-    DismissWelcome 'j4/j5 after the unsaved-changes question'
-    $welcomeGone = -not (WelcomeShowing)
-    Report $welcomeGone 'j4 the interface is what is on screen, not the first-run welcome' $(if ($welcomeGone) { 'the welcome is not on screen' } else { 'the welcome is still on screen after Skip was pressed, so nothing behind it can be found: ' + (AutomationIdDump 20) })
+function Journey45 {
+    "--- journeys 4 and 5: grant-to-component and run-input (Inspector) ---"
+    $folderField = $null
+    try {
+        EnsureNoDialogs 'j4/j5 before'
+        DismissWelcome 'j4/j5 before'
+        [void](GoTo '^(Constructor|Builder)$' 'Builder')
+        $new = Wait 'Button' '^(Nuevo|New)$' 10
+        if ($new) {
+            Click $new
+            # New does one of two things and both are answers: it empties the canvas, or it puts
+            # the unsaved-changes question on screen. Waited on rather than slept through.
+            for ($i = 0; $i -lt 30; $i++) {
+                if (Find (AppWindow) 'Button' '^(Descartar los cambios|Discard changes)$') { break }
+                if ((CdpStepCount) -eq 0) { break }
+                Start-Sleep -Milliseconds 100
+            }
+        }
+        # New does not start a new project while there is unsaved work: it puts the discard question
+        # on screen instead (store.ts:677) and waits. That question is an in-page alertdialog, not a
+        # window, so nothing in the dialog handling above sees it - and the step journey 2 left on the
+        # canvas is exactly what makes it appear here. Answered, so this journey starts on its own
+        # canvas rather than on top of journey 2's.
+        DismissDiscardPrompt
+        # And answering that question is exactly where this journey lost the interface. The prompt
+        # declares `aria-modal="true"` and traps focus, and a11y/focus.ts hands focus back to whatever
+        # had it when the prompt opened - which, on a machine where the first-run welcome has never
+        # been dismissed, is the welcome card. The welcome is also `aria-modal="true"`, so from that
+        # moment Chromium leaves the whole interface out of the accessibility tree, the step placed
+        # next is invisible rather than absent, and the Inspector is looked for on a canvas nothing
+        # can see. `ids on screen: ... welcome-title(Text)` was the whole of it.
+        DismissWelcome 'j4/j5 after the unsaved-changes question'
+        $welcomeGone = -not (WelcomeShowing)
+        Report $welcomeGone 'j4 the interface is what is on screen, not the first-run welcome' $(if ($welcomeGone) { 'the welcome is not on screen' } else { 'the welcome is still on screen after Skip was pressed, so nothing behind it can be found: ' + (AutomationIdDump 20) })
 
-    # From here it is exactly the route journey 2 takes: be in the Builder, and place a step from
-    # the palette. Placing is the only way in - `addNode` selects what it placed (store.ts:355),
-    # while clicking a step on the canvas is not available from here at all, because ComponentNode
-    # deliberately publishes no ARIA role and so offers no Invoke pattern.
-    [void](GoTo '^(Constructor|Builder)$' 'Builder')
-    PlaceStep '(Save File|encastra\.file\.save)' 'j4' 'encastra\.file\.save@'
-    if (-not $script:stepPlaced) {
-        throw 'SKIP: no step was placed by any of the three activation routes - neither the canvas nor the Inspector witnessed one - so the Inspector has nothing to show and neither of the two choosers below it can be reached. The routes and what each of them saw are in the notes above this line.'
+        # From here it is exactly the route journey 2 takes: be in the Builder, and place a step from
+        # the palette. Placing is the only way in - `addNode` selects what it placed (store.ts:355),
+        # while clicking a step on the canvas is not available from here at all, because ComponentNode
+        # deliberately publishes no ARIA role and so offers no Invoke pattern.
+        [void](GoTo '^(Constructor|Builder)$' 'Builder')
+        PlaceStep '(Save File|encastra\.file\.save)' 'j4' 'encastra.file.save'
+        if (-not $script:stepPlaced) {
+            throw 'SKIP: the store never counted a step and the canvas never drew one, so the Inspector has nothing to show and neither of the two choosers below it can be reached. The routes and what each of them saw are in the notes above this line.'
+        }
+
+        # Everything below this line needs the step to be SELECTED, not merely placed: the folder
+        # row and the starting-material row are the selected step's rows. `addNode` is supposed to
+        # select what it placed (store.ts:355), so this is the product's own promise and it is
+        # asserted as its own line rather than being discovered three checks later as "the folder
+        # field is not exposed". A step is on the canvas by now - PlaceStep named it - so a failure
+        # here is about selection and nothing else.
+        $selected = Cdp-Wait "(()=>{const p=document.querySelector('.panel--inspector');if(!p)return '';const t=p.innerText;const i=t.indexOf('encastra.file.save@');if(i<0)return '';return t.substr(i,40);})()" 6000
+        Report ([bool]$selected) 'j4 step selected in inspector' "the panel reads '$selected' for the step just placed$(if (-not $selected) { "; the panel is showing instead: $(OneLine (CdpInspectorText))" })"
+
+        # The Inspector shows a step's settings only for the step that is selected (Inspector.tsx:506
+        # returns the empty panel when `selectedNodeId` names nothing). Placing from the palette is
+        # enough to select: `addNode` sets `selectedNodeId` to the step it just made (store.ts:355,
+        # "a newly placed node is the one you want to configure"). That matters, because selecting by
+        # clicking the step on the canvas is not available from here - React Flow draws each step as a
+        # plain div with, deliberately, no ARIA role and so no Invoke pattern (ComponentNode.tsx).
+        # A step is known to be on the canvas by now - PlaceStep above named it - so if the field
+        # below is missing, "no step was placed" is already ruled out and what is left is that
+        # placing it did not select it, or that the Inspector does not publish the row. The dumps say
+        # which, rather than leaving it to be guessed at.
+        $folderField = ByIdSuffix '-folder' 12
+        $whichStep = if ($script:placedStep) { "the canvas calls it '$script:placedStep'" } else { 'the canvas publishes no id for it, so it is named only by the Inspector' }
+        if (-not $folderField) {
+            Report $false 'j4 the Inspector shows the folder setting for the selected step' ("a step was placed ($whichStep) and no element publishes an id ending in '-folder'. Steps UI Automation can see: " + (PlacedStepsDump) + ' ... ids on screen: ' + (AutomationIdDump 40))
+            throw "SKIP: a step was placed ($whichStep) but its folder setting is not exposed to UI Automation - placing it did not select it, or the Inspector is publishing no row for it - so neither chooser below it can be reached"
+        }
+        Report $true 'j4 the Inspector shows the folder setting for the selected step' "automationId='$($folderField.Current.AutomationId)'"
+        # Everything below is addressed relative to this field - the Choose button is found by the row
+        # it sits in. Without it there is nothing to drive, and carrying on only produced
+        # `You cannot call a method on a null-valued expression` three checks later.
+        $nodeId = $folderField.Current.AutomationId -replace '-folder$', ''
+        Note "the step is '$nodeId'"
+
+        $allow = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 10
+        Report ($null -ne $allow) 'j4 the permission control is on screen before any folder is chosen' "'$($allow.Current.Name)' enabled=$($allow.Current.IsEnabled)"
+        $hint = FindText '(Elige antes una carpeta|Choose a folder first)' 3
+        Report ($null -ne $hint -and $null -ne $allow -and -not $allow.Current.IsEnabled) 'j4 nothing can be allowed until a folder is chosen' "hint='$hint' allowEnabled=$($allow.Current.IsEnabled)"
+
+        # Negative: cancel. Nothing is configured, so nothing can be allowed.
+        $chooseFolder = ChooseButtonNear $folderField
+        Report ($null -ne $chooseFolder) 'j4 the folder row has its own Choose button' "'$($chooseFolder.Current.Name)'"
+        Click (MustFind $chooseFolder 'the folder row has no Choose button next to it, so grant-to-component cannot be driven')
+        $dlg = WaitDialog 12
+        Report ($null -ne $dlg) 'j4 chooser opened for grant-to-component' "'$($dlg.Current.Name)'"
+        CancelChooser $dlg 'j4'
+        Start-Sleep -Milliseconds 700
+        $stillEmpty = ValueOf (ByIdSuffix '-folder' 5)
+        $allow = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 5
+        Report ($stillEmpty -eq '' -and $null -ne $allow -and -not $allow.Current.IsEnabled) 'j4 Cancel granted nothing and configured nothing' "folder='$stillEmpty' allowEnabled=$($allow.Current.IsEnabled)"
+
+        # Confirm, then allow: the button's own label is the application saying the folder answered
+        # the question it was asked.
+        Click (MustFind (ChooseButtonNear (ByIdSuffix '-folder' 5)) 'the folder row lost its Choose button after the cancelled chooser')
+        $dlg = WaitDialog 12
+        ConfirmChooser $dlg $grantFolder 'j4' 'folder'
+        ReportChooserClosed 'j4'
+        Start-Sleep -Milliseconds 800
+        $folderValue = ValueOf (ByIdSuffix '-folder' 5)
+        Report (SamePath $folderValue $grantFolder) 'j4 the chosen folder became the step configuration' "'$folderValue' (expected the same folder as '$grantFolder')"
+        $allow = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 8
+        Report ($null -ne $allow -and $allow.Current.IsEnabled) 'j4 the permission control armed once a folder was chosen' "enabled=$($allow.Current.IsEnabled)"
+        Click $allow
+        $allowed = Wait 'Button' '^(Permitido|Allowed)$' 8
+        Report ($null -ne $allowed) 'j4 the application says the folder is allowed' "button now reads '$($allowed.Current.Name)'"
+
+        # --- journey 5: the file a run starts from -------------------------------------------
+        $entryTitle = FindText '(Material de partida|Starting material)' 8
+        Report ($null -ne $entryTitle) 'j5 the Inspector asks for the file the run starts from' "'$entryTitle'"
+        $readonlyBox = $null
+        foreach ($e in (Descendants (AppWindow))) {
+            if ($e.Current.ControlType.ProgrammaticName -eq 'ControlType.Edit' -and (IsReadOnly $e)) { $readonlyBox = $e; break }
+        }
+        Report ($null -ne $readonlyBox) 'j5 the read-only box for the starting file is exposed' "found=$($null -ne $readonlyBox)"
+        if (-not $readonlyBox) { throw 'SKIP: the read-only box for the starting file is not exposed, so run-input cannot be driven' }
+        $chooseFile = ChooseButtonNear $readonlyBox
+        Report ($null -ne $chooseFile) 'j5 the starting-material row has its own Choose button' "'$($chooseFile.Current.Name)'"
+
+        Click (MustFind $chooseFile 'the starting-material row has no Choose button next to it, so run-input cannot be driven')
+        $dlg = WaitDialog 12
+        Report ($null -ne $dlg) 'j5 chooser opened for run-input' "'$($dlg.Current.Name)'"
+        CancelChooser $dlg 'j5'
+        Start-Sleep -Milliseconds 600
+        $afterCancel = ValueOf $readonlyBox
+        Report ($afterCancel -eq '') 'j5 Cancel seeded no input' "box='$afterCancel'"
+
+        Click (MustFind (ChooseButtonNear $readonlyBox) 'the starting-material row lost its Choose button after the cancelled chooser')
+        $dlg = WaitDialog 12
+        ConfirmChooser $dlg $inputFile 'j5' 'file'
+        ReportChooserClosed 'j5'
+        Start-Sleep -Milliseconds 800
+        $inputValue = ValueOf $readonlyBox
+        Report (SamePath $inputValue $inputFile) 'j5 the chosen file became the input for the run' "'$inputValue' (expected the same file as '$inputFile')"
+
+        # The proof that both answers were real: a run that writes into the granted folder.
+        $run = Wait 'Button' '^(Ejecutar|Run)$' 10
+        Report ($null -ne $run -and $run.Current.IsEnabled) 'j4/j5 Run is available with a folder allowed and a file chosen' "enabled=$($run.Current.IsEnabled)"
+        Click (MustFind $run 'the Run button is not on screen, so the granted folder cannot be written into')
+        $saved = $null
+        for ($i = 0; $i -lt 60; $i++) {
+            $hit = @(Get-ChildItem -Force -Path $grantFolder -File -ErrorAction SilentlyContinue)
+            if ($hit.Count -gt 0) { $saved = $hit[0].FullName; break }
+            Start-Sleep -Milliseconds 500
+        }
+        $runSays = FindText '(correcto|correctos|ok|fallido|failed|Nada se ha ejecutado|Nothing ran)' 3
+        Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'"
+
+        # =========================================================================================
+        # NEGATIVE - a folder chosen for one purpose does not answer another.
+        #
+        # This is the one the whole design exists for. The folder below was chosen in journey 1, and
+        # only for `projects-location`. The interface lets it be *typed* into the step's folder box,
+        # which is exactly the case the runtime is built to refuse: the editor can put any string
+        # there, and the record it is checked against was made by the chooser on the privileged side.
+        # Pressing Allow and running must be refused, in the reader's own language, naming the step.
+        # =========================================================================================
+        $stop = Find (AppWindow) 'Button' '^(Detener|Stop)$'
+        if ($stop) { Click $stop; Start-Sleep -Milliseconds 1200 }
+        $typed = SetValue (MustFind (ByIdSuffix '-folder' 5) 'the folder box is no longer exposed, so a folder it never chose cannot be typed into it') $projectsLocation
+        Report ($typed -eq $projectsLocation) 'neg the interface accepts a typed folder it never chose' "'$typed'"
+        $allowAgain = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 8
+        Report ($null -ne $allowAgain) 'neg the permission went back to asking when the folder changed' "button reads '$($allowAgain.Current.Name)' rather than Allowed"
+        Click (MustFind $allowAgain 'the permission control did not go back to asking, so the refusal cannot be provoked')
+        Start-Sleep -Milliseconds 400
+        Click (MustFind (Wait 'Button' '^(Ejecutar|Run)$' 10) 'the Run button is not on screen for the refusal probe')
+        $refusal = FindText '(elige esa carpeta con el bot.n Elegir|choose that folder with the Choose button)' 20
+        $anything = FindText '(No se ha ejecutado nada|Nothing ran)' 2
+        Report ($null -ne $refusal) 'neg a folder chosen for projects-location is refused as a grant' "'$refusal' / '$anything'"
+        Start-Sleep -Milliseconds 2000
+        $leaked = @(Get-ChildItem -Force -Path $projectsLocation -File -ErrorAction SilentlyContinue)
+        Report ($leaked.Count -eq 0) 'neg nothing was written into the folder that was not granted' "files there: $($leaked.Count)"
+
+        # The same question the other way round cannot be asked through this interface, and is not
+        # pretended: Publish takes its destination only from the chooser (Publish.tsx:108) and Import
+        # only from the chooser (store.ts:863). Neither has a box to type a path into, so a folder
+        # chosen for `grant-to-component` can never be offered to them from the GUI at all. The pair
+        # is covered where it is expressible - here - and by `a folder chosen for {recorded} must not
+        # answer {asked}` in apps/desktop/src-tauri/src/lib.rs, which walks every pair.
+    } catch {
+        JourneyEnded $_ 'j4/j5 grant-to-component and run-input journeys ran to the end'
     }
-
-    # The Inspector shows a step's settings only for the step that is selected (Inspector.tsx:506
-    # returns the empty panel when `selectedNodeId` names nothing). Placing from the palette is
-    # enough to select: `addNode` sets `selectedNodeId` to the step it just made (store.ts:355,
-    # "a newly placed node is the one you want to configure"). That matters, because selecting by
-    # clicking the step on the canvas is not available from here - React Flow draws each step as a
-    # plain div with, deliberately, no ARIA role and so no Invoke pattern (ComponentNode.tsx).
-    # A step is known to be on the canvas by now - PlaceStep above named it - so if the field
-    # below is missing, "no step was placed" is already ruled out and what is left is that
-    # placing it did not select it, or that the Inspector does not publish the row. The dumps say
-    # which, rather than leaving it to be guessed at.
-    $folderField = ByIdSuffix '-folder' 12
-    $whichStep = if ($script:placedStep) { "the canvas calls it '$script:placedStep'" } else { 'the canvas publishes no id for it, so it is named only by the Inspector' }
-    if (-not $folderField) {
-        Report $false 'j4 the Inspector shows the folder setting for the selected step' ("a step was placed ($whichStep) and no element publishes an id ending in '-folder'. Steps UI Automation can see: " + (PlacedStepsDump) + ' ... ids on screen: ' + (AutomationIdDump 40))
-        throw "SKIP: a step was placed ($whichStep) but its folder setting is not exposed to UI Automation - placing it did not select it, or the Inspector is publishing no row for it - so neither chooser below it can be reached"
-    }
-    Report $true 'j4 the Inspector shows the folder setting for the selected step' "automationId='$($folderField.Current.AutomationId)'"
-    # Everything below is addressed relative to this field - the Choose button is found by the row
-    # it sits in. Without it there is nothing to drive, and carrying on only produced
-    # `You cannot call a method on a null-valued expression` three checks later.
-    $nodeId = $folderField.Current.AutomationId -replace '-folder$', ''
-    Note "the step is '$nodeId'"
-
-    $allow = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 10
-    Report ($null -ne $allow) 'j4 the permission control is on screen before any folder is chosen' "'$($allow.Current.Name)' enabled=$($allow.Current.IsEnabled)"
-    $hint = FindText '(Elige antes una carpeta|Choose a folder first)' 3
-    Report ($null -ne $hint -and $null -ne $allow -and -not $allow.Current.IsEnabled) 'j4 nothing can be allowed until a folder is chosen' "hint='$hint' allowEnabled=$($allow.Current.IsEnabled)"
-
-    # Negative: cancel. Nothing is configured, so nothing can be allowed.
-    $chooseFolder = ChooseButtonNear $folderField
-    Report ($null -ne $chooseFolder) 'j4 the folder row has its own Choose button' "'$($chooseFolder.Current.Name)'"
-    Click (MustFind $chooseFolder 'the folder row has no Choose button next to it, so grant-to-component cannot be driven')
-    $dlg = WaitDialog 12
-    Report ($null -ne $dlg) 'j4 chooser opened for grant-to-component' "'$($dlg.Current.Name)'"
-    CancelChooser $dlg 'j4'
-    Start-Sleep -Milliseconds 700
-    $stillEmpty = ValueOf (ByIdSuffix '-folder' 5)
-    $allow = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 5
-    Report ($stillEmpty -eq '' -and $null -ne $allow -and -not $allow.Current.IsEnabled) 'j4 Cancel granted nothing and configured nothing' "folder='$stillEmpty' allowEnabled=$($allow.Current.IsEnabled)"
-
-    # Confirm, then allow: the button's own label is the application saying the folder answered
-    # the question it was asked.
-    Click (MustFind (ChooseButtonNear (ByIdSuffix '-folder' 5)) 'the folder row lost its Choose button after the cancelled chooser')
-    $dlg = WaitDialog 12
-    ConfirmChooser $dlg $grantFolder 'j4' 'folder'
-    ReportChooserClosed 'j4'
-    Start-Sleep -Milliseconds 800
-    $folderValue = ValueOf (ByIdSuffix '-folder' 5)
-    Report (SamePath $folderValue $grantFolder) 'j4 the chosen folder became the step configuration' "'$folderValue' (expected the same folder as '$grantFolder')"
-    $allow = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 8
-    Report ($null -ne $allow -and $allow.Current.IsEnabled) 'j4 the permission control armed once a folder was chosen' "enabled=$($allow.Current.IsEnabled)"
-    Click $allow
-    $allowed = Wait 'Button' '^(Permitido|Allowed)$' 8
-    Report ($null -ne $allowed) 'j4 the application says the folder is allowed' "button now reads '$($allowed.Current.Name)'"
-
-    # --- journey 5: the file a run starts from -------------------------------------------
-    $entryTitle = FindText '(Material de partida|Starting material)' 8
-    Report ($null -ne $entryTitle) 'j5 the Inspector asks for the file the run starts from' "'$entryTitle'"
-    $readonlyBox = $null
-    foreach ($e in (Descendants (AppWindow))) {
-        if ($e.Current.ControlType.ProgrammaticName -eq 'ControlType.Edit' -and (IsReadOnly $e)) { $readonlyBox = $e; break }
-    }
-    Report ($null -ne $readonlyBox) 'j5 the read-only box for the starting file is exposed' "found=$($null -ne $readonlyBox)"
-    if (-not $readonlyBox) { throw 'SKIP: the read-only box for the starting file is not exposed, so run-input cannot be driven' }
-    $chooseFile = ChooseButtonNear $readonlyBox
-    Report ($null -ne $chooseFile) 'j5 the starting-material row has its own Choose button' "'$($chooseFile.Current.Name)'"
-
-    Click (MustFind $chooseFile 'the starting-material row has no Choose button next to it, so run-input cannot be driven')
-    $dlg = WaitDialog 12
-    Report ($null -ne $dlg) 'j5 chooser opened for run-input' "'$($dlg.Current.Name)'"
-    CancelChooser $dlg 'j5'
-    Start-Sleep -Milliseconds 600
-    $afterCancel = ValueOf $readonlyBox
-    Report ($afterCancel -eq '') 'j5 Cancel seeded no input' "box='$afterCancel'"
-
-    Click (MustFind (ChooseButtonNear $readonlyBox) 'the starting-material row lost its Choose button after the cancelled chooser')
-    $dlg = WaitDialog 12
-    ConfirmChooser $dlg $inputFile 'j5' 'file'
-    ReportChooserClosed 'j5'
-    Start-Sleep -Milliseconds 800
-    $inputValue = ValueOf $readonlyBox
-    Report (SamePath $inputValue $inputFile) 'j5 the chosen file became the input for the run' "'$inputValue' (expected the same file as '$inputFile')"
-
-    # The proof that both answers were real: a run that writes into the granted folder.
-    $run = Wait 'Button' '^(Ejecutar|Run)$' 10
-    Report ($null -ne $run -and $run.Current.IsEnabled) 'j4/j5 Run is available with a folder allowed and a file chosen' "enabled=$($run.Current.IsEnabled)"
-    Click (MustFind $run 'the Run button is not on screen, so the granted folder cannot be written into')
-    $saved = $null
-    for ($i = 0; $i -lt 60; $i++) {
-        $hit = @(Get-ChildItem -Force -Path $grantFolder -File -ErrorAction SilentlyContinue)
-        if ($hit.Count -gt 0) { $saved = $hit[0].FullName; break }
-        Start-Sleep -Milliseconds 500
-    }
-    $runSays = FindText '(correcto|correctos|ok|fallido|failed|Nada se ha ejecutado|Nothing ran)' 3
-    Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'"
-
-    # =========================================================================================
-    # NEGATIVE - a folder chosen for one purpose does not answer another.
-    #
-    # This is the one the whole design exists for. The folder below was chosen in journey 1, and
-    # only for `projects-location`. The interface lets it be *typed* into the step's folder box,
-    # which is exactly the case the runtime is built to refuse: the editor can put any string
-    # there, and the record it is checked against was made by the chooser on the privileged side.
-    # Pressing Allow and running must be refused, in the reader's own language, naming the step.
-    # =========================================================================================
-    $stop = Find (AppWindow) 'Button' '^(Detener|Stop)$'
-    if ($stop) { Click $stop; Start-Sleep -Milliseconds 1200 }
-    $typed = SetValue (MustFind (ByIdSuffix '-folder' 5) 'the folder box is no longer exposed, so a folder it never chose cannot be typed into it') $projectsLocation
-    Report ($typed -eq $projectsLocation) 'neg the interface accepts a typed folder it never chose' "'$typed'"
-    $allowAgain = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 8
-    Report ($null -ne $allowAgain) 'neg the permission went back to asking when the folder changed' "button reads '$($allowAgain.Current.Name)' rather than Allowed"
-    Click (MustFind $allowAgain 'the permission control did not go back to asking, so the refusal cannot be provoked')
-    Start-Sleep -Milliseconds 400
-    Click (MustFind (Wait 'Button' '^(Ejecutar|Run)$' 10) 'the Run button is not on screen for the refusal probe')
-    $refusal = FindText '(elige esa carpeta con el bot.n Elegir|choose that folder with the Choose button)' 20
-    $anything = FindText '(No se ha ejecutado nada|Nothing ran)' 2
-    Report ($null -ne $refusal) 'neg a folder chosen for projects-location is refused as a grant' "'$refusal' / '$anything'"
-    Start-Sleep -Milliseconds 2000
-    $leaked = @(Get-ChildItem -Force -Path $projectsLocation -File -ErrorAction SilentlyContinue)
-    Report ($leaked.Count -eq 0) 'neg nothing was written into the folder that was not granted' "files there: $($leaked.Count)"
-
-    # The same question the other way round cannot be asked through this interface, and is not
-    # pretended: Publish takes its destination only from the chooser (Publish.tsx:108) and Import
-    # only from the chooser (store.ts:863). Neither has a box to type a path into, so a folder
-    # chosen for `grant-to-component` can never be offered to them from the GUI at all. The pair
-    # is covered where it is expressible - here - and by `a folder chosen for {recorded} must not
-    # answer {asked}` in apps/desktop/src-tauri/src/lib.rs, which walks every pair.
-} catch {
-    JourneyEnded $_ 'j4/j5 grant-to-component and run-input journeys ran to the end'
+    EnsureNoDialogs 'j4/j5 after'
 }
-EnsureNoDialogs 'j4/j5 after'
+
+# --- the run --------------------------------------------------------------------------------
+#
+# The suite, n times, in order, each time on its own sandbox and its own empty project. In order
+# and not journey-by-journey, because the journeys are chained: journey 2 prepares a publication
+# and journey 3 imports that same folder back, and three publications followed by three imports
+# would be asserting about somebody else's folder.
+#
+# A journey that passes once and fails the second time has not passed. Everything the run produced
+# is in one log, each line saying which iteration it came from, and the counters run across all of
+# them: one FAIL anywhere is a failed run.
+HarnessStart
+for ($iter = 1; $iter -le $Repeat; $iter++) {
+    $script:iteration = "  [iteration $iter/$Repeat]"
+    "--- iteration $iter of $Repeat ---"
+    NewSandbox "-i$iter"
+    ResetProject "iteration $iter"
+    $script:preparedFolder = $null
+    Journey1
+    Journey2
+    Journey3
+    Journey45
+}
+$script:iteration = ''
 
 # --- the application is still standing ---------------------------------------------------------
 ForceCloseDialogs
 $proc.Refresh()
 Report (-not $proc.HasExited) 'application still running at the end' "exited=$($proc.HasExited) responding=$($proc.Responding)"
 
-"SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  sandbox=$sandbox"
+"SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  sandbox=$script:sandbox"
 if ($script:failed -gt 0) { exit 1 }
 if ($script:skipped -gt 0) { exit 2 }
 exit 0
