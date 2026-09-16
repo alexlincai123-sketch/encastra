@@ -517,6 +517,9 @@ function AccRole($acc, $child) {
 #     left in $script:cdpError for the caller to report.
 $script:cdpError = ''
 $script:cdpHelper = Join-Path $PSScriptRoot 'cdp.mjs'
+# The port actually in use. It starts as the one that was asked for and only ever moves to one a
+# DevToolsActivePort file names - see "can the page be asked anything at all" below.
+$script:cdpPort = $CdpPort
 $script:nodeExe = $null
 try { $script:nodeExe = (Get-Command node -ErrorAction Stop).Source } catch { $script:nodeExe = $null }
 
@@ -533,9 +536,9 @@ function CdpRun($mode, $expression, $timeoutMs) {
     $out = ''
     try {
         if ($mode -eq 'wait') {
-            $out = & $script:nodeExe $script:cdpHelper '--port' "$CdpPort" 'wait' $expression '--timeout-ms' "$timeoutMs" '--interval-ms' '100'
+            $out = & $script:nodeExe $script:cdpHelper '--port' "$script:cdpPort" 'wait' $expression '--timeout-ms' "$timeoutMs" '--interval-ms' '100'
         } else {
-            $out = & $script:nodeExe $script:cdpHelper '--port' "$CdpPort" 'eval' $expression
+            $out = & $script:nodeExe $script:cdpHelper '--port' "$script:cdpPort" 'eval' $expression
         }
     } catch {
         $script:cdpError = "$($_.Exception.GetType().Name): $($_.Exception.Message)"
@@ -1502,9 +1505,87 @@ function ReportChooserClosed($what) {
 # without the DevTools protocol there is no oracle - so this is reported as a FAIL and the run
 # stops. It is never a SKIP: a skip that exits 0 is a pass wearing a hat, and a skip on the one
 # check the rest of the file rests on would be worse than that.
-$cdpTitle = Cdp-Eval 'document.title'
-$cdpOk = ($null -ne $cdpTitle -and -not $script:cdpError)
-Report $cdpOk 'CDP reachable' $(if ($cdpOk) { "node $($script:nodeExe) is talking to the page titled '$cdpTitle' on 127.0.0.1:$CdpPort" } else { "$script:cdpError - the application has to be started with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=$CdpPort, and node has to be on PATH (found: $(if ($script:nodeExe) { $script:nodeExe } else { 'nothing' }))" })
+#
+# Waited on rather than asked once. A run on a hosted runner (35058615026) said exactly this and
+# nothing else:
+#
+#   PASS  installed application launches and stays up  -> pid 5080 title='Encastra'
+#   FAIL  CDP reachable  -> no CDP endpoint on 127.0.0.1:9222 (fetch failed)
+#
+# with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS in that step's environment and an application that was
+# up with a window of its own. One attempt cannot tell "the port never opened" from "the port
+# opened a second after we looked", and the log left nobody a way to find out on a machine nobody
+# can watch. So: poll for a minute and a half, say how long it took, and when nothing ever answers
+# print what this machine's WebView2 actually is - whether anything is listening, whether the flag
+# reached the browser process's own command line, which runtime is installed - BEFORE the verdict,
+# in the order somebody reads it.
+$CDP_WAIT_SECONDS = 90
+function WaitForCdp($seconds) {
+    $script:cdpWaitedMs = 0
+    $started = Get-Date
+    if (-not $script:nodeExe) {
+        $script:cdpError = 'node is not on PATH, so the page cannot be asked anything'
+        return $null
+    }
+    $deadline = $started.AddSeconds($seconds)
+    while ($true) {
+        $title = Cdp-Eval 'document.title'
+        # An empty document.title is still an answer. $script:cdpError is what says whether the
+        # page was reached, and it is the only thing that does.
+        if (-not $script:cdpError) {
+            $script:cdpWaitedMs = [int]((Get-Date) - $started).TotalMilliseconds
+            return $title
+        }
+        if ((Get-Date) -ge $deadline) { break }
+        Start-Sleep -Milliseconds 1000
+    }
+    $script:cdpWaitedMs = [int]((Get-Date) - $started).TotalMilliseconds
+    return $null
+}
+# What this machine's WebView2 looks like, from the same script the workflow and install_check run,
+# so all three say the same things in the same words.
+function WebView2State($port) {
+    $probe = Join-Path $PSScriptRoot 'webview2_state.ps1'
+    if (-not (Test-Path $probe)) { return @('webview2: scripts/verify/webview2_state.ps1 is not next to this file, so nothing can be said about the WebView2') }
+    try { return @(& $probe -Port $port) } catch { return @("webview2: the probe threw $($_.Exception.GetType().Name)") }
+}
+# Chromium writes the port it really bound into DevToolsActivePort, which is the answer when a
+# fixed port was refused and a random one taken instead. Edge WebView2 153.0.4234.32 writes no such
+# file - checked against a running application with the port open and listening, and against the
+# whole of LOCALAPPDATA - so this is expected to find nothing here, and is kept for the runtime
+# that does write one. One level of user-data directories, never a walk of LOCALAPPDATA: that takes
+# minutes, and this runs on a failure path.
+function DevToolsPortFromDisk {
+    try {
+        foreach ($dir in @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA '*\EBWebView') -Directory -ErrorAction SilentlyContinue)) {
+            foreach ($candidate in @((Join-Path $dir.FullName 'DevToolsActivePort'), (Join-Path $dir.FullName 'Default\DevToolsActivePort'))) {
+                if (-not (Test-Path $candidate)) { continue }
+                $first = Get-Content $candidate -TotalCount 1 -ErrorAction SilentlyContinue
+                $port = 0
+                if ([int]::TryParse(([string]$first).Trim(), [ref]$port) -and $port -gt 0) { return $port }
+            }
+        }
+    } catch { }
+    return 0
+}
+
+$cdpTitle = WaitForCdp $CDP_WAIT_SECONDS
+$cdpOk = -not $script:cdpError
+if (-not $cdpOk) {
+    $firstTrouble = $script:cdpError
+    $waitedFirst = $script:cdpWaitedMs
+    foreach ($line in (WebView2State $script:cdpPort)) { Note $line }
+    $onDisk = DevToolsPortFromDisk
+    if ($onDisk -gt 0 -and $onDisk -ne $script:cdpPort) {
+        Note "CDP reachable : a DevToolsActivePort file names port $onDisk rather than the $($script:cdpPort) that was asked for, so the browser bound somewhere else; trying that instead"
+        $script:cdpPort = $onDisk
+        $cdpTitle = WaitForCdp 15
+        $cdpOk = -not $script:cdpError
+    }
+    # The first failure is the one that describes the run, not whatever the fallback said last.
+    if (-not $cdpOk) { $script:cdpError = $firstTrouble; $script:cdpWaitedMs = $waitedFirst }
+}
+Report $cdpOk 'CDP reachable' $(if ($cdpOk) { "node $($script:nodeExe) is talking to the page titled '$cdpTitle' on 127.0.0.1:$($script:cdpPort), after $($script:cdpWaitedMs) ms of waiting" } else { "nothing answered on 127.0.0.1:$($script:cdpPort) in $($script:cdpWaitedMs) ms of polling; last: $script:cdpError. The application has to be started with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=$($script:cdpPort) - the webview2 notes above this line say whether that flag reached the browser process - and node has to be on PATH (found: $(if ($script:nodeExe) { $script:nodeExe } else { 'nothing' }))" })
 if (-not $cdpOk) {
     "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  (the page could not be reached, so the canvas cannot be observed)"
     exit 1
@@ -1519,14 +1600,16 @@ if (-not $cdpOk) {
 # whatever project is open.
 function RunSelfTest {
     '--- self test: the page, the canvas oracle, and nothing native ---'
-    $wentTo = CdpOnView '^(Constructor|Builder)$'
-    Report ($wentTo -eq $true) 'self test: the Builder is the view on screen' "$(if ($wentTo) { 'the sidebar marks it aria-current=page' } else { "could not get there: $script:cdpError" })"
-    if (-not $wentTo) {
-        [void](Cdp-Eval "(()=>{const i=[...document.querySelectorAll('.sidebar__item')].find(e=>/Constructor|Builder/.test(e.innerText));if(i)i.click();return !!i;})()")
-        $wentTo = CdpOnView '^(Constructor|Builder)$'
-        Report ($wentTo -eq $true) 'self test: the Builder opened when the sidebar item was clicked' "aria-current=page: $wentTo"
-        if (-not $wentTo) { return }
+    # The application opens on Home, which is not a fault - so this is one check about where we end
+    # up, not a failure for not already being there followed by a pass for arriving.
+    $already = (CdpOnView '^(Constructor|Builder)$') -eq $true
+    $clicked = $false
+    if (-not $already) {
+        $clicked = (Cdp-Eval "(()=>{const i=[...document.querySelectorAll('.sidebar__item')].find(e=>/Constructor|Builder/.test(e.innerText));if(!i)return false;i.click();return true;})()") -eq $true
     }
+    $wentTo = $already -or ((CdpOnView '^(Constructor|Builder)$') -eq $true)
+    Report $wentTo 'self test: the Builder is the view on screen' "$(if ($already) { 'it already was' } elseif ($wentTo) { 'the sidebar item was clicked and now carries aria-current=page' } else { "the sidebar item was clicked=$clicked and it still does not carry aria-current=page: $script:cdpError" })"
+    if (-not $wentTo) { return }
 
     $clean = CdpOracleIsClean
     Report ($clean -eq 'clean') 'self test: the oracle reads the store and the canvas, never the palette' "$clean"

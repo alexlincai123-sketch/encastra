@@ -86,6 +86,16 @@ jobs:
             Tee-Object -FilePath install.log
           if (Select-String -Path install.log -Pattern '^FAIL' -Quiet) { throw "install_check reported a failure" }
 
+      # Run 35058615026 printed `PASS installed application launches and stays up -> pid 5080
+      # title='Encastra'` and then `FAIL CDP reachable -> fetch failed`, with the variable present
+      # in the step environment, and nothing in the log could say whether the port never opened or
+      # the flag never reached the browser process. This answers that from the job log alone, and
+      # it runs whatever happened above, because the run where it matters is the one that failed.
+      - name: Describe the WebView2 the runner has
+        if: always()
+        shell: pwsh
+        run: ./scripts/verify/webview2_state.ps1 -Port 9222 | Tee-Object -FilePath webview2.log
+
       # install_check.ps1 leaves the installed copy running, which is what this drives.
       #
       # -Repeat 3: a chooser that works once and not twice works by accident. The suite runs three
@@ -111,5 +121,6 @@ jobs:
           path: |
             gui-journeys.log
             install.log
+            webview2.log
           if-no-files-found: warn
           retention-days: 90
