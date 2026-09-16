@@ -261,5 +261,69 @@ class CiEvidenceTests(unittest.TestCase):
         self.assertIn("no run of CI", check.evidence)
 
 
+class GuiJourneyEvidenceTests(unittest.TestCase):
+    """What a gui_journeys.ps1 log is taken to mean.
+
+    Asked of the reading directly, like the CI evidence above: what is under test is how a log is
+    judged, not the machinery that finds one.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+
+    def judge(self, text: str):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import release_check
+
+        log = pathlib.Path(self._tmp.name) / "gui-journeys.log"
+        log.write_text(text, "utf-8")
+        return release_check.check_gui_journeys(log)
+
+    def test_three_runs_of_the_suite_all_passing_is_evidence(self) -> None:
+        check = self.judge(
+            "PASS  j1 something  -> observed  [iteration 1/3]\n"
+            "PASS  j1 something  -> observed  [iteration 2/3]\n"
+            "PASS  j1 something  -> observed  [iteration 3/3]\n"
+            "SUMMARY  passed=3 failed=0 skipped=0  repeat=3  sandbox=C:\\x\n",
+        )
+        self.assertEqual(check.status, "PASS")
+        self.assertIn("repeat=3", check.evidence)
+
+    def test_one_run_is_not_yet_evidence(self) -> None:
+        # A chooser that works once and not twice works by accident, and the log of a single run
+        # cannot tell the two apart.
+        check = self.judge(
+            "PASS  j1 something  -> observed  [iteration 1/1]\n"
+            "SUMMARY  passed=1 failed=0 skipped=0  repeat=1  sandbox=C:\\x\n",
+        )
+        self.assertEqual(check.status, "NOT_VERIFIED")
+        self.assertIn("repeat=1", check.evidence)
+        self.assertIn("-Repeat 3", check.action)
+
+    def test_a_log_that_stops_before_its_summary_is_a_failure(self) -> None:
+        # Everything in it passed, and it says nothing about what came after the cut.
+        check = self.judge("PASS  j1 something  -> observed  [iteration 1/3]\n")
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("no SUMMARY", check.evidence)
+
+    def test_a_failed_line_outranks_the_repeat_count(self) -> None:
+        check = self.judge(
+            "PASS  a  -> ok  [iteration 1/3]\n"
+            "FAIL  b  -> broken  [iteration 2/3]\n"
+            "SUMMARY  passed=1 failed=1 skipped=0  repeat=3  sandbox=C:\\x\n",
+        )
+        self.assertEqual(check.status, "FAIL")
+
+    def test_a_skip_is_still_not_a_pass_however_many_times_it_ran(self) -> None:
+        check = self.judge(
+            "PASS  a  -> ok  [iteration 1/3]\n"
+            "SKIP  b  -> the chooser never appeared  [iteration 1/3]\n"
+            "SUMMARY  passed=1 failed=0 skipped=1  repeat=3  sandbox=C:\\x\n",
+        )
+        self.assertEqual(check.status, "NOT_VERIFIED")
+        self.assertIn("skipped", check.evidence)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -380,6 +380,13 @@ def check_gui_journeys(evidence: pathlib.Path | None) -> Check:
 
     The evidence is a gui_journeys.ps1 log. A log proves a run happened, not where; keep it with
     the run that produced it.
+
+    A run of one is not evidence either. These journeys drive a native modal dialog through a
+    browser engine, and a chooser that works once and not twice works by accident; the harness's
+    -Repeat runs the whole suite from a clean state each time and writes the number into its
+    SUMMARY line, and fewer than three is NOT_VERIFIED rather than a pass. A log with no SUMMARY
+    line at all is a run that did not reach its end — a killed process, a truncated artefact — and
+    the PASS lines above the cut say nothing about what came after it.
     """
     if evidence is None:
         return Check("gui.journeys", NOT_VERIFIED, "no chooser-journey log given", "run scripts/verify/gui_journeys.ps1 on a machine nobody is using; then --evidence-gui <log>")
@@ -389,15 +396,22 @@ def check_gui_journeys(evidence: pathlib.Path | None) -> Check:
     fails = re.findall(r"^FAIL.*$", text, re.M)
     skips = re.findall(r"^SKIP.*$", text, re.M)
     passes = len(re.findall(r"^PASS", text, re.M))
+    summary = re.search(r"^SUMMARY.*$", text, re.M)
     if fails:
         return Check("gui.journeys", FAIL, f"{len(fails)} failed: {fails[0][:120]}")
     if passes == 0:
         return Check("gui.journeys", FAIL, f"{evidence.name} has no PASS lines; is it a gui_journeys.ps1 log?")
+    if summary is None:
+        return Check("gui.journeys", FAIL, f"{evidence.name} has {passes} PASS lines and no SUMMARY line; the run did not reach its end", "run it again and keep the whole log")
+    found = re.search(r"repeat=(\d+)", summary.group(0))
+    repeat = int(found.group(1)) if found else 0
     if skips:
         # A journey that did not run is not a journey that passed, and the two are the same colour
         # unless something says so.
-        return Check("gui.journeys", NOT_VERIFIED, f"{passes} passed but {len(skips)} skipped: {skips[0][:120]}")
-    return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name}")
+        return Check("gui.journeys", NOT_VERIFIED, f"{passes} passed over repeat={repeat} but {len(skips)} skipped: {skips[0][:120]}")
+    if repeat < 3:
+        return Check("gui.journeys", NOT_VERIFIED, f"{passes} checks passed in {evidence.name} but repeat={repeat}: one run of a chooser is not evidence that it works", "run scripts/verify/gui_journeys.ps1 -Repeat 3")
+    return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name} over repeat={repeat} runs of the suite")
 
 
 def check_toolchain() -> Check:
