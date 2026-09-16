@@ -87,6 +87,26 @@ public static class W32 {
   // false negative. Raised once, by handle, at the start - never a global SendKeys.
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
+  // Who a window's parent actually is, and what id its dialog template gave it. `child windows=[]`
+  // printed next to a pane that plainly owns a handle is a contradiction, and these two settle it:
+  // either the pane is not under the handle the enumeration was started from, or it is and the
+  // enumeration is wrong. Both are printed rather than guessed at.
+  [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr h);
+  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr h);
+  // Keystrokes to one window handle. PostMessage rather than SendMessage because a key press is
+  // two messages the target has to see in order and process on its own thread; and to a handle,
+  // never to "whatever has focus on this desktop" - there is no global SendKeys in this file.
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
+  // MSAA's hit test. This is what the accessibility layer itself answers for a screen point, so it
+  // says two things at once: which element is really on top at the palette item's own coordinates
+  // (an item covered by something else is an item whose clicks land elsewhere), and it hands back
+  // the IAccessible whose accDoDefaultAction is what LegacyIAccessiblePattern.DoDefaultAction
+  // calls. The managed UI Automation wrapper does not expose that pattern at all - it knows Invoke,
+  // Value, Toggle and the rest, and nothing about the legacy bridge - so this is the route to it.
+  // IAccessible is a dual interface, so it is called by name through IDispatch and no vtable is
+  // redeclared here.
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x; public int y; }
+  [DllImport("oleacc.dll")] public static extern int AccessibleObjectFromPoint(POINT pt, [MarshalAs(UnmanagedType.IDispatch)] out object acc, [MarshalAs(UnmanagedType.Struct)] out object child);
   // A window's caption, read the way that works across a process boundary for a top-level window.
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, System.Text.StringBuilder s, int max);
   // Every top-level window this process owns, whatever its class and wherever UI Automation
@@ -117,6 +137,8 @@ $T = [System.Windows.Automation.TreeScope]
 $TRUE_COND = [System.Windows.Automation.Condition]::TrueCondition
 $BM_CLICK = 0x00F5; $WM_SETTEXT = 0x000C; $WM_GETTEXT = 0x000D
 $WM_CLOSE = 0x0010; $WM_COMMAND = 0x0111; $IDOK = 1; $IDCANCEL = 2
+$WM_KEYDOWN = 0x0100; $WM_KEYUP = 0x0101
+$VK_RETURN = 0x0D; $VK_SPACE = 0x20
 $NULLPTR = [IntPtr]::Zero
 
 $script:passed = 0; $script:failed = 0; $script:skipped = 0
@@ -336,33 +358,283 @@ function PlacedStepIds {
     } catch { }
     return $out
 }
+# Every id on screen that carries `node-` anywhere in it, not only at the start, so the shape of
+# the id is on the record rather than being assumed to be the shape this file went looking for.
+function NodeIdDump {
+    $out = @()
+    try {
+        foreach ($e in (Descendants (AppWindow))) {
+            $id = $e.Current.AutomationId
+            if ($id -and $id -like '*node-*') { $out += ("{0}({1})" -f $id, ($e.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '')) }
+        }
+    } catch { $out += "(the tree could not be read: $($_.Exception.GetType().Name))" }
+    if ($out.Count -eq 0) { return '(no id anywhere on screen contains node-)' }
+    return ($out -join ' ')
+}
+# What the palette is actually offering. "The item was not found" and "the palette is empty" are
+# different answers and only one of them is a harness problem: `Palette()` renders
+# `palette.empty` - "No components are installed." - when the `manifests` map is empty, and an
+# empty map is also exactly what makes `addNode` return without doing anything (store.ts:328,
+# `const manifest = get().manifests[componentRef]; if (!manifest) return;`). So if the palette is
+# empty the silence is the product's, not this file's, and that is worth saying out loud.
+# A palette item is told apart from every other button on screen by its own title attribute, which
+# `PaletteItem` sets to the component reference - `encastra.data.json@1.0.0` and the description -
+# and which Chromium publishes as HelpText. So the list below is not "buttons that might be palette
+# items": it is the set of references the palette is offering, which is the `manifests` map itself,
+# which is the very thing `addNode` looks the reference up in.
+function PaletteDump($max) {
+    $empty = FindText '(No components are installed|No hay componentes instalados)' 1
+    $items = @(); $others = 0
+    try {
+        foreach ($b in (ControlsOfType 'Button')) {
+            $ref = (HelpTextOf $b) -split "`n" | Select-Object -First 1
+            if (-not $ref -or $ref -notmatch '^[a-z0-9._-]+@') { $others++; continue }
+            if ($items.Count -ge $max) { continue }
+            $n = $b.Current.Name
+            if (-not $n) { $n = '' }
+            if ($n.Length -gt 26) { $n = $n.Substring(0, 26) }
+            $items += ("{0} ('{1}')" -f $ref.Trim(), $n)
+        }
+    } catch { $items += "(the tree could not be read: $($_.Exception.GetType().Name))" }
+    $head = if ($empty) { "the palette is showing its empty state ('$empty'), so the store's manifests map is empty and addNode returns without placing anything; " } else { '' }
+    if ($items.Count -eq 0) { return ($head + "the palette is offering no component at all ($others other buttons are on screen)") }
+    return ($head + "the palette is offering $($items.Count) components ($others other buttons on screen): " + ($items -join ' '))
+}
+# Everything UI Automation will say about one element, before it is asked to do anything. The
+# patterns are the point: a control that publishes no Invoke is a control `Invoke()` cannot press,
+# and `IsOffscreen` or `IsEnabled=False` is a click that was never going to land. LegacyIAccessible
+# is deliberately absent from this list - the managed UI Automation wrapper knows Invoke, Value,
+# Toggle, SelectionItem and the rest and nothing at all about the legacy bridge, so whether the
+# element supports it cannot be asked here; route 2 below reaches it through MSAA instead.
+function ElementFacts($el) {
+    if (-not $el) { return '(no element)' }
+    try {
+        $c = $el.Current
+        $pats = @()
+        if (HasPattern $el ([System.Windows.Automation.InvokePattern]::Pattern)) { $pats += 'Invoke' }
+        if (HasPattern $el ([System.Windows.Automation.SelectionItemPattern]::Pattern)) { $pats += 'SelectionItem' }
+        if (HasPattern $el ([System.Windows.Automation.TogglePattern]::Pattern)) { $pats += 'Toggle' }
+        if (HasPattern $el ([System.Windows.Automation.ValuePattern]::Pattern)) { $pats += 'Value' }
+        if (HasPattern $el ([System.Windows.Automation.ScrollItemPattern]::Pattern)) { $pats += 'ScrollItem' }
+        if ($pats.Count -eq 0) { $pats += 'none' }
+        $n = $c.Name
+        if (-not $n) { $n = '' }
+        if ($n.Length -gt 70) { $n = $n.Substring(0, 70) }
+        $r = $c.BoundingRectangle
+        return ("type={0} automationId='{1}' name='{2}' enabled={3} offscreen={4} keyboardFocusable={5} rect=({6},{7} {8}x{9}) hwnd={10} helpText='{11}' patterns={12}" -f `
+            ($c.ControlType.ProgrammaticName -replace '^ControlType\.', ''), $c.AutomationId, $n, $c.IsEnabled, $c.IsOffscreen, $c.IsKeyboardFocusable, `
+            [int]$r.Left, [int]$r.Top, [int]$r.Width, [int]$r.Height, $c.NativeWindowHandle, (HelpTextOf $el), ($pats -join '+'))
+    } catch { return "(the element could not be read: $($_.Exception.GetType().Name))" }
+}
+# The window Chromium renders into, which is where a keystroke aimed at the page has to be sent.
+# Under the Tauri window it is a Chrome_WidgetWin host with a Chrome_RenderWidgetHostHWND inside
+# it; the innermost is preferred because that is the one with the input handler on it.
+function WebViewHwnd {
+    $w = AppWindow
+    if (-not $w) { return $NULLPTR }
+    $wh = Hwnd $w
+    if ($wh -eq $NULLPTR) { return $NULLPTR }
+    foreach ($cls in @('Chrome_RenderWidgetHostHWND', 'Chrome_WidgetWin_1', 'Chrome_WidgetWin_0')) {
+        $h = ChildByClass $wh $cls 4
+        if ($h -ne $NULLPTR) { return $h }
+    }
+    return $NULLPTR
+}
+function ChildClassesDump($parent, $max) {
+    $out = @(); $child = $NULLPTR
+    while ($parent -ne $NULLPTR -and $out.Count -lt $max) {
+        $child = [W32]::FindWindowExW($parent, $child, $null, $null)
+        if ($child -eq $NULLPTR) { break }
+        $out += ("{0}#{1}" -f (HwndClass $child), $child)
+    }
+    if ($out.Count -eq 0) { return '(no child windows)' }
+    return ($out -join ' ')
+}
+# MSAA by name through IDispatch: IAccessible is a dual interface, so no vtable is redeclared.
+function AccName($acc, $child) {
+    if (-not $acc) { return '' }
+    try { return [string]$acc.GetType().InvokeMember('accName', 'GetProperty', $null, $acc, @($child)) } catch { return '' }
+}
+function AccRole($acc, $child) {
+    if (-not $acc) { return '' }
+    try { return [string]$acc.GetType().InvokeMember('accRole', 'GetProperty', $null, $acc, @($child)) } catch { return '' }
+}
+
+# Is the Inspector configuring a step of this component? `Inspector()` returns the empty panel
+# unless `selectedNodeId` names a node that is really in `nodes` (Inspector.tsx:516), and when it
+# does not it prints the component reference - `encastra.data.json@1.0.0` - into a `<dd>`. So a
+# Text element carrying that reference is the store saying, in its own words, that `addNode`
+# added a node and selected it. Restricted to Text on purpose: the palette item is a Button, and
+# its reference lives in a `title` attribute, which Chromium publishes as HelpText and not as the
+# name - but the restriction makes that impossible to get wrong rather than merely unlikely.
+function InspectorShows($pattern) {
+    if (-not $pattern) { return $null }
+    try {
+        foreach ($e in (Descendants (AppWindow))) {
+            if ($e.Current.ControlType.ProgrammaticName -ne 'ControlType.Text') { continue }
+            $n = $e.Current.Name
+            if ($n -and $n -match $pattern) { return $n }
+        }
+    } catch { }
+    return $null
+}
+# The two independent answers to "did a step get placed", polled together: a new id on the canvas,
+# and the Inspector configuring the step. Returns them both rather than printing, so the caller
+# can report which one it got.
+function StepEvidence($before, $refPattern, $ticks) {
+    $fresh = @(); $shown = $null
+    for ($i = 0; $i -lt $ticks; $i++) {
+        $fresh = @(@(PlacedStepIds) | Where-Object { $before -notcontains $_ })
+        $shown = InspectorShows $refPattern
+        if ($fresh.Count -gt 0 -or $shown) { break }
+        Start-Sleep -Milliseconds 300
+    }
+    return @{ Ids = $fresh; Shown = $shown }
+}
+
+# The three ways to activate a control, most ordinary first. Each writes a note saying what it did
+# and what came back, so a run where none of them worked says which of them was even possible.
+#
+#   1. InvokePattern.Invoke - what a client normally does, and what this file has always done.
+#   2. MSAA accDoDefaultAction - what LegacyIAccessiblePattern.DoDefaultAction calls underneath.
+#      The element is found by hit-testing the accessibility layer at the item's own centre, which
+#      also answers a question Invoke cannot: if the element sitting at those coordinates is not
+#      the palette item, something is covering it and every click lands on that instead.
+#   3. Focus, then a key press to the window Chromium renders into. A `<button>` activates on both
+#      Enter and Space, so both are sent - to that one window handle, never to the desktop.
+function RouteName($n) {
+    switch ($n) {
+        1 { return 'route 1 (InvokePattern.Invoke)' }
+        2 { return 'route 2 (MSAA accDoDefaultAction, what LegacyIAccessible.DoDefaultAction calls)' }
+        3 { return 'route 3 (SetFocus, then VK_RETURN and VK_SPACE to the WebView2 window)' }
+    }
+    return "route $n"
+}
+function ActivateRoute($item, $n, $what) {
+    $tag = "$what $(RouteName $n)"
+    if ($n -eq 1) {
+        if (-not (HasPattern $item ([System.Windows.Automation.InvokePattern]::Pattern))) {
+            Note "$tag : the element publishes no Invoke pattern, so there was nothing to invoke"
+            return
+        }
+        try {
+            $item.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+            Note "$tag : invoked, no error"
+        } catch { Note "$tag : threw $($_.Exception.GetType().Name) - $($_.Exception.Message)" }
+        return
+    }
+    if ($n -eq 2) {
+        $cx = 0; $cy = 0
+        try {
+            $r = $item.Current.BoundingRectangle
+            if ($r.Width -le 0 -or $r.Height -le 0) { Note "$tag : the element has no rectangle to hit-test"; return }
+            $cx = [int]($r.Left + $r.Width / 2); $cy = [int]($r.Top + $r.Height / 2)
+        } catch { Note "$tag : the element's rectangle could not be read ($($_.Exception.GetType().Name))"; return }
+        $pt = New-Object 'W32+POINT'
+        $pt.x = $cx; $pt.y = $cy
+        $acc = $null; $child = $null; $hr = -1
+        try { $hr = [W32]::AccessibleObjectFromPoint($pt, [ref]$acc, [ref]$child) } catch {
+            Note "$tag : AccessibleObjectFromPoint threw $($_.Exception.GetType().Name)"
+            return
+        }
+        if ($hr -ne 0 -or $null -eq $acc) { Note "$tag : AccessibleObjectFromPoint($cx,$cy) returned hr=$hr and no object"; return }
+        Note "$tag : at the item's own centre ($cx,$cy) the accessibility layer says the element there is '$(AccName $acc $child)' role=$(AccRole $acc $child) - if that is not this palette item, something is covering it and a click lands on that instead"
+        try {
+            [void]$acc.GetType().InvokeMember('accDoDefaultAction', 'InvokeMethod', $null, $acc, @($child))
+            Note "$tag : accDoDefaultAction returned without error"
+        } catch { Note "$tag : accDoDefaultAction threw $($_.Exception.GetType().Name) - $($_.Exception.Message)" }
+        return
+    }
+    try { $item.SetFocus(); Note "$tag : focus set on the element" }
+    catch { Note "$tag : SetFocus threw $($_.Exception.GetType().Name) - $($_.Exception.Message)" }
+    $wv = WebViewHwnd
+    if ($wv -eq $NULLPTR) {
+        $w = AppWindow
+        Note "$tag : no Chromium window under the main window to send a key to; its child windows are: $(ChildClassesDump (Hwnd $w) 12)"
+        return
+    }
+    Note "$tag : sending to $(HwndClass $wv)#$wv"
+    foreach ($vk in @($VK_RETURN, $VK_SPACE)) {
+        [void][W32]::PostMessageW($wv, $WM_KEYDOWN, [IntPtr]$vk, [IntPtr]1)
+        Start-Sleep -Milliseconds 60
+        [void][W32]::PostMessageW($wv, $WM_KEYUP, [IntPtr]$vk, [IntPtr]1)
+        Start-Sleep -Milliseconds 500
+    }
+}
+
 # Places a step from the palette and proves one arrived, which is not the same question as
 # whether the palette item was clicked. Journey 2 used to ask the second and call it the first:
 # `FindText '(Parse JSON)'` matches the palette button that was just pressed, so it would have
 # said "a step is on the canvas" with an empty canvas.
 #
-# Prints its own result and leaves the id in $script:placedStep rather than returning it, for the
-# reason given above Report: a function that writes to the success stream cannot also hand a
-# value back. The caller decides whether an empty canvas is fatal to its journey.
+# Asking the first question honestly then failed every time, in every run, which leaves two
+# possibilities and the run has to say which:
+#
+#   * nothing was placed - the click never reached React, or `addNode` returned early on a
+#     manifest that is not in the map (store.ts:328); or
+#   * a step was placed and the canvas does not publish it. ComponentNode gives each step
+#     `id="node-<id>"` and, deliberately, no ARIA role (ComponentNode.tsx:131 and the comment
+#     above it), and a div with no role is a generic container Chromium is free to leave out of
+#     the accessibility tree altogether - in which case the id exists in the page and no client
+#     can see it, and `aria-activedescendant` points at something nothing can reach.
+#
+# Those are different findings with different owners, so they are reported as different lines and
+# the second one is not allowed to masquerade as the first. The Inspector is what tells them
+# apart: it renders the empty panel unless `selectedNodeId` names a node that is really in `nodes`
+# (Inspector.tsx:516), and `addNode` selects what it placed (store.ts:355). So the Inspector
+# showing this component's reference is the store stating that a node was added - which is the
+# precondition journeys 2, 4 and 5 actually need, whether or not the canvas publishes an id.
+#
+# Prints its own results and leaves the answers in $script: variables rather than returning them,
+# for the reason given above Report: a function that writes to the success stream cannot also hand
+# a value back.
+#
+#   $script:placedStep - the canvas id of the step, or $null if the canvas publishes none.
+#   $script:stepPlaced - a step was placed at all, by either witness. What the callers gate on.
 $script:placedStep = $null
-function PlaceStep($palettePattern, $what) {
+$script:stepPlaced = $false
+function PlaceStep($palettePattern, $what, $refPattern) {
     $script:placedStep = $null
+    $script:stepPlaced = $false
     $before = @(PlacedStepIds)
+    # If the Inspector is already showing this component, the second witness cannot tell this
+    # placement from the last one, and it is not used. Said out loud rather than silently relied on.
+    $alreadyShown = InspectorShows $refPattern
     $item = Wait 'Button' $palettePattern 20
-    if (-not $item) { throw "SKIP: the palette item matching $palettePattern never appeared; what is on screen: $(AutomationIdDump 40)" }
-    Click $item
-    $fresh = @()
-    for ($i = 0; $i -lt 40; $i++) {
-        $fresh = @(@(PlacedStepIds) | Where-Object { $before -notcontains $_ })
-        if ($fresh.Count -gt 0) { break }
-        Start-Sleep -Milliseconds 250
+    if (-not $item) {
+        throw "SKIP: the palette item matching $palettePattern never appeared. $(PaletteDump 30). Ids on screen: $(AutomationIdDump 40)"
     }
-    if ($fresh.Count -eq 0) {
-        Report $false "$what a step is on the canvas" ("the palette item '$($item.Current.Name)' was clicked and no new step id appeared in 10s. Steps UI Automation can see: " + (PlacedStepsDump) + '; the interface is saying: ' + (AppNotices 4))
+    Note "$what the palette item, as UI Automation sees it before it is touched: $(ElementFacts $item)"
+    Note "$what $(PaletteDump 30)"
+    if ($alreadyShown) { Note "$what the Inspector was already showing '$alreadyShown' before anything was clicked, so only a new canvas id counts as evidence here" }
+
+    $ev = @{ Ids = @(); Shown = $null }
+    $used = ''
+    foreach ($n in 1, 2, 3) {
+        ActivateRoute $item $n $what
+        $ev = StepEvidence $before $refPattern 24
+        if ($alreadyShown) { $ev.Shown = $null }
+        if ($ev.Ids.Count -gt 0 -or $ev.Shown) { $used = (RouteName $n); break }
+        Note "$what $(RouteName $n) placed nothing: no new canvas id, and the Inspector is saying $(if (InspectorShows '.') { 'something else' } else { 'nothing' })"
+        # React re-renders the palette on every store change, which can leave the element this
+        # loop is holding stale; the next route is given a fresh one where there is one.
+        $again = Find (AppWindow) 'Button' $palettePattern
+        if ($again) { $item = $again }
+    }
+
+    if ($ev.Ids.Count -gt 0) {
+        $script:placedStep = $ev.Ids[0]
+        $script:stepPlaced = $true
+        Report $true "$what a step is on the canvas" "the canvas publishes '$($script:placedStep)' after $used; every id on screen containing node-: $(NodeIdDump)"
         return
     }
-    $script:placedStep = $fresh[0]
-    Report $true "$what a step is on the canvas" "the canvas publishes '$($script:placedStep)'"
+    if ($ev.Shown) {
+        $script:stepPlaced = $true
+        Report $true "$what the palette placed a step and the Inspector is configuring it" "'$($ev.Shown)' is on screen after $used, which Inspector.tsx:516 only renders for a selectedNodeId that names a node in the graph"
+        Report $false "$what a step is on the canvas, and the canvas says so to UI Automation" ("a step was placed - see the line above - and nothing on screen publishes a node-* automation id. ComponentNode.tsx:131 gives each step id='node-<id>' and the canvas points aria-activedescendant at it, so a client that cannot see the id cannot follow the selection. Ids containing node-: " + (NodeIdDump) + '; steps UI Automation can see: ' + (PlacedStepsDump))
+        return
+    }
+    Report $false "$what a step is on the canvas" ("the palette item '$($item.Current.Name)' was activated by all three routes and neither witness ever answered: no new node-* id, and the Inspector never showed $refPattern. The item now: " + (ElementFacts $item) + '. ' + (PaletteDump 30) + '. Ids containing node-: ' + (NodeIdDump) + '. Steps UI Automation can see: ' + (PlacedStepsDump) + '; the interface is saying: ' + (AppNotices 4))
 }
 # The sentences the interface is showing. A failed save puts its reason in the status bar
 # (store.ts saveProject: `set({ message: { tone: 'error', text: describe(error) } })`), so when a
@@ -737,6 +1009,49 @@ function DlgNameField($dlg, $kind) {
         }
     }
     if ($best) { return $best }
+    # A control that is not an Edit, that the dialog labels as its file-name box, and that owns a
+    # real window handle. The Save As dialog on Windows Server 2025 came back as exactly that:
+    #
+    #   uia=[... Text'File name:'#0 Pane'File name:'#328292] child windows=[] edit windows=[]
+    #
+    # - a labelled Pane with a handle, no Edit anywhere, and the search box already named and
+    # turned down above. A handle is a handle: WM_SETTEXT to it is how the shell's own controls are
+    # written, and what it holds is read straight back before anything is confirmed, so a pane that
+    # turns out not to be the name box reports itself instead of confirming on nothing.
+    #
+    # For a *file* dialog only. The folder pickers are driven by a label pattern that includes the
+    # bare word "folder", which a folder dialog's own title and tree also carry, and those journeys
+    # already reach their name box by id or by class; widening their search to any labelled pane
+    # would be trading a route that works for one that might.
+    if ($kind -eq 'file') {
+        $labelled = $null; $labelledScore = -1
+        foreach ($c in (Descendants $dlg)) {
+            $label = $c.Current.Name
+            if (-not $label -or $label -notmatch $wanted) { continue }
+            if (LooksLikeSearch $label) { $script:fieldRejected += "UIA descendant '$label'"; continue }
+            $h = [IntPtr]$c.Current.NativeWindowHandle
+            if ($h -eq $NULLPTR) { continue }
+            $cls = HwndClass $h
+            $inner = ChildByClass $h 'Edit' 3
+            # An Edit inside it is the control the text really belongs in; failing that, a combo
+            # takes a WM_SETTEXT of its own and hands it to the edit it owns; failing that, the
+            # window itself, which is still better than nothing and still read back afterwards.
+            $s = 0
+            if ($inner -ne $NULLPTR) { $s = 3 } elseif ($cls -eq 'Edit') { $s = 2 } elseif ($cls -like 'ComboBox*') { $s = 1 }
+            if ($s -le $labelledScore) { continue }
+            $labelledScore = $s
+            $type = ($c.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '')
+            $route = "UIA descendant $type '$label' #$h class=$cls parent=#$([W32]::GetParent($h)) ctrlId=$([W32]::GetDlgCtrlID($h))"
+            if ($inner -ne $NULLPTR) {
+                $route += " -> Edit #$inner"
+                $labelled = NameFieldCandidate $inner $h $null $label $wanted $route
+            } else {
+                $route += ' (written through its own handle; it holds no Edit window)'
+                $labelled = NameFieldCandidate $h $NULLPTR $null $label $wanted $route
+            }
+        }
+        if ($labelled) { return $labelled }
+    }
     # Last resort: any Edit window under the dialog that is not a search box, whatever else it
     # turns out to be. What it holds is read back before anything is confirmed, so a wrong guess
     # reports itself rather than confirming on nothing.
@@ -767,6 +1082,25 @@ function WriteNameField($f, $path) {
         [void][W32]::SendMessageW($f.Combo, $WM_SETTEXT, $NULLPTR, $path)
         Start-Sleep -Milliseconds 350
     }
+    # And if the control that was found is a container rather than a box - the labelled Pane the
+    # Save As dialog offers instead of an Edit - the box may be a combo inside it. Tried only after
+    # the direct write did not take, and the read-back still decides whether anything is confirmed.
+    if ((ReadNameField $f) -ne $path -and $f.Hwnd -ne $NULLPTR) {
+        foreach ($cls in @('ComboBox', 'ComboBoxEx32', 'Edit')) {
+            $inner = ChildByClass $f.Hwnd $cls 3
+            if ($inner -eq $NULLPTR) { continue }
+            [void][W32]::SendMessageW($inner, $WM_SETTEXT, $NULLPTR, $path)
+            Start-Sleep -Milliseconds 350
+            if ((HwndText $inner) -eq $path) {
+                $f.Combo = $f.Hwnd
+                $f.Hwnd = $inner
+                # $f is the caller's own hashtable, so the read-back and the confirm that follow
+                # are about this control; the route says so rather than naming the container.
+                $f.Route = "$($f.Route) -> written through its $cls child #$inner"
+                break
+            }
+        }
+    }
 }
 
 $CONFIRM = '^(Seleccionar carpeta|Seleccionar|Select Folder|Elegir carpeta|Elegir|Choose|Aceptar|OK|Guardar|Save|Abrir|Open)$'
@@ -791,7 +1125,15 @@ function DlgButtonHwnd($dlg, $namePattern, $fallbackId) {
 # What the dialog is actually made of, printed only when something was not found in it, so that a
 # failure on a machine nobody can watch still says enough to be acted on.
 function DialogShape($dlg) {
+    $dh = Hwnd $dlg
     $parts = @()
+    # Every element the accessibility tree hangs under the dialog, and for the ones that own a
+    # window, who their parent really is. `uia=[... Pane'File name:'#328292] child windows=[]` is a
+    # contradiction - a window with a handle that the enumeration starting at the dialog cannot
+    # reach - and only the parent chain says which half is wrong: either the pane is not under this
+    # handle at all (the shell hosts its file dialog somewhere else and UI Automation stitches the
+    # two together), or it is and the enumeration below is being asked the wrong question.
+    $handles = @()
     try {
         foreach ($c in (Descendants $dlg)) {
             if ($parts.Count -ge 24) { break }
@@ -799,9 +1141,13 @@ function DialogShape($dlg) {
             if (-not $n) { $n = '' }
             if ($n.Length -gt 24) { $n = $n.Substring(0, 24) }
             $parts += ("{0}'{1}'#{2}" -f ($c.Current.ControlType.ProgrammaticName -replace '^ControlType\.', ''), $n, $c.Current.NativeWindowHandle)
+            $h = [IntPtr]$c.Current.NativeWindowHandle
+            if ($h -ne $NULLPTR -and $handles.Count -lt 10) {
+                $handles += ("#{0} {1} parent=#{2} ctrlId={3} underThisDialog={4}" -f $h, (HwndClass $h), [W32]::GetParent($h), [W32]::GetDlgCtrlID($h), ([W32]::GetParent($h) -eq $dh))
+            }
         }
     } catch { $parts += "(the dialog tree could not be read: $($_.Exception.GetType().Name))" }
-    $classes = @(); $child = $NULLPTR; $dh = Hwnd $dlg
+    $classes = @(); $child = $NULLPTR
     while ($dh -ne $NULLPTR -and $classes.Count -lt 12) {
         $child = [W32]::FindWindowExW($dh, $child, $null, $null)
         if ($child -eq $NULLPTR) { break }
@@ -815,7 +1161,16 @@ function DialogShape($dlg) {
         if ($edits.Count -ge 8) { break }
         $edits += ("#{0}'{1}'" -f $e, (HwndUiaName $e))
     }
-    return ('uia=[' + ($parts -join ' ') + '] child windows=[' + ($classes -join ',') + '] edit windows=[' + ($edits -join ' ') + ']')
+    # The four control ids a common dialog gives its name box, asked directly. This is the route
+    # that does not depend on enumerating anything, so when the enumeration comes back empty this
+    # is what says whether the controls are there under ids or are not there at all.
+    $probe = @()
+    foreach ($id in $NAME_FIELD_IDS) {
+        $h = if ($dh -eq $NULLPTR) { $NULLPTR } else { [W32]::GetDlgItem($dh, $id) }
+        if ($h -eq $NULLPTR) { $probe += "$id=none" }
+        else { $probe += ("{0}=#{1} {2} '{3}'" -f $id, $h, (HwndClass $h), (HwndUiaName $h)) }
+    }
+    return ('dialog=#' + $dh + ' ' + (HwndClass $dh) + ' uia=[' + ($parts -join ' ') + '] child windows=[' + ($classes -join ',') + '] edit windows=[' + ($edits -join ' ') + '] GetDlgItem=[' + ($probe -join ' ') + '] windowed uia elements=[' + ($handles -join ' | ') + ']')
 }
 # Whatever the shell put on screen when it would not accept a path: its own message box is a
 # second #32770 owned by this process, and its static text is the sentence the person reads.
@@ -912,7 +1267,7 @@ function ConfirmChooser($dlg, $path, $what, $kind) {
     $landed = (ReadNameField $field).Trim().Trim('"')
     $inSearch = LooksLikeSearch $field.Label
     if ($landed -ne $path -or $inSearch) {
-        Report $false "$what : the path is in the chooser's name box before it is confirmed" "the control labelled '$($field.Label)' holds '$landed', wanted '$path' (route: $($field.Route))$(if ($inSearch) { ' - and that control is a search box' }) - not confirming on that"
+        Report $false "$what : the path is in the chooser's name box before it is confirmed" "the control labelled '$($field.Label)' holds '$landed', wanted '$path' (route: $($field.Route))$(if ($inSearch) { ' - and that control is a search box' }) - not confirming on that. The dialog holds: $(DialogShape $dlg)"
         ForceCloseDialogs
         return
     }
@@ -1096,7 +1451,7 @@ try {
     # canvas. What is asked instead is whether the canvas publishes a step of its own. Not fatal
     # to this journey if it does not: what journey 2 exists for is downstream, and the save is
     # what gates that.
-    PlaceStep '(Parse JSON|encastra\.data\.json)' 'j2'
+    PlaceStep '(Parse JSON|encastra\.data\.json)' 'j2' 'encastra\.data\.json@'
 
     # Save is armed by nothing but the store's `busy` flag (App.tsx: `disabled={busy}`) - not by a
     # name, and not by the project being dirty, though the step just placed made it dirty anyway.
@@ -1373,9 +1728,9 @@ try {
     # while clicking a step on the canvas is not available from here at all, because ComponentNode
     # deliberately publishes no ARIA role and so offers no Invoke pattern.
     [void](GoTo '^(Constructor|Builder)$' 'Builder')
-    PlaceStep '(Save File|encastra\.file\.save)' 'j4'
-    if (-not $script:placedStep) {
-        throw 'SKIP: no step reached the canvas, so the Inspector has nothing to show and neither of the two choosers below it can be reached'
+    PlaceStep '(Save File|encastra\.file\.save)' 'j4' 'encastra\.file\.save@'
+    if (-not $script:stepPlaced) {
+        throw 'SKIP: no step was placed by any of the three activation routes - neither the canvas nor the Inspector witnessed one - so the Inspector has nothing to show and neither of the two choosers below it can be reached. The routes and what each of them saw are in the notes above this line.'
     }
 
     # The Inspector shows a step's settings only for the step that is selected (Inspector.tsx:506
@@ -1389,9 +1744,10 @@ try {
     # placing it did not select it, or that the Inspector does not publish the row. The dumps say
     # which, rather than leaving it to be guessed at.
     $folderField = ByIdSuffix '-folder' 12
+    $whichStep = if ($script:placedStep) { "the canvas calls it '$script:placedStep'" } else { 'the canvas publishes no id for it, so it is named only by the Inspector' }
     if (-not $folderField) {
-        Report $false 'j4 the Inspector shows the folder setting for the selected step' ("no element publishes an id ending in '-folder', though '$script:placedStep' is on the canvas. Steps UI Automation can see: " + (PlacedStepsDump) + ' ... ids on screen: ' + (AutomationIdDump 40))
-        throw "SKIP: the step '$script:placedStep' is on the canvas but its folder setting is not exposed to UI Automation - placing it did not select it, or the Inspector is publishing no row for it - so neither chooser below it can be reached"
+        Report $false 'j4 the Inspector shows the folder setting for the selected step' ("a step was placed ($whichStep) and no element publishes an id ending in '-folder'. Steps UI Automation can see: " + (PlacedStepsDump) + ' ... ids on screen: ' + (AutomationIdDump 40))
+        throw "SKIP: a step was placed ($whichStep) but its folder setting is not exposed to UI Automation - placing it did not select it, or the Inspector is publishing no row for it - so neither chooser below it can be reached"
     }
     Report $true 'j4 the Inspector shows the folder setting for the selected step' "automationId='$($folderField.Current.AutomationId)'"
     # Everything below is addressed relative to this field - the Choose button is found by the row
