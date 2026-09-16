@@ -216,6 +216,16 @@ jobs:
             npm run tauri:build
           fi
 
+      # Asked of the artefact, not of the environment that was supposed to produce it.
+      #
+      # The remapping arrives through RUSTFLAGS, which this file also sets at workflow level, and
+      # which of the two wins is a property of the runner rather than of anything written here.
+      # Reading the answer out of the binary settles it: a build that was not remapped carries the
+      # account name of the machine that made it, hundreds of times.
+      - name: The binary does not name the machine that built it
+        shell: bash
+        run: python scripts/verify/toolchain.py --check-binary target/release/encastra-desktop.exe
+
       # The installer is a function of its inputs, checked rather than assumed.
       #
       # rc.3's two release runs wrapped a byte-identical executable and produced two different
