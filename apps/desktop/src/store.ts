@@ -351,11 +351,22 @@ export const useEditor = create<EditorState>((set, get) => ({
         id: makeId(componentRef),
         type: 'component',
         position: at,
+        selected: true,
         data: { componentRef, config, disabled: false },
       };
-      // A newly placed node is the one you want to configure, so it is selected immediately.
+      // A newly placed node is the one you want to configure, so it is selected immediately —
+      // in both of the places a selection lives. React Flow owns the selection; `selectedNodeId`
+      // is this store's mirror of it. Setting only the mirror looked right and did nothing:
+      // React Flow still held the old selection, fired `onSelectionChange` with it on the next
+      // render, and `select()` put the store straight back — so the step just placed from the
+      // palette was not the selected one, the inspector stayed on "select a step to configure
+      // it", and somebody working from the keyboard had no way to reach the step they had just
+      // placed except by hunting for it with the arrow keys. `Canvas.tsx`'s `go` documents the
+      // same mechanism for arrow-key selection, and `pasteClipboard` below writes both halves
+      // for the same reason. So: the new node carries `selected`, every node already on the
+      // canvas is written unselected, and `selectedNodeId` names the new one.
       return {
-        nodes: [...s.nodes, node],
+        nodes: [...s.nodes.map((n) => ({ ...n, selected: false })), node],
         selectedNodeId: node.id,
         validation: null,
         dirty: true,
