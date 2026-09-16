@@ -45,6 +45,16 @@
 #     so the next journey finds that dialog instead of its own and every button underneath it
 #     reads as disabled. Each journey therefore asserts an empty screen before it starts and
 #     after it ends, and closes anything it finds.
+#   * Reading the path back out of a field proves what is in a control, not which control it is.
+#     A Save As dialog carries a search box as well as a name box, and a path typed into the
+#     search box reads back perfectly, runs a search, and saves nothing: three PASS lines and
+#     then `j2 project saved to disk -> exists=False`. So no candidate whose label says search is
+#     ever accepted, the name box is preferred by label and by control id, and the read-back line
+#     names the control it read.
+#   * An `aria-modal="true"` dialog inside the WebView does not merely cover the interface: while
+#     it has focus, Chromium leaves everything outside it out of the accessibility tree, so every
+#     lookup in this file returns nothing. The first-run welcome is one of those, and it is
+#     dismissed before anything is looked for - see "the first-run welcome" below.
 #
 # A journey that cannot run prints FAIL, or SKIP with the reason. It never prints PASS. The exit
 # code is 1 if anything failed and 2 if anything was skipped, because a skipped journey leaves
@@ -280,6 +290,8 @@ function WaitEnabled($ctrl, $namePattern, $seconds) {
 
 function AutomationIdDump($max) {
     $ids = @()
+    $prefix = ''
+    if (WelcomeShowing) { $prefix = '(the first-run welcome is on screen, and while it has focus everything behind it is out of the accessibility tree) ' }
     try {
         foreach ($e in (Descendants (AppWindow))) {
             if ($ids.Count -ge $max) { break }
@@ -287,8 +299,8 @@ function AutomationIdDump($max) {
             if ($id) { $ids += ("{0}({1})" -f $id, ($e.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '')) }
         }
     } catch { $ids += "(the tree could not be read: $($_.Exception.GetType().Name))" }
-    if ($ids.Count -eq 0) { return '(nothing on screen publishes an automation id)' }
-    return ($ids -join ' ')
+    if ($ids.Count -eq 0) { return ($prefix + '(nothing on screen publishes an automation id)') }
+    return ($prefix + ($ids -join ' '))
 }
 # What UI Automation sees for a step that has been placed. ComponentNode gives each one
 # id="node-<id>" and deliberately no ARIA role - see the comment in ComponentNode.tsx - so it
@@ -296,6 +308,8 @@ function AutomationIdDump($max) {
 # out loud if a step turns out not to be selectable from here.
 function PlacedStepsDump {
     $out = @()
+    $prefix = ''
+    if (WelcomeShowing) { $prefix = '(the first-run welcome is on screen, so the canvas behind it is out of the accessibility tree whether or not a step is on it) ' }
     try {
         foreach ($e in (Descendants (AppWindow))) {
             $id = $e.Current.AutomationId
@@ -306,8 +320,49 @@ function PlacedStepsDump {
             $out += ("{0} type={1} name='{2}' invokable={3}" -f $id, ($e.Current.ControlType.ProgrammaticName -replace '^ControlType\.', ''), $n, (HasPattern $e ([System.Windows.Automation.InvokePattern]::Pattern)))
         }
     } catch { $out += "(the tree could not be read: $($_.Exception.GetType().Name))" }
-    if ($out.Count -eq 0) { return '(nothing on screen carries a node-* id: either no step was placed or the canvas publishes none)' }
-    return ($out -join ' | ')
+    if ($out.Count -eq 0) { return ($prefix + '(nothing on screen carries a node-* id: either no step was placed or the canvas publishes none)') }
+    return ($prefix + ($out -join ' | '))
+}
+# Just the ids, for the question "is a step on the canvas". ComponentNode gives every step
+# `id="node-<id>"` (ComponentNode.tsx:131) and the canvas points `aria-activedescendant` at it,
+# so the id is not decoration - it is what the interface itself uses to name a placed step.
+function PlacedStepIds {
+    $out = @()
+    try {
+        foreach ($e in (Descendants (AppWindow))) {
+            $id = $e.Current.AutomationId
+            if ($id -and $id.StartsWith('node-')) { $out += $id }
+        }
+    } catch { }
+    return $out
+}
+# Places a step from the palette and proves one arrived, which is not the same question as
+# whether the palette item was clicked. Journey 2 used to ask the second and call it the first:
+# `FindText '(Parse JSON)'` matches the palette button that was just pressed, so it would have
+# said "a step is on the canvas" with an empty canvas.
+#
+# Prints its own result and leaves the id in $script:placedStep rather than returning it, for the
+# reason given above Report: a function that writes to the success stream cannot also hand a
+# value back. The caller decides whether an empty canvas is fatal to its journey.
+$script:placedStep = $null
+function PlaceStep($palettePattern, $what) {
+    $script:placedStep = $null
+    $before = @(PlacedStepIds)
+    $item = Wait 'Button' $palettePattern 20
+    if (-not $item) { throw "SKIP: the palette item matching $palettePattern never appeared; what is on screen: $(AutomationIdDump 40)" }
+    Click $item
+    $fresh = @()
+    for ($i = 0; $i -lt 40; $i++) {
+        $fresh = @(@(PlacedStepIds) | Where-Object { $before -notcontains $_ })
+        if ($fresh.Count -gt 0) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    if ($fresh.Count -eq 0) {
+        Report $false "$what a step is on the canvas" ("the palette item '$($item.Current.Name)' was clicked and no new step id appeared in 10s. Steps UI Automation can see: " + (PlacedStepsDump) + '; the interface is saying: ' + (AppNotices 4))
+        return
+    }
+    $script:placedStep = $fresh[0]
+    Report $true "$what a step is on the canvas" "the canvas publishes '$($script:placedStep)'"
 }
 # The sentences the interface is showing. A failed save puts its reason in the status bar
 # (store.ts saveProject: `set({ message: { tone: 'error', text: describe(error) } })`), so when a
@@ -336,6 +391,50 @@ function DismissDiscardPrompt {
     Note 'the application asked about unsaved changes; discarding them so the journey starts from a clean canvas'
     Click $discard
     Start-Sleep -Milliseconds 900
+}
+# --- the first-run welcome -------------------------------------------------------------------
+#
+# onboarding/Welcome.tsx puts the first-run card on screen - `role="dialog" aria-modal="true"`,
+# portalled into the body - until the preference `welcomeSeen` has been recorded. Chromium
+# honours aria-modal the way the specification asks it to: while such a dialog holds focus,
+# everything outside it is left out of the accessibility tree *entirely*. Not covered - absent.
+# Every Wait in this file then times out and every dump prints four ids, one of them the card's
+# own title, which is what `j4 ... ids on screen: RootWebArea(Document) root(Group)
+# react-flow__aria-live-1(Group) welcome-title(Text)` was. The step that journey had just placed
+# was on the canvas the whole time, behind it.
+#
+# And it comes back. Blink re-reads which modal is active on every focus change, and
+# a11y/focus.ts deliberately hands focus back to whatever had it when an in-page dialog closes -
+# so answering the unsaved-changes question can return focus to the welcome card and put the
+# whole interface out of reach again in the middle of a journey. Working around it is therefore
+# not enough; it has to be gone. This is called at the start and again after anything that
+# closes an in-page dialog.
+#
+# Skip is the choice that changes nothing else. It runs `finish()`, which records welcomeSeen and
+# hands the person back to the editor; the other two either start the seven-card tour or load a
+# sample graph, and a journey asserting about a sample's steps would be asserting about somebody
+# else's work. The button's accessible name is its title and its note run together - "Skip Go
+# straight in..." / "Omitir Ve directo..." - so the pattern anchors on the title alone.
+#
+# Asked of the id the card's own heading carries, and defensive: this is called from inside the
+# failure dumps, and a window that goes away mid-dump must not turn a FAIL that was about to be
+# printed into an exception about the printing of it.
+function WelcomeShowing {
+    try { return ($null -ne (ById 'welcome-title')) } catch { return $false }
+}
+function DismissWelcome($what) {
+    if (-not (WelcomeShowing)) { return }
+    Note "$what : the first-run welcome is on screen, and nothing behind it is in the accessibility tree while it is; skipping it"
+    for ($i = 0; $i -lt 3; $i++) {
+        $skip = Wait 'Button' '^(Omitir|Skip)([^A-Za-z]|$)' 5
+        if (-not $skip) { break }
+        # Never throws: this runs outside any journey's try as well as inside one, and a welcome
+        # that would not go away is reported by the caller reading WelcomeShowing, not by an
+        # exception thrown from the middle of the harness's own start-up.
+        try { Click $skip } catch { }
+        Start-Sleep -Milliseconds 700
+        if (-not (WelcomeShowing)) { break }
+    }
 }
 # A click on nothing, or on a control the application has greyed out, is not a click: it threw
 # `Unrecognized error` out of Invoke on the runner and took the rest of the journey with it. Both
@@ -503,11 +602,75 @@ function ChildByClass($parent, $cls, $depth) {
         if ($deeper -ne $NULLPTR) { return $deeper }
     }
 }
+# Every descendant window of that class, not the first. A file dialog holds more than one combo
+# box - one of them is the search box - and a search that stops at the first match is a search
+# that can stop on the wrong control and then read a path back out of it quite correctly.
+function ChildrenByClass($parent, $cls, $depth) {
+    $out = @()
+    if ($parent -eq $NULLPTR -or $depth -le 0) { return $out }
+    $child = $NULLPTR
+    while ($true) {
+        $child = [W32]::FindWindowExW($parent, $child, $null, $null)
+        if ($child -eq $NULLPTR) { break }
+        if ((HwndClass $child) -eq $cls) { $out += $child }
+        $deeper = @(ChildrenByClass $child $cls ($depth - 1))
+        if ($deeper.Count -gt 0) { $out += $deeper }
+    }
+    return $out
+}
+# A control's label is not its window text - its window text is whatever it currently holds - so
+# what a control is called is asked of UI Automation even when the control was found by handle.
+function HwndUiaName($h) {
+    if ($h -eq $NULLPTR) { return '' }
+    try { $e = $A::FromHandle($h); if ($e) { return $e.Current.Name } } catch { }
+    return ''
+}
 
-# The file-name control's well-known ids: 1148 and 1152 in the modern dialog, 1090 and 1152 in the
-# older one, 1001 in the oldest. Whichever answers may be the combo rather than the edit inside it.
-$NAME_FIELD_IDS = @(1152, 1148, 1090, 1001)
-function DlgNameField($dlg) {
+# What the box a path is typed into is called, in the two display languages these checks know.
+# The dialog's language is the *Windows* display language, not the application's.
+#
+# A Save As dialog and a folder picker are not the same dialog and do not label that box the
+# same way, so they are looked up separately rather than through one chain that happens to suit
+# whichever was driven first.
+$FILE_NAME_LABEL = '(?i)(file *name|nombre de archivo|nombre del archivo)'
+$FOLDER_NAME_LABEL = '(?i)(folder|carpeta|file *name|nombre de archivo|nombre del archivo)'
+# And what it is never, on either dialog. A file dialog also carries a search box; a path typed
+# into a search box reads back out of it perfectly, runs a search, and saves nothing. That is
+# `j2-save : the path is in the chooser -> '...journeys.encastra'` immediately above `j2 project
+# saved to disk -> exists=False`: the read-back was honest about the text and silent about the
+# control. Nothing matching this is accepted, whichever route found it.
+$SEARCH_LABEL = '(?i)(search|buscar|find|filtro|filter)'
+function LooksLikeSearch($name) {
+    if (-not $name) { return $false }
+    return (([string]$name) -match $SEARCH_LABEL)
+}
+# The file-name control's well-known ids. 1148 is the ComboBoxEx32 the Vista-style dialog wraps
+# the edit in - the edit inside it is 1001 - and 1152 and 1090 belong to the older dialogs. The
+# combo comes first because that is the shape a Save As dialog reliably has, and every route
+# drills in with FindWindowExW rather than settling for the container it found.
+$NAME_FIELD_IDS = @(1148, 1152, 1090, 1001)
+# What was turned down, so a dialog where nothing was acceptable says why rather than "none
+# found". Module scope for the reason given above Report: DlgNameField returns its answer, so it
+# cannot also print, and the caller needs both.
+$script:fieldRejected = @()
+function NameFieldCandidate($hwnd, $combo, $element, $label, $wanted, $route) {
+    return @{
+        Hwnd    = $hwnd
+        Combo   = $combo
+        Element = $element
+        Label   = $label
+        # True when the dialog itself labels this control as its name box. A candidate that is
+        # merely the only writable box left is still used - some builds label nothing - but the
+        # difference is printed, because "we know this is the right control" and "nothing else
+        # was on offer" are not the same claim.
+        Trusted = ($label -and ($label -match $wanted))
+        Route   = $route
+    }
+}
+function DlgNameField($dlg, $kind) {
+    if (-not $kind) { $kind = 'folder' }
+    $wanted = if ($kind -eq 'file') { $FILE_NAME_LABEL } else { $FOLDER_NAME_LABEL }
+    $script:fieldRejected = @()
     $dh = Hwnd $dlg
     $fallback = $null
     if ($dh -ne $NULLPTR) {
@@ -515,37 +678,74 @@ function DlgNameField($dlg) {
             $h = [W32]::GetDlgItem($dh, $id)
             if ($h -eq $NULLPTR) { continue }
             $cls = HwndClass $h
-            if ($cls -eq 'Edit') { return @{ Hwnd = $h; Combo = $NULLPTR; Element = $null; Route = "GetDlgItem($id) Edit" } }
-            $inner = ChildByClass $h 'Edit' 3
-            if ($inner -ne $NULLPTR) { return @{ Hwnd = $inner; Combo = $h; Element = $null; Route = "GetDlgItem($id) $cls -> Edit" } }
+            $edit = $NULLPTR; $combo = $NULLPTR
+            if ($cls -eq 'Edit') { $edit = $h } else {
+                $inner = ChildByClass $h 'Edit' 3
+                if ($inner -ne $NULLPTR) { $edit = $inner; $combo = $h }
+            }
+            if ($edit -ne $NULLPTR) {
+                $label = HwndUiaName $edit
+                if (LooksLikeSearch $label) { $script:fieldRejected += "GetDlgItem($id) $cls -> Edit '$label'"; continue }
+                return (NameFieldCandidate $edit $combo $null $label $wanted "GetDlgItem($id) $cls -> Edit '$label'")
+            }
             # That id exists but holds no edit. Keep it in case nothing better turns up - a combo
             # takes a WM_SETTEXT of its own - but keep looking rather than settling for it here.
-            if (-not $fallback) { $fallback = @{ Hwnd = $h; Combo = $NULLPTR; Element = $null; Route = "GetDlgItem($id) $cls" } }
+            $label = HwndUiaName $h
+            if (LooksLikeSearch $label) { $script:fieldRejected += "GetDlgItem($id) $cls '$label'"; continue }
+            if (-not $fallback) { $fallback = NameFieldCandidate $h $NULLPTR $null $label $wanted "GetDlgItem($id) $cls '$label'" }
         }
-        # The same control found by class instead of by id.
+        # The same control found by class instead of by id - every one of that class, and the one
+        # the dialog labels as its name box preferred over one it does not label at all.
         foreach ($outer in @('ComboBoxEx32', 'ComboBox')) {
-            $c = ChildByClass $dh $outer 4
-            if ($c -eq $NULLPTR) { continue }
-            $inner = ChildByClass $c 'Edit' 3
-            if ($inner -ne $NULLPTR) { return @{ Hwnd = $inner; Combo = $c; Element = $null; Route = "$outer -> Edit" } }
+            $spare = $null
+            foreach ($c in @(ChildrenByClass $dh $outer 4)) {
+                $inner = ChildByClass $c 'Edit' 3
+                if ($inner -eq $NULLPTR) { continue }
+                $label = HwndUiaName $inner
+                if (LooksLikeSearch $label) { $script:fieldRejected += "$outer -> Edit '$label'"; continue }
+                $candidate = NameFieldCandidate $inner $c $null $label $wanted "$outer -> Edit '$label'"
+                if ($candidate.Trusted) { return $candidate }
+                if (-not $spare) { $spare = $candidate }
+            }
+            if ($spare) { return $spare }
         }
     }
     # UI Automation, anywhere below the dialog - descendants, never children. An Edit that owns no
     # window handle can still be written through its Value pattern.
+    #
+    # Every Edit is weighed rather than the first one taken. Taking the first is exactly how the
+    # path went into the search box: on this dialog the search box comes before the name box in
+    # the tree, so "the first Edit" was never the name box at all. Labelled as the name box beats
+    # a real window handle, which beats merely being writable.
+    $best = $null; $bestScore = -1
     foreach ($c in (Descendants $dlg)) {
         if ($c.Current.ControlType.ProgrammaticName -ne 'ControlType.Edit') { continue }
-        if ($c.Current.NativeWindowHandle -ne 0) {
-            return @{ Hwnd = (Hwnd $c); Combo = $NULLPTR; Element = $c; Route = "UIA descendant Edit '$($c.Current.Name)'" }
-        }
-        if ((HasValuePattern $c) -and -not (IsReadOnly $c)) {
-            return @{ Hwnd = $NULLPTR; Combo = $NULLPTR; Element = $c; Route = "UIA descendant Edit '$($c.Current.Name)' (value pattern, no window handle)" }
+        $label = $c.Current.Name
+        if (LooksLikeSearch $label) { $script:fieldRejected += "UIA descendant Edit '$label'"; continue }
+        $handled = ($c.Current.NativeWindowHandle -ne 0)
+        $writable = ((HasValuePattern $c) -and -not (IsReadOnly $c))
+        if (-not $handled -and -not $writable) { continue }
+        $score = 0
+        if ($label -and $label -match $wanted) { $score += 4 }
+        if ($handled) { $score += 2 }
+        if ($writable) { $score += 1 }
+        if ($score -gt $bestScore) {
+            $bestScore = $score
+            $route = "UIA descendant Edit '$label'"
+            if (-not $handled) { $route += ' (value pattern, no window handle)' }
+            $best = NameFieldCandidate $(if ($handled) { Hwnd $c } else { $NULLPTR }) $NULLPTR $c $label $wanted $route
         }
     }
-    # Last resort: any Edit window at all under the dialog, whatever it turns out to be. What it
-    # holds is read back before anything is confirmed, so a wrong guess reports itself.
+    if ($best) { return $best }
+    # Last resort: any Edit window under the dialog that is not a search box, whatever else it
+    # turns out to be. What it holds is read back before anything is confirmed, so a wrong guess
+    # reports itself rather than confirming on nothing.
     if ($dh -ne $NULLPTR) {
-        $any = ChildByClass $dh 'Edit' 5
-        if ($any -ne $NULLPTR) { return @{ Hwnd = $any; Combo = $NULLPTR; Element = $null; Route = 'first Edit window under the dialog' } }
+        foreach ($any in @(ChildrenByClass $dh 'Edit' 5)) {
+            $label = HwndUiaName $any
+            if (LooksLikeSearch $label) { $script:fieldRejected += "Edit window '$label'"; continue }
+            return (NameFieldCandidate $any $NULLPTR $null $label $wanted "first Edit window under the dialog that is not a search box ('$label')")
+        }
     }
     if ($fallback) { return $fallback }
     return $null
@@ -607,7 +807,15 @@ function DialogShape($dlg) {
         if ($child -eq $NULLPTR) { break }
         $classes += (HwndClass $child)
     }
-    return ('uia=[' + ($parts -join ' ') + '] child windows=[' + ($classes -join ',') + ']')
+    # Every Edit anywhere under the dialog, with what the dialog calls it. The name is the whole
+    # question when a path has to go into one of them and not into another: "the dialog holds an
+    # Edit" was true of the run that typed a path into the search box.
+    $edits = @()
+    foreach ($e in @(ChildrenByClass $dh 'Edit' 5)) {
+        if ($edits.Count -ge 8) { break }
+        $edits += ("#{0}'{1}'" -f $e, (HwndUiaName $e))
+    }
+    return ('uia=[' + ($parts -join ' ') + '] child windows=[' + ($classes -join ',') + '] edit windows=[' + ($edits -join ' ') + ']')
 }
 # Whatever the shell put on screen when it would not accept a path: its own message box is a
 # second #32770 owned by this process, and its static text is the sentence the person reads.
@@ -679,27 +887,36 @@ function CancelChooser($dlg, $what) {
 # Types a path into the chooser, proves it landed, and confirms it. $script:chooserClosed says
 # whether the dialog actually went away: a path the shell will not accept leaves it standing,
 # which is itself the refusal. A confirm is never pressed on a field that does not hold the path.
-function ConfirmChooser($dlg, $path, $what) {
+function ConfirmChooser($dlg, $path, $what, $kind) {
     $script:chooserClosed = $false
     $script:chooserConfirmed = $false
     if (-not $dlg) { Report $false "$what : a chooser was on screen to drive" 'none'; return }
-    $field = DlgNameField $dlg
+    $field = DlgNameField $dlg $kind
+    $turnedDown = ''
+    if (@($script:fieldRejected).Count -gt 0) { $turnedDown = '; turned down as search boxes: ' + ($script:fieldRejected -join ', ') }
     if (-not $field) {
-        Report $false "$what : chooser name field found" "no id, class or accessibility route found one; the dialog holds: $(DialogShape $dlg)"
+        Report $false "$what : chooser name field found" "no id, class or accessibility route found one$turnedDown; the dialog holds: $(DialogShape $dlg)"
         ForceCloseDialogs
         return
     }
-    Report $true "$what : chooser name field found" "via $($field.Route)"
+    $named = if ($field.Trusted) { "the control the dialog labels as its name box" } else { "not labelled as a name box; nothing better was on this dialog" }
+    Report $true "$what : chooser name field found" "via $($field.Route) - $named$turnedDown"
     WriteNameField $field $path
     # `-ne` between strings is case-insensitive here, which is right for a path; the trims are for
     # a shell that quotes what it holds. Anything else and the confirm is not pressed at all.
+    #
+    # Which control, as well as what is in it. A path reads back out of a search box exactly as
+    # faithfully as out of a name box, so this line fails on a search box even though the lookup
+    # above already refuses to hand one back - the assertion is about the control the confirm is
+    # about to be pressed on, and it says which one that is.
     $landed = (ReadNameField $field).Trim().Trim('"')
-    if ($landed -ne $path) {
-        Report $false "$what : the path is in the chooser before it is confirmed" "the field holds '$landed', wanted '$path' (route: $($field.Route)) - not confirming on that"
+    $inSearch = LooksLikeSearch $field.Label
+    if ($landed -ne $path -or $inSearch) {
+        Report $false "$what : the path is in the chooser's name box before it is confirmed" "the control labelled '$($field.Label)' holds '$landed', wanted '$path' (route: $($field.Route))$(if ($inSearch) { ' - and that control is a search box' }) - not confirming on that"
         ForceCloseDialogs
         return
     }
-    Report $true "$what : the path is in the chooser before it is confirmed" "'$landed'"
+    Report $true "$what : the path is in the chooser's name box before it is confirmed" "'$landed' in the control labelled '$($field.Label)' (via $($field.Route))"
     $ok = DlgButtonHwnd $dlg $CONFIRM $IDOK
     if ($ok -eq $NULLPTR) {
         Report $false "$what : chooser confirm button found" "nothing matching $CONFIRM and no IDOK; the dialog holds: $(DialogShape $dlg)"
@@ -760,6 +977,14 @@ $win = AppWindow
 Report ($null -ne $win) 'main window found' "$($win.Current.Name) class=$($win.Current.ClassName)"
 if ($win) { [void][W32]::SetForegroundWindow((Hwnd $win)) }
 
+# Before anything is looked for, because while the first-run welcome has focus there is nothing
+# to look for: an aria-modal dialog takes the rest of the document out of the accessibility tree.
+# On a machine where the application has never been opened by hand - a hosted runner, every time
+# - this is what is on screen at start-up.
+DismissWelcome 'harness start'
+$welcomeCleared = -not (WelcomeShowing)
+Report $welcomeCleared 'the first-run welcome is not standing in front of the interface' $(if ($welcomeCleared) { 'not on screen' } else { 'still on screen, so nothing behind it is in the accessibility tree: ' + (AutomationIdDump 20) })
+
 $sidebarSettings = Wait 'Button' '^(Ajustes|Settings)$' 30
 Report ($null -ne $sidebarSettings) 'sidebar exposed to UI Automation' "settings item: '$($sidebarSettings.Current.Name)'"
 if (-not $sidebarSettings) {
@@ -784,6 +1009,7 @@ function GoTo($pattern, $what) {
 "--- journey 1: projects-location (Settings -> Projects -> Browse) ---"
 try {
     EnsureNoDialogs 'j1 before'
+    DismissWelcome 'j1 before'
     [void](GoTo '^(Ajustes|Settings)$' 'Settings')
     $projectsNav = Wait 'Button' '^(Proyectos|Projects)' 10
     Report ($null -ne $projectsNav) 'j1 Settings nav Projects found' "'$($projectsNav.Current.Name)'"
@@ -806,7 +1032,7 @@ try {
     # Confirm: the path comes back into the preference exactly.
     Click (MustFind (Wait 'Button' '(Examinar|Browse)' 10) 'the Browse button did not come back after the cancelled chooser')
     $dlg = WaitDialog 10
-    ConfirmChooser $dlg $projectsLocation 'j1'
+    ConfirmChooser $dlg $projectsLocation 'j1' 'folder'
     ReportChooserClosed 'j1'
     Start-Sleep -Milliseconds 800
     $after = ValueOf (ById 'pref-project-folder')
@@ -828,7 +1054,7 @@ try {
     } else {
         Click (MustFind (Wait 'Button' '(Examinar|Browse)' 10) 'the Browse button was not on screen for the junction probe')
         $dlg = WaitDialog 10
-        ConfirmChooser $dlg $junction 'j1-junction'
+        ConfirmChooser $dlg $junction 'j1-junction' 'folder'
         $closed = $script:chooserClosed
         if (-not $closed) { ForceCloseDialogs }
         Start-Sleep -Milliseconds 900
@@ -863,12 +1089,14 @@ EnsureNoDialogs 'j1 after'
 $preparedFolder = $null
 try {
     EnsureNoDialogs 'j2 before'
+    DismissWelcome 'j2 before'
     [void](GoTo '^(Constructor|Builder)$' 'Builder')
-    $palette = Wait 'Button' '(Parse JSON|encastra\.data\.json)' 15
-    if (-not $palette) { throw 'the Parse JSON palette item never appeared' }
-    Click $palette
-    Start-Sleep -Milliseconds 700
-    Report ($null -ne (FindText '(Parse JSON)' 5)) 'j2 a step is on the canvas' 'Parse JSON placed'
+    # `FindText '(Parse JSON)'` used to stand here, and it matched the palette button that had
+    # just been pressed - so it would have reported "a step is on the canvas" with an empty
+    # canvas. What is asked instead is whether the canvas publishes a step of its own. Not fatal
+    # to this journey if it does not: what journey 2 exists for is downstream, and the save is
+    # what gates that.
+    PlaceStep '(Parse JSON|encastra\.data\.json)' 'j2'
 
     # Save is armed by nothing but the store's `busy` flag (App.tsx: `disabled={busy}`) - not by a
     # name, and not by the project being dirty, though the step just placed made it dirty anyway.
@@ -897,7 +1125,7 @@ try {
         throw "SKIP: the save chooser never appeared (save still waiting=$stillWaiting), so nothing downstream of a saved project - publish-into included - can be driven"
     }
     Report $true 'j2 native save dialog opened' "'$($dlg.Current.Name)' class=$(HwndClass (Hwnd $dlg))"
-    ConfirmChooser $dlg $projectFile 'j2-save'
+    ConfirmChooser $dlg $projectFile 'j2-save' 'file'
     ReportChooserClosed 'j2-save'
     Start-Sleep -Milliseconds 1500
     $projectSaved = Test-Path $projectFile
@@ -947,7 +1175,7 @@ try {
         # Confirm, and then the thing the folder was chosen for actually happening.
         Click (MustFind (Wait 'Button' '^(Preparar|Prepare)' 10) 'the Prepare button did not come back after the cancelled chooser')
         $dlg = WaitDialog 12
-        ConfirmChooser $dlg $publishInto 'j2'
+        ConfirmChooser $dlg $publishInto 'j2' 'folder'
         ReportChooserClosed 'j2'
         $done = FindText '(D.nde ha quedado|Where it went)' 15
         $err = FindText '(no se puede usar|cannot be used|Elige la carpeta|Choose the folder to publish into)' 2
@@ -980,6 +1208,7 @@ EnsureNoDialogs 'j2 after'
 "--- journey 3: import-from (Library -> Import) ---"
 try {
     EnsureNoDialogs 'j3 before'
+    DismissWelcome 'j3 before'
     [void](GoTo '^(Biblioteca|Library)$' 'Library')
     # Both halves are the check. A chooser left open by an earlier journey is modal to the
     # application, and every button underneath it - this one included - then reads as disabled;
@@ -1017,7 +1246,7 @@ try {
     Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button did not come back after the cancelled chooser')
     $dlg = WaitDialog 12
     if ($dlg) {
-        ConfirmChooser $dlg $missing 'j3-missing'
+        ConfirmChooser $dlg $missing 'j3-missing' 'folder'
         if (-not $script:chooserConfirmed) {
             Skip 'j3 a path that is not there was refused' 'the chooser could not be driven, so it was never asked to accept the path'
             ForceCloseDialogs
@@ -1047,7 +1276,7 @@ try {
         Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button was not on screen for the junction probe')
         $dlg = WaitDialog 12
         if ($dlg) {
-            ConfirmChooser $dlg $junction 'j3-junction'
+            ConfirmChooser $dlg $junction 'j3-junction' 'folder'
             if (-not $script:chooserConfirmed) {
                 Skip 'j3 a junction is resolved or refused, never followed blindly' 'the chooser could not be driven, so it was never asked to accept the link'
                 ForceCloseDialogs
@@ -1078,7 +1307,7 @@ try {
     } else {
         Click (MustFind (Wait 'Button' '^(Importar|Import)' 10) 'the Import button was not on screen for the round trip')
         $dlg = WaitDialog 12
-        ConfirmChooser $dlg $preparedFolder 'j3'
+        ConfirmChooser $dlg $preparedFolder 'j3' 'folder'
         ReportChooserClosed 'j3'
         $what = FindText '(Qu. dice que es|What this says it is)' 20
         $refused = FindText '(no se ha recibido nada|Nothing was taken in|no se eligi|was not picked)' 2
@@ -1118,6 +1347,7 @@ EnsureNoDialogs 'j3 after'
 $folderField = $null
 try {
     EnsureNoDialogs 'j4/j5 before'
+    DismissWelcome 'j4/j5 before'
     [void](GoTo '^(Constructor|Builder)$' 'Builder')
     $new = Wait 'Button' '^(Nuevo|New)$' 10
     if ($new) { Click $new; Start-Sleep -Milliseconds 900 }
@@ -1127,10 +1357,26 @@ try {
     # canvas is exactly what makes it appear here. Answered, so this journey starts on its own
     # canvas rather than on top of journey 2's.
     DismissDiscardPrompt
-    $palette = Wait 'Button' '(Save File|encastra\.file\.save)' 15
-    if (-not $palette) { throw 'the Save File palette item never appeared' }
-    Click $palette
-    Start-Sleep -Milliseconds 900
+    # And answering that question is exactly where this journey lost the interface. The prompt
+    # declares `aria-modal="true"` and traps focus, and a11y/focus.ts hands focus back to whatever
+    # had it when the prompt opened - which, on a machine where the first-run welcome has never
+    # been dismissed, is the welcome card. The welcome is also `aria-modal="true"`, so from that
+    # moment Chromium leaves the whole interface out of the accessibility tree, the step placed
+    # next is invisible rather than absent, and the Inspector is looked for on a canvas nothing
+    # can see. `ids on screen: ... welcome-title(Text)` was the whole of it.
+    DismissWelcome 'j4/j5 after the unsaved-changes question'
+    $welcomeGone = -not (WelcomeShowing)
+    Report $welcomeGone 'j4 the interface is what is on screen, not the first-run welcome' $(if ($welcomeGone) { 'the welcome is not on screen' } else { 'the welcome is still on screen after Skip was pressed, so nothing behind it can be found: ' + (AutomationIdDump 20) })
+
+    # From here it is exactly the route journey 2 takes: be in the Builder, and place a step from
+    # the palette. Placing is the only way in - `addNode` selects what it placed (store.ts:355),
+    # while clicking a step on the canvas is not available from here at all, because ComponentNode
+    # deliberately publishes no ARIA role and so offers no Invoke pattern.
+    [void](GoTo '^(Constructor|Builder)$' 'Builder')
+    PlaceStep '(Save File|encastra\.file\.save)' 'j4'
+    if (-not $script:placedStep) {
+        throw 'SKIP: no step reached the canvas, so the Inspector has nothing to show and neither of the two choosers below it can be reached'
+    }
 
     # The Inspector shows a step's settings only for the step that is selected (Inspector.tsx:506
     # returns the empty panel when `selectedNodeId` names nothing). Placing from the palette is
@@ -1138,12 +1384,14 @@ try {
     # "a newly placed node is the one you want to configure"). That matters, because selecting by
     # clicking the step on the canvas is not available from here - React Flow draws each step as a
     # plain div with, deliberately, no ARIA role and so no Invoke pattern (ComponentNode.tsx).
-    # If the field below is missing, the two dumps say whether a step was placed at all and what
-    # the interface is publishing instead, rather than leaving that to be guessed at.
+    # A step is known to be on the canvas by now - PlaceStep above named it - so if the field
+    # below is missing, "no step was placed" is already ruled out and what is left is that
+    # placing it did not select it, or that the Inspector does not publish the row. The dumps say
+    # which, rather than leaving it to be guessed at.
     $folderField = ByIdSuffix '-folder' 12
     if (-not $folderField) {
-        Report $false 'j4 the Inspector shows the folder setting for the selected step' ("no element publishes an id ending in '-folder'. Steps UI Automation can see: " + (PlacedStepsDump) + ' ... ids on screen: ' + (AutomationIdDump 40))
-        throw 'SKIP: the folder setting of the selected step is not exposed to UI Automation - either the step was not placed, or placing it did not select it - so neither chooser below it can be reached'
+        Report $false 'j4 the Inspector shows the folder setting for the selected step' ("no element publishes an id ending in '-folder', though '$script:placedStep' is on the canvas. Steps UI Automation can see: " + (PlacedStepsDump) + ' ... ids on screen: ' + (AutomationIdDump 40))
+        throw "SKIP: the step '$script:placedStep' is on the canvas but its folder setting is not exposed to UI Automation - placing it did not select it, or the Inspector is publishing no row for it - so neither chooser below it can be reached"
     }
     Report $true 'j4 the Inspector shows the folder setting for the selected step' "automationId='$($folderField.Current.AutomationId)'"
     # Everything below is addressed relative to this field - the Choose button is found by the row
@@ -1173,7 +1421,7 @@ try {
     # the question it was asked.
     Click (MustFind (ChooseButtonNear (ByIdSuffix '-folder' 5)) 'the folder row lost its Choose button after the cancelled chooser')
     $dlg = WaitDialog 12
-    ConfirmChooser $dlg $grantFolder 'j4'
+    ConfirmChooser $dlg $grantFolder 'j4' 'folder'
     ReportChooserClosed 'j4'
     Start-Sleep -Milliseconds 800
     $folderValue = ValueOf (ByIdSuffix '-folder' 5)
@@ -1206,7 +1454,7 @@ try {
 
     Click (MustFind (ChooseButtonNear $readonlyBox) 'the starting-material row lost its Choose button after the cancelled chooser')
     $dlg = WaitDialog 12
-    ConfirmChooser $dlg $inputFile 'j5'
+    ConfirmChooser $dlg $inputFile 'j5' 'file'
     ReportChooserClosed 'j5'
     Start-Sleep -Milliseconds 800
     $inputValue = ValueOf $readonlyBox
