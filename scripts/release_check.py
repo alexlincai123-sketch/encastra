@@ -8,6 +8,7 @@ person, a workflow or another program can read without interpreting prose:
     python scripts/release_check.py --skip-gate        # do not re-run the test gate (it is marked NOT_VERIFIED)
     python scripts/release_check.py --compare DIR      # DIR holds a second build of this commit; compare bytes
     python scripts/release_check.py --evidence-vm LOG  # an install_check.ps1 log from a clean machine
+    python scripts/release_check.py --evidence-gui LOG # a gui_journeys.ps1 log: the chooser journeys (B5)
     python scripts/release_check.py --no-network       # do not ask GitHub about workflow runs
     python scripts/release_check.py --mode release     # what mode is being claimed (default: from the version)
 
@@ -368,6 +369,67 @@ def check_vm(evidence: pathlib.Path | None) -> Check:
     return Check("clean_vm", PASS, f"{passes} checks passed in {evidence.name} (a log is evidence of a run, not of the machine it ran on — keep the VM record with it)")
 
 
+def check_gui_journeys(evidence: pathlib.Path | None) -> Check:
+    """Have the chooser journeys that gate permissions been driven through the interface?
+
+    B5. Four folder purposes and one file purpose decide what the application may read and write,
+    and until 0.5.0-rc.4 only `projects-location` — the one that gates nothing — had ever been
+    driven by a person or by automation. A unit test cannot stand in for this: what is in doubt is
+    the whole path from the native chooser through IPC to the registry, and that path has a native
+    dialog in the middle of it.
+
+    The evidence is a gui_journeys.ps1 log. A log proves a run happened, not where; keep it with
+    the run that produced it.
+    """
+    if evidence is None:
+        return Check("gui.journeys", NOT_VERIFIED, "no chooser-journey log given", "run scripts/verify/gui_journeys.ps1 on a machine nobody is using; then --evidence-gui <log>")
+    if not evidence.exists():
+        return Check("gui.journeys", FAIL, f"{evidence} does not exist")
+    text = evidence.read_text("utf-8", errors="replace")
+    fails = re.findall(r"^FAIL.*$", text, re.M)
+    skips = re.findall(r"^SKIP.*$", text, re.M)
+    passes = len(re.findall(r"^PASS", text, re.M))
+    if fails:
+        return Check("gui.journeys", FAIL, f"{len(fails)} failed: {fails[0][:120]}")
+    if passes == 0:
+        return Check("gui.journeys", FAIL, f"{evidence.name} has no PASS lines; is it a gui_journeys.ps1 log?")
+    if skips:
+        # A journey that did not run is not a journey that passed, and the two are the same colour
+        # unless something says so.
+        return Check("gui.journeys", NOT_VERIFIED, f"{passes} passed but {len(skips)} skipped: {skips[0][:120]}")
+    return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name}")
+
+
+def check_toolchain() -> Check:
+    """Would this machine's tools produce the published bytes?
+
+    rustc is pinned in rust-toolchain.toml and Node in .nvmrc, but the C toolchain underneath
+    rustc was pinned by nothing until B7: rustc asks Visual Studio for a linker and takes whatever
+    that installation calls its default. That is why 0.5.0-rc.3's bytes did not reproduce on the
+    hosted runner — it had moved to Visual Studio 2026 and a newer toolset. scripts/verify has the
+    pin and the comparison; this puts the answer in the verdict.
+    """
+    script = ROOT / "scripts" / "verify" / "toolchain.py"
+    if not script.exists():
+        return Check("toolchain.msvc", NOT_VERIFIED, f"{script.name} is missing", "restore scripts/verify/toolchain.py")
+    result = run([sys.executable, str(script), "--json"], timeout=300)
+    if result.returncode not in (0, 1):
+        return Check("toolchain.msvc", NOT_VERIFIED, f"could not read the toolchain: {tail(result.stderr, 1)}")
+    try:
+        report = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return Check("toolchain.msvc", NOT_VERIFIED, "toolchain.py did not answer in JSON")
+    expected, found = report.get("expected", {}), report.get("found", {})
+    if report.get("agrees"):
+        return Check("toolchain.msvc", PASS, f"MSVC {found.get('msvc')}, node {found.get('node')}, rustc {found.get('rustc')}")
+    return Check(
+        "toolchain.msvc",
+        FAIL,
+        "; ".join(report.get("problems", [])) or f"expected {expected}, found {found}",
+        "python scripts/verify/toolchain.py",
+    )
+
+
 def check_external(mode: str) -> list[Check]:
     legal = ROOT / "docs" / "legal"
     drafts = sorted(p.name for p in legal.glob("*.md")) if legal.exists() else []
@@ -421,6 +483,7 @@ def main() -> int:
     parser.add_argument("--skip-deps", action="store_true")
     parser.add_argument("--compare", type=pathlib.Path, help="root of a second build of this commit")
     parser.add_argument("--evidence-vm", type=pathlib.Path, help="an install_check.ps1 log from a clean machine")
+    parser.add_argument("--evidence-gui", type=pathlib.Path, help="a gui_journeys.ps1 log: the chooser journeys driven through the interface")
     parser.add_argument("--no-network", action="store_true")
     parser.add_argument("--out", type=pathlib.Path, default=ROOT / "release-readiness.json")
     parser.add_argument("--quiet", action="store_true")
@@ -444,8 +507,10 @@ def main() -> int:
     checks.append(check_manifest(mode))
     checks.append(check_signing(mode, entries))
     checks.append(check_reproducibility(args.compare, entries))
+    checks.append(check_toolchain())
     checks.append(check_ci(args.no_network))
     checks.append(check_vm(args.evidence_vm))
+    checks.append(check_gui_journeys(args.evidence_gui))
     checks += check_external(mode)
 
     result, reason = verdict(mode, checks)
