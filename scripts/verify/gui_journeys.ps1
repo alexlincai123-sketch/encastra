@@ -843,6 +843,62 @@ function CdpFittedCanvasIds {
     return @(CdpCanvasIds)
 }
 function CdpInspectorText { return (Cdp-Eval "(document.querySelector('.panel--inspector')||{innerText:''}).innerText") }
+# --- reaching a control the Inspector has scrolled off the bottom ------------------------------
+#
+# `PASS j4 the permission control armed once a folder was chosen -> enabled=True` and then
+# `SKIP ... the control 'Allow this folder' is off screen, so it cannot be clicked`. The Inspector
+# is a scrolling panel and the runner's window is shorter than this developer's, so Allow was below
+# the fold. That is the harness's problem and not the product's: a panel that scrolls is correct,
+# and a person would have scrolled to it.
+#
+# Scrolling is done through the page because that is the only place a scroll container exists; it
+# is setup rather than the thing under test, and every assertion afterwards still goes through the
+# interface. The control is named by a CSS expression rather than by its words wherever it can be -
+# the folder row's Choose is the button beside the input whose id ends in `-folder`, the starting
+# material's is the button beside the read-only input - so that a translation cannot pick the wrong
+# one of two buttons both called "Choose".
+$CDP_SCROLL_PRELUDE = "const p=document.querySelector('.panel--inspector');if(!p)return 'the Inspector panel is not on the page';"
+$CDP_SCROLL_EPILOGUE = "if(!b)return 'not found';b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return 'at '+Math.round(r.left)+','+Math.round(r.top)+' '+Math.round(r.width)+'x'+Math.round(r.height)+' of a '+Math.round(document.documentElement.clientHeight)+'px window';"
+$CDP_SCROLL_FOLDER_CHOOSE = "(()=>{$CDP_SCROLL_PRELUDE const i=[...p.querySelectorAll('input')].find(e=>(e.id||'').endsWith('-folder'));const b=i&&i.parentElement.querySelector('button');$CDP_SCROLL_EPILOGUE})()"
+$CDP_SCROLL_ENTRY_CHOOSE = "(()=>{$CDP_SCROLL_PRELUDE const i=p.querySelector('input[readonly]');const b=i&&i.parentElement.querySelector('button');$CDP_SCROLL_EPILOGUE})()"
+$CDP_SCROLL_ALLOW = "(()=>{$CDP_SCROLL_PRELUDE const b=[...p.querySelectorAll('button')].find(e=>/^(Permitir|Allow|Permitido|Allowed)/.test((e.innerText||'').trim()));$CDP_SCROLL_EPILOGUE})()"
+# Run is in the toolbar rather than the Inspector, so it is named across the whole page.
+$CDP_SCROLL_RUN = "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/^(Ejecutar|Run)$/.test((e.innerText||'').trim()));if(!b)return 'not found';b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return 'at '+Math.round(r.left)+','+Math.round(r.top)+' '+Math.round(r.width)+'x'+Math.round(r.height);})()"
+function ScrollInspectorTo($js, $what) {
+    $where = Cdp-Eval $js
+    Note "$what : scrolled it into view - $where$(if ($script:cdpError) { " ($script:cdpError)" })"
+}
+# A click that will not be thrown away. `Click` raises SKIP for an off-screen control, which is the
+# right answer for a control nobody can reach - but a control that merely needs scrolling to is one
+# the harness can reach, and a SKIP the harness could have avoided is a skip that is really a
+# defect in the harness. So: scroll, wait for the element to say it is on screen, and only then
+# press it. If it is still off screen after that, it FAILS with what the page said, and never SKIPs.
+function ClickInspector($el, $js, $what) {
+    if (-not $el) { throw "SKIP: $what is not on screen at all" }
+    if (-not $el.Current.IsOffscreen) { Click $el; return }
+    ScrollInspectorTo $js $what
+    for ($i = 0; $i -lt 20; $i++) {
+        if (-not $el.Current.IsOffscreen) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    # Failing that, the element's own scroll pattern - the accessibility layer's way of asking for
+    # the same thing, which works on controls the CSS expression above did not name.
+    if ($el.Current.IsOffscreen -and (HasPattern $el ([System.Windows.Automation.ScrollItemPattern]::Pattern))) {
+        try {
+            $el.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()
+            Note "$what : asked the element's own ScrollItem pattern to bring it into view"
+        } catch { Note "$what : ScrollItemPattern.ScrollIntoView threw $($_.Exception.GetType().Name)" }
+        for ($i = 0; $i -lt 20; $i++) {
+            if (-not $el.Current.IsOffscreen) { break }
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    if ($el.Current.IsOffscreen) {
+        Report $false "$what can be brought on screen" "it is still off screen after scrolling: $(ElementFacts $el)"
+        throw "SKIP: $what stayed off screen after the panel was scrolled to it, so it could not be pressed"
+    }
+    Click $el
+}
 # The assertion that the oracle is not reading the thing it is meant to be checking. The palette
 # item carries the component reference in its own title, so an oracle that read the palette would
 # report the reference back whether or not anything was placed - which is exactly the mistake this
@@ -1145,28 +1201,55 @@ function DismissDiscardPrompt {
 # else's work. The button's accessible name is its title and its note run together - "Skip Go
 # straight in..." / "Omitir Ve directo..." - so the pattern anchors on the title alone.
 #
-# Asked of the id the card's own heading carries, and defensive: this is called from inside the
-# failure dumps, and a window that goes away mid-dump must not turn a FAIL that was about to be
-# printed into an exception about the printing of it.
+# And the Skip button cannot be pressed through UI Automation, which is the part that took a run
+# to learn. Run 35064817460 dumped the whole tree while the card was up:
+#
+#   RootWebArea(Document) root(Group) welcome-title(Text)
+#
+# Three elements. The card's own buttons are not among them - Chromium leaves them out along with
+# everything else - so `Wait 'Button' '^(Omitir|Skip)'` was waiting for something that was not
+# there to be found, timed out, and the harness reported the welcome as immovable. It was not:
+# something dismissed it later (by journey 4 it was gone), but the start-of-run check had already
+# failed and three iterations ran with that FAIL against them.
+#
+# So the card is asked of, and dismissed through, the page - which is where it exists. That is a
+# legitimate route because this is setup: it is not the thing under test, no journey asserts
+# anything about the welcome, and every check that matters still goes through the interface.
+# The Skip choice is taken by position rather than by its words - Welcome.tsx renders
+# createFirst, then optionally the sample, then skip, so skip is the last `.welcome__choice` - with
+# the localised title as a first preference, so that a reordering of the card is noticed rather
+# than silently dismissing something else.
+$WELCOME_PRESENT_JS = "!!document.querySelector('.welcome')"
+$WELCOME_SKIP_JS = "(()=>{const w=document.querySelector('.welcome');if(!w)return 'gone';const all=[...w.querySelectorAll('button.welcome__choice')];if(all.length===0)return 'no choices';let b=all.find(e=>/^(Omitir|Skip)/.test((e.innerText||'').trim()));const how=b?'by its title':'as the last choice';if(!b)b=all[all.length-1];b.click();return 'clicked '+how+': '+(b.innerText||'').replace(/\s+/g,' ').slice(0,60);})()"
+$WELCOME_DOM_JS = "(()=>{const w=document.querySelector('.welcome');if(!w)return 'no .welcome element on the page';return (w.innerText||'').replace(/\s+/g,' ').slice(0,300)+' || choices: '+[...w.querySelectorAll('button.welcome__choice')].map(e=>(e.innerText||'').replace(/\s+/g,' ').slice(0,30)).join(' / ');})()"
+# Defensive: this is called from inside the failure dumps, and a page that goes away mid-dump must
+# not turn a FAIL that was about to be printed into an exception about the printing of it. A CDP
+# call that cannot be made answers "not showing" rather than throwing - the UI Automation reading
+# is kept as a second opinion for exactly that case.
 function WelcomeShowing {
+    try {
+        $onPage = Cdp-Eval $WELCOME_PRESENT_JS
+        if ($onPage -eq $true) { return $true }
+        if ($null -ne $onPage -and -not $script:cdpError) { return $false }
+    } catch { }
     try { return ($null -ne (ById 'welcome-title')) } catch { return $false }
 }
+# Clicks Skip through the page and waits for the card to be gone - a condition, not a sleep.
+# Returns nothing and reports nothing; the caller reads WelcomeShowing and decides what that means,
+# because this runs outside any journey's try as well as inside one.
 function DismissWelcome($what) {
     if (-not (WelcomeShowing)) { return }
-    Note "$what : the first-run welcome is on screen, and nothing behind it is in the accessibility tree while it is; skipping it"
-    for ($i = 0; $i -lt 3; $i++) {
-        $skip = Wait 'Button' '^(Omitir|Skip)([^A-Za-z]|$)' 5
-        if (-not $skip) { break }
-        # Never throws: this runs outside any journey's try as well as inside one, and a welcome
-        # that would not go away is reported by the caller reading WelcomeShowing, not by an
-        # exception thrown from the middle of the harness's own start-up.
-        try { Click $skip } catch { }
-        # Polled, not slept: what is being waited for is the card going away.
-        for ($j = 0; $j -lt 14; $j++) {
-            if (-not (WelcomeShowing)) { break }
-            Start-Sleep -Milliseconds 100
-        }
-        if (-not (WelcomeShowing)) { break }
+    Note "$what : the first-run welcome is on screen; its buttons are not in the accessibility tree while it is, so Skip is pressed through the page"
+    $deadline = (Get-Date).AddSeconds(20)
+    while ((Get-Date) -lt $deadline) {
+        $did = Cdp-Eval $WELCOME_SKIP_JS
+        if ($did) { Note "$what : $did" }
+        # Wait on the card being gone from the page, not on a number of milliseconds.
+        $gone = Cdp-Wait "!document.querySelector('.welcome')" 5000
+        if ($gone -eq $true) { break }
+    }
+    if (WelcomeShowing) {
+        Note "$what : the welcome is STILL on the page after 20s; it holds: $(Cdp-Eval $WELCOME_DOM_JS)"
     }
 }
 # A click on nothing, or on a control the application has greyed out, is not a click: it threw
@@ -1507,8 +1590,16 @@ function DlgNameField($dlg, $kind) {
                 $route += " -> Edit #$inner"
                 $labelled = NameFieldCandidate $inner $h $null $label $wanted $route
             } else {
-                $route += ' (written through its own handle; it holds no Edit window)'
-                $labelled = NameFieldCandidate $h $NULLPTR $null $label $wanted $route
+                # No Edit window under it, which is the modern Common Item Dialog hosting a
+                # windowless edit inside its combo. WM_SETTEXT to the combo's own handle sets what
+                # the combo displays and reads straight back out of it - which is why the read-back
+                # passed on the runner while `j2 project saved to disk -> exists=False` followed -
+                # but the dialog takes its file name from its own state, not from that window text.
+                # So the element is carried along, and WriteNameField prefers its Value pattern,
+                # which is the route that goes through the control rather than around it.
+                $writable = ((HasValuePattern $c) -and -not (IsReadOnly $c))
+                $route += if ($writable) { ' (no Edit window under it; written through its UIA Value pattern, falling back to its own handle)' } else { ' (written through its own handle; it holds no Edit window and publishes no writable Value pattern)' }
+                $labelled = NameFieldCandidate $h $NULLPTR $(if ($writable) { $c } else { $null }) $label $wanted $route
             }
         }
         if ($labelled) { return $labelled }
@@ -1534,9 +1625,23 @@ function ReadNameField($f) {
     return ''
 }
 function WriteNameField($f, $path) {
-    if ($f.Hwnd -ne $NULLPTR) { [void][W32]::SendMessageW($f.Hwnd, $WM_SETTEXT, $NULLPTR, $path) }
-    elseif ($f.Element) { try { $f.Element.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($path) } catch { } }
+    # The Value pattern first wherever the control publishes one. It goes through the control - the
+    # dialog's own edit, windowless or not - where WM_SETTEXT to a container's handle only changes
+    # what that window displays. Both are tried; the read-back below still decides.
+    $wrote = $false
+    if ($f.Element) {
+        try {
+            $f.Element.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($path)
+            $wrote = $true
+        } catch { $wrote = $false }
+    }
+    if (-not $wrote -and $f.Hwnd -ne $NULLPTR) { [void][W32]::SendMessageW($f.Hwnd, $WM_SETTEXT, $NULLPTR, $path) }
     Start-Sleep -Milliseconds 350
+    # And if the Value pattern took the string but the dialog did not, the handle is still there.
+    if ((ReadNameField $f) -ne $path -and $f.Hwnd -ne $NULLPTR) {
+        [void][W32]::SendMessageW($f.Hwnd, $WM_SETTEXT, $NULLPTR, $path)
+        Start-Sleep -Milliseconds 350
+    }
     # A ComboBoxEx32 hands its own WM_SETTEXT to the edit it owns; if writing the edit directly
     # did not take, the combo is the other documented way in.
     if ((ReadNameField $f) -ne $path -and $f.Combo -ne $NULLPTR) {
@@ -1977,7 +2082,7 @@ function HarnessStart {
     # every time - this is what is on screen at start-up.
     DismissWelcome 'harness start'
     $welcomeCleared = -not (WelcomeShowing)
-    Report $welcomeCleared 'the first-run welcome is not standing in front of the interface' $(if ($welcomeCleared) { 'not on screen' } else { 'still on screen, so nothing behind it is in the accessibility tree: ' + (AutomationIdDump 20) })
+    Report $welcomeCleared 'the first-run welcome is not standing in front of the interface' $(if ($welcomeCleared) { 'neither the page nor UI Automation can find it' } else { 'still on the page after Skip was pressed and waited on for 20s. The card holds: ' + (Cdp-Eval $WELCOME_DOM_JS) + '. Ids in the accessibility tree: ' + (AutomationIdDump 20) })
 
     $sidebarSettings = Wait 'Button' '^(Ajustes|Settings)$' 30
     Report ($null -ne $sidebarSettings) 'sidebar exposed to UI Automation' "settings item: '$($sidebarSettings.Current.Name)'"
@@ -2131,9 +2236,47 @@ function Journey2 {
         Report $true 'j2 native save dialog opened' "'$($dlg.Current.Name)' class=$(HwndClass (Hwnd $dlg))"
         ConfirmChooser $dlg $projectFile 'j2-save' 'file'
         ReportChooserClosed 'j2-save'
-        Start-Sleep -Milliseconds 1500
-        $projectSaved = Test-Path $projectFile
-        Report $projectSaved 'j2 project saved to disk' "$projectFile exists=$projectSaved"
+        # Two different questions, asked in the order that tells them apart.
+        #
+        # First what the application believes. `saveProject` (store.ts:758) takes the path FROM the
+        # chooser - `await ipc.pickProjectToSave(...)` - and only then awaits `ipc.saveProject(path,
+        # ...)`, so the file is written after the dialog has already gone; and on success it sets
+        # `projectPath`, `projectName` and `dirty: false`. App.tsx renders that as `.project-name`
+        # with a `.project-name__dirty` bullet while the project is dirty. So the page can be asked
+        # whether the store thinks it saved, and under what name, without touching the disk.
+        #
+        # Then whether the bytes are there, polled rather than read once: `Test-Path` the instant
+        # the dialog closes was asking before the write had been awaited.
+        $appSaved = Cdp-Wait "(()=>{const n=document.querySelector('.project-name');if(!n)return '';if(n.querySelector('.project-name__dirty'))return '';return (n.innerText||'').trim()||'(no name)';})()" 15000
+        if ($appSaved) {
+            Report $true 'j2 the application says the project is saved' "the toolbar reads '$appSaved' and no longer shows the unsaved-changes mark, which store.ts only does after ipc.saveProject resolved"
+        } else {
+            $toolbarNow = Cdp-Eval "(document.querySelector('.project-name')||{innerText:[]}).innerText"
+            $statusNow = Cdp-Eval "(document.querySelector('[class^=statusbar__message]')||{innerText:[]}).innerText"
+            Report $false 'j2 the application says the project is saved' "the toolbar still reads '$(OneLine $toolbarNow)' and the status bar says '$(OneLine $statusNow)' - store.ts clears dirty only after ipc.saveProject resolved, so the save either never ran or failed"
+        }
+        $projectSaved = $false
+        for ($i = 0; $i -lt 30; $i++) {
+            if (Test-Path $projectFile) { $projectSaved = $true; break }
+            Start-Sleep -Milliseconds 500
+        }
+        # If it is not where it was asked for, say where it went instead. That is the whole
+        # difference between "the write had not finished" and "the name never reached the dialog and
+        # it saved somewhere else under that name" - and only one of those is a harness bug.
+        $whereInstead = ''
+        if (-not $projectSaved) {
+            $since = (Get-Item $script:sandbox).CreationTime
+            $hunt = @($env:USERPROFILE, (Join-Path $env:USERPROFILE 'Documents'), (Join-Path $env:USERPROFILE 'Desktop'), (Join-Path $env:USERPROFILE 'Downloads'), $env:TEMP, (Split-Path $proc.Path -Parent))
+            $found = @()
+            foreach ($dir in ($hunt | Sort-Object -Unique)) {
+                if (-not $dir -or -not (Test-Path $dir)) { continue }
+                foreach ($f in @(Get-ChildItem -Path $dir -Filter '*.encastra' -File -ErrorAction SilentlyContinue)) {
+                    if ($f.LastWriteTime -ge $since) { $found += "$($f.FullName) (written $($f.LastWriteTime.ToString('s')))" }
+                }
+            }
+            $whereInstead = if ($found.Count -gt 0) { '; a .encastra file newer than this run turned up at ' + ($found -join ', ') + ' - so the chooser took a name but not the folder that was typed' } else { '; no .encastra newer than this run is in the profile, Documents, Desktop, Downloads, TEMP or the install directory either' }
+        }
+        Report $projectSaved 'j2 project saved to disk' "$projectFile exists=$projectSaved$whereInstead"
         # Publish.tsx arms Prepare only for a saved project that matches the canvas. Without one the
         # chooser under test never opens, and reporting the greyed-out button as a failure of
         # publish-into would be reporting the save twice under another name.
@@ -2435,7 +2578,7 @@ function Journey45 {
         # Negative: cancel. Nothing is configured, so nothing can be allowed.
         $chooseFolder = ChooseButtonNear $folderField
         Report ($null -ne $chooseFolder) 'j4 the folder row has its own Choose button' "'$($chooseFolder.Current.Name)'"
-        Click (MustFind $chooseFolder 'the folder row has no Choose button next to it, so grant-to-component cannot be driven')
+        ClickInspector (MustFind $chooseFolder 'the folder row has no Choose button next to it, so grant-to-component cannot be driven') $CDP_SCROLL_FOLDER_CHOOSE 'j4 the folder row Choose button'
         $dlg = WaitDialog 12
         Report ($null -ne $dlg) 'j4 chooser opened for grant-to-component' "'$($dlg.Current.Name)'"
         CancelChooser $dlg 'j4'
@@ -2446,7 +2589,7 @@ function Journey45 {
 
         # Confirm, then allow: the button's own label is the application saying the folder answered
         # the question it was asked.
-        Click (MustFind (ChooseButtonNear (ByIdSuffix '-folder' 5)) 'the folder row lost its Choose button after the cancelled chooser')
+        ClickInspector (MustFind (ChooseButtonNear (ByIdSuffix '-folder' 5)) 'the folder row lost its Choose button after the cancelled chooser') $CDP_SCROLL_FOLDER_CHOOSE 'j4 the folder row Choose button'
         $dlg = WaitDialog 12
         ConfirmChooser $dlg $grantFolder 'j4' 'folder'
         ReportChooserClosed 'j4'
@@ -2455,7 +2598,7 @@ function Journey45 {
         Report (SamePath $folderValue $grantFolder) 'j4 the chosen folder became the step configuration' "'$folderValue' (expected the same folder as '$grantFolder')"
         $allow = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 8
         Report ($null -ne $allow -and $allow.Current.IsEnabled) 'j4 the permission control armed once a folder was chosen' "enabled=$($allow.Current.IsEnabled)"
-        Click $allow
+        ClickInspector $allow $CDP_SCROLL_ALLOW 'j4 the Allow this folder button'
         $allowed = Wait 'Button' '^(Permitido|Allowed)$' 8
         Report ($null -ne $allowed) 'j4 the application says the folder is allowed' "button now reads '$($allowed.Current.Name)'"
 
@@ -2471,7 +2614,7 @@ function Journey45 {
         $chooseFile = ChooseButtonNear $readonlyBox
         Report ($null -ne $chooseFile) 'j5 the starting-material row has its own Choose button' "'$($chooseFile.Current.Name)'"
 
-        Click (MustFind $chooseFile 'the starting-material row has no Choose button next to it, so run-input cannot be driven')
+        ClickInspector (MustFind $chooseFile 'the starting-material row has no Choose button next to it, so run-input cannot be driven') $CDP_SCROLL_ENTRY_CHOOSE 'j5 the starting-material Choose button'
         $dlg = WaitDialog 12
         Report ($null -ne $dlg) 'j5 chooser opened for run-input' "'$($dlg.Current.Name)'"
         CancelChooser $dlg 'j5'
@@ -2479,7 +2622,7 @@ function Journey45 {
         $afterCancel = ValueOf $readonlyBox
         Report ($afterCancel -eq '') 'j5 Cancel seeded no input' "box='$afterCancel'"
 
-        Click (MustFind (ChooseButtonNear $readonlyBox) 'the starting-material row lost its Choose button after the cancelled chooser')
+        ClickInspector (MustFind (ChooseButtonNear $readonlyBox) 'the starting-material row lost its Choose button after the cancelled chooser') $CDP_SCROLL_ENTRY_CHOOSE 'j5 the starting-material Choose button'
         $dlg = WaitDialog 12
         ConfirmChooser $dlg $inputFile 'j5' 'file'
         ReportChooserClosed 'j5'
@@ -2490,7 +2633,7 @@ function Journey45 {
         # The proof that both answers were real: a run that writes into the granted folder.
         $run = Wait 'Button' '^(Ejecutar|Run)$' 10
         Report ($null -ne $run -and $run.Current.IsEnabled) 'j4/j5 Run is available with a folder allowed and a file chosen' "enabled=$($run.Current.IsEnabled)"
-        Click (MustFind $run 'the Run button is not on screen, so the granted folder cannot be written into')
+        ClickInspector (MustFind $run 'the Run button is not on screen, so the granted folder cannot be written into') $CDP_SCROLL_RUN 'j4/j5 the Run button'
         $saved = $null
         for ($i = 0; $i -lt 60; $i++) {
             $hit = @(Get-ChildItem -Force -Path $grantFolder -File -ErrorAction SilentlyContinue)
@@ -2515,9 +2658,9 @@ function Journey45 {
         Report ($typed -eq $projectsLocation) 'neg the interface accepts a typed folder it never chose' "'$typed'"
         $allowAgain = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 8
         Report ($null -ne $allowAgain) 'neg the permission went back to asking when the folder changed' "button reads '$($allowAgain.Current.Name)' rather than Allowed"
-        Click (MustFind $allowAgain 'the permission control did not go back to asking, so the refusal cannot be provoked')
+        ClickInspector (MustFind $allowAgain 'the permission control did not go back to asking, so the refusal cannot be provoked') $CDP_SCROLL_ALLOW 'neg the Allow this folder button'
         Start-Sleep -Milliseconds 400
-        Click (MustFind (Wait 'Button' '^(Ejecutar|Run)$' 10) 'the Run button is not on screen for the refusal probe')
+        ClickInspector (MustFind (Wait 'Button' '^(Ejecutar|Run)$' 10) 'the Run button is not on screen for the refusal probe') $CDP_SCROLL_RUN 'neg the Run button'
         $refusal = FindText '(elige esa carpeta con el bot.n Elegir|choose that folder with the Choose button)' 20
         $anything = FindText '(No se ha ejecutado nada|Nothing ran)' 2
         Report ($null -ne $refusal) 'neg a folder chosen for projects-location is refused as a grant' "'$refusal' / '$anything'"
