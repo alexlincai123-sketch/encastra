@@ -31,6 +31,13 @@
 #     plain panes with no Invoke or Value pattern, so they are driven the way the shell itself
 #     would: BM_CLICK and WM_SETTEXT to their window handles. Never a global SendKeys: every
 #     message in this file goes to one specific window handle.
+#   * "What is on screen" is asked of the *window list* (`EnumWindows`), not of the accessibility
+#     tree. Asking the tree only ever found the dialogs some provider had hung under the desktop,
+#     and `j2 native save dialog opened -> ''` is what that costs: a dialog that is up and not
+#     listed leaves the save waiting on it, the store `busy`, and every later journey greyed out
+#     for a reason the log cannot name. Whenever something expected is not found, the log now
+#     prints every top-level window this process owns - class, caption, visible, enabled - so a
+#     run nobody can watch says what *was* there rather than only what was not.
 #   * Its name field is a *descendant* and not a child, and on some builds it owns no window
 #     handle of its own; the routes to it are in "the native chooser" below. The path is read
 #     back out of the field before anything is confirmed, because a confirm pressed on an empty
@@ -69,6 +76,30 @@ public static class W32 {
   // The window WebView2 renders into throttles when it has no focus, which turns a poll into a
   // false negative. Raised once, by handle, at the start - never a global SendKeys.
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
+  // A window's caption, read the way that works across a process boundary for a top-level window.
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, System.Text.StringBuilder s, int max);
+  // Every top-level window this process owns, whatever its class and wherever UI Automation
+  // decides to hang it. `RootElement.FindAll(Children, pid)` is a view of the accessibility tree
+  // and a dialog is only in it if a provider put it there; this is the window list itself, so a
+  // chooser that is genuinely on screen cannot hide from it. See "the native chooser" below.
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  public static IntPtr[] TopLevelWindows(int pid) {
+    var found = new System.Collections.Generic.List<IntPtr>();
+    EnumWindows(delegate(IntPtr h, IntPtr l) {
+      uint p = 0;
+      GetWindowThreadProcessId(h, out p);
+      if ((int)p == pid) { found.Add(h); }
+      return true;
+    }, IntPtr.Zero);
+    return found.ToArray();
+  }
+  // TEMP on a hosted runner is handed out in its 8.3 short form - C:\Users\RUNNER~1\... - and the
+  // application canonicalises every path it records, so a raw string comparison against what the
+  // harness typed compares two spellings of the same folder and calls them different.
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] public static extern int GetLongPathNameW(string path, System.Text.StringBuilder buf, int len);
 }
 "@
 $A = [System.Windows.Automation.AutomationElement]
@@ -80,18 +111,57 @@ $NULLPTR = [IntPtr]::Zero
 
 $script:passed = 0; $script:failed = 0; $script:skipped = 0
 
+# --- paths, in the one spelling the application will answer in -------------------------------
+#
+# `resolve_grant_directory` canonicalises before it records, which is the whole point of it: the
+# runtime learns a folder from the operating system and stores the one name that folder has. So
+# the harness has to ask the same question of its own paths before it compares. Two things differ:
+#
+#   * 8.3 short names. `$env:TEMP` on a hosted runner is `C:\Users\RUNNER~1\AppData\Local\Temp`,
+#     and the application answers `C:\Users\runneradmin\...`. Same folder, different spelling.
+#     `(Get-Item $p).FullName` does not expand that; `GetLongPathNameW` does, for a path that
+#     exists. The sandbox is also built under USERPROFILE rather than TEMP so the question mostly
+#     does not arise, and the harness says so below if a `~` survives anyway.
+#   * Case. Windows paths are case-insensitive, and `-eq` between strings in PowerShell already is.
+function LongPath($p) {
+    if (-not $p) { return '' }
+    $sb = New-Object System.Text.StringBuilder 1024
+    $n = 0
+    try { $n = [W32]::GetLongPathNameW($p, $sb, 1024) } catch { $n = 0 }
+    # 0 means the path is not on disk (a deliberately missing folder, say). Its own spelling is
+    # then the only one there is, and GetFullPath still normalises the separators.
+    $long = if ($n -gt 0 -and $n -lt 1024) { $sb.ToString() } else { $p }
+    try { return [System.IO.Path]::GetFullPath($long) } catch { return $long }
+}
+# Two paths naming one folder. Never used to widen an assertion: what it removes is the harness's
+# own spelling, not any difference the application put there. A path that resolves somewhere else
+# - a junction followed to the wrong place, a preference holding a different folder - still fails.
+function SamePath($a, $b) {
+    if (-not $a -or -not $b) { return $false }
+    $la = LongPath ($a.Trim().Trim('"').TrimEnd('\'))
+    $lb = LongPath ($b.Trim().Trim('"').TrimEnd('\'))
+    return ($la -eq $lb)
+}
+
 # Report, Skip and Note write their line to the success stream, which is how it reaches the log
 # scripts/release_check.py reads. That has one consequence the whole file obeys: a function that
 # reports must not also return a value, because `$x = SomeFn` would collect the printed line into
 # $x and `@('FAIL ...', $false)` is *true* in PowerShell. That is exactly how
 # `j1 chooser closed on confirm -> dialogs left: 1` came out PASS. Results travel in $script:
 # variables instead; see $script:chooserClosed below.
+# One line per result, whatever was observed. Sentences read off the screen wrap, and a name with
+# a newline in it would split a FAIL into two lines - one of which release_check.py would then be
+# reading as something other than the result it belongs to.
+function OneLine($s) {
+    if ($null -eq $s) { return '' }
+    return ((([string]$s) -replace '\r?\n', ' / ') -replace '\s{3,}', '  ')
+}
 function Report($ok, $what, $observed) {
     if ($ok) { $script:passed++ } else { $script:failed++ }
-    "{0}  {1}  -> {2}" -f ($(if ($ok) { 'PASS' } else { 'FAIL' }), $what, $observed)
+    "{0}  {1}  -> {2}" -f ($(if ($ok) { 'PASS' } else { 'FAIL' }), (OneLine $what), (OneLine $observed))
 }
-function Skip($what, $why) { $script:skipped++; "SKIP  {0}  -> {1}" -f $what, $why }
-function Note($text) { "note  $text" }
+function Skip($what, $why) { $script:skipped++; "SKIP  {0}  -> {1}" -f (OneLine $what), (OneLine $why) }
+function Note($text) { "note  $(OneLine $text)" }
 # How every journey ends, including badly. A journey that could not be driven - a control that was
 # not on screen, a button the application had greyed out, a prerequisite another journey failed to
 # produce - raises `throw 'SKIP: reason'` and is reported as SKIP, with the reason. Anything else
@@ -144,14 +214,128 @@ function Wait($ctrl, $namePattern, $seconds) {
 function ById($id) { (AppWindow).FindFirst($T::Descendants, (New-Object System.Windows.Automation.PropertyCondition($A::AutomationIdProperty, $id))) }
 # React's useId makes the first half of every id unpredictable; the half that names the field is
 # not, so fields are found by the suffix the component wrote.
+$CONTROL_TYPES = @{
+    Edit   = [System.Windows.Automation.ControlType]::Edit
+    Button = [System.Windows.Automation.ControlType]::Button
+    Text   = [System.Windows.Automation.ControlType]::Text
+}
+function ControlsOfType($ctrl) {
+    $el = AppWindow
+    if (-not $el) { return @() }
+    $ct = $CONTROL_TYPES[$ctrl]
+    if (-not $ct) { return @() }
+    $cond = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, $ct)
+    return @($el.FindAll($T::Descendants, $cond))
+}
 function ByIdSuffix($suffix, $seconds) {
     for ($i = 0; $i -lt $seconds * 4; $i++) {
-        foreach ($e in (Descendants (AppWindow))) {
-            if ($e.Current.AutomationId -and $e.Current.AutomationId.EndsWith($suffix)) { return $e }
+        # Narrow first. Every field these journeys look for is a text box, and asking UI
+        # Automation for the Edits alone is one cross-process call, where walking the whole tree
+        # and reading `.Current` off each element is one call per element. With a canvas and a run
+        # panel on screen that difference is the difference between a poll and a timeout - and a
+        # timeout reads exactly like an element that is not there.
+        foreach ($e in (ControlsOfType 'Edit')) {
+            $id = $e.Current.AutomationId
+            if ($id -and $id.EndsWith($suffix)) { return $e }
         }
         Start-Sleep -Milliseconds 250
     }
+    # Once, at the end: the same question of everything on screen, in case the control is not an
+    # Edit at all. Slow, so it is not in the poll.
+    foreach ($e in (Descendants (AppWindow))) {
+        $id = $e.Current.AutomationId
+        if ($id -and $id.EndsWith($suffix)) { return $e }
+    }
     return $null
+}
+function HasPattern($el, $pattern) {
+    if (-not $el) { return $false }
+    try { [void]$el.GetCurrentPattern($pattern); return $true } catch { return $false }
+}
+function HelpTextOf($el) {
+    if (-not $el) { return '' }
+    try { return $el.Current.HelpText } catch { return '' }
+}
+# Like Wait, but for a control the application arms a moment after it appears. Returns the
+# control even when it never armed, so the caller can report what state it was actually in
+# rather than "not found" - which is a different thing and used to be reported as the same.
+function WaitEnabled($ctrl, $namePattern, $seconds) {
+    $last = $null
+    for ($i = 0; $i -lt $seconds * 4; $i++) {
+        $e = Find (AppWindow) $ctrl $namePattern
+        if ($e) {
+            $last = $e
+            if ($e.Current.IsEnabled) { return $e }
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    return $last
+}
+
+# --- what was on screen, for the times something was not ---------------------------------------
+#
+# Each of these is printed only on a failure, and each answers the question a log that says
+# "not found" leaves open. A run costs about twenty-five minutes on the runner; a log that names
+# what it did see is worth more than one that has to be guessed at afterwards.
+
+function AutomationIdDump($max) {
+    $ids = @()
+    try {
+        foreach ($e in (Descendants (AppWindow))) {
+            if ($ids.Count -ge $max) { break }
+            $id = $e.Current.AutomationId
+            if ($id) { $ids += ("{0}({1})" -f $id, ($e.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '')) }
+        }
+    } catch { $ids += "(the tree could not be read: $($_.Exception.GetType().Name))" }
+    if ($ids.Count -eq 0) { return '(nothing on screen publishes an automation id)' }
+    return ($ids -join ' ')
+}
+# What UI Automation sees for a step that has been placed. ComponentNode gives each one
+# id="node-<id>" and deliberately no ARIA role - see the comment in ComponentNode.tsx - so it
+# arrives as a plain grouping element with no Invoke pattern. That is exactly the thing to say
+# out loud if a step turns out not to be selectable from here.
+function PlacedStepsDump {
+    $out = @()
+    try {
+        foreach ($e in (Descendants (AppWindow))) {
+            $id = $e.Current.AutomationId
+            if (-not $id -or -not $id.StartsWith('node-')) { continue }
+            $n = $e.Current.Name
+            if (-not $n) { $n = '' }
+            if ($n.Length -gt 28) { $n = $n.Substring(0, 28) }
+            $out += ("{0} type={1} name='{2}' invokable={3}" -f $id, ($e.Current.ControlType.ProgrammaticName -replace '^ControlType\.', ''), $n, (HasPattern $e ([System.Windows.Automation.InvokePattern]::Pattern)))
+        }
+    } catch { $out += "(the tree could not be read: $($_.Exception.GetType().Name))" }
+    if ($out.Count -eq 0) { return '(nothing on screen carries a node-* id: either no step was placed or the canvas publishes none)' }
+    return ($out -join ' | ')
+}
+# The sentences the interface is showing. A failed save puts its reason in the status bar
+# (store.ts saveProject: `set({ message: { tone: 'error', text: describe(error) } })`), so when a
+# chooser does not appear the reason may already be written on screen.
+function AppNotices($max) {
+    $lines = @()
+    try {
+        foreach ($e in (Descendants (AppWindow))) {
+            if ($lines.Count -ge $max) { break }
+            if ($e.Current.ControlType.ProgrammaticName -ne 'ControlType.Text') { continue }
+            $n = $e.Current.Name
+            if ($n -and $n.Length -gt 18) { $lines += "'" + $n + "'" }
+        }
+    } catch { }
+    if ($lines.Count -eq 0) { return '(no sentence on screen long enough to be a message)' }
+    return ($lines -join ' | ')
+}
+# The prompt `newProject` and `openProject` raise when there is unsaved work (store.ts:677 ->
+# requestDiscard -> panels/UnsavedChanges.tsx). It is an in-page alertdialog, not a window, so
+# none of the dialog handling above sees it - and left standing it swallows the rest of a journey.
+# Prints and returns nothing, for the reason given above Report: a function that writes to the
+# success stream must not also hand a value back, or the caller collects the printed line.
+function DismissDiscardPrompt {
+    $discard = Wait 'Button' '^(Descartar los cambios|Discard changes)$' 4
+    if (-not $discard) { return }
+    Note 'the application asked about unsaved changes; discarding them so the journey starts from a clean canvas'
+    Click $discard
+    Start-Sleep -Milliseconds 900
 }
 # A click on nothing, or on a control the application has greyed out, is not a click: it threw
 # `Unrecognized error` out of Invoke on the runner and took the rest of the journey with it. Both
@@ -228,8 +412,69 @@ function ChooseButtonNear($anchor) {
 #
 # Everything is still a message to one specific window handle. There is no global SendKeys here.
 
-function Dialogs { @($root.FindAll($T::Children, $byPid) | Where-Object { $_.Current.ClassName -eq '#32770' }) }
-function DialogCount { @(Dialogs).Count }
+# What is on screen, asked of the window list rather than of the accessibility tree.
+#
+# `RootElement.FindAll(Children, pid)` only ever showed the dialogs some provider had hung under
+# the desktop, and `j2 native save dialog opened -> ''` is what that costs when a dialog is up and
+# not there: the save is still awaiting a chooser nobody can see, the store stays `busy`, and
+# every later journey finds its own buttons greyed out for a reason the log cannot name. So the
+# question is put to `EnumWindows` instead, which is the list of windows themselves.
+#
+# The application's own window is excluded by class, and so is the noise every WebView2 process
+# carries around - input-method and tooltip windows, which are top-level but are not in front of
+# anybody. What is left is either a common dialog (#32770) or some other window of this process
+# standing over the interface with a caption of its own, and both are things a journey has to
+# deal with before it can claim the screen was clear.
+$MAIN_WINDOW_CLASS = 'Tauri Window'
+$NOISE_CLASSES = @('IME', 'MSCTFIME UI', 'Default IME', 'tooltips_class32', 'OleMainThreadWndClass', 'CicMarshalWndClass')
+function ProcWindows {
+    $out = @()
+    foreach ($h in [W32]::TopLevelWindows($proc.Id)) {
+        $sb = New-Object System.Text.StringBuilder 512
+        [void][W32]::GetWindowTextW($h, $sb, 512)
+        $out += @{
+            Hwnd    = $h
+            Class   = (HwndClass $h)
+            Title   = $sb.ToString()
+            Visible = [W32]::IsWindowVisible($h)
+            Enabled = [W32]::IsWindowEnabled($h)
+        }
+    }
+    return $out
+}
+# Printed whenever something expected was not found, so a run nobody can watch still says what
+# *was* on screen instead of only what was not.
+function ProcWindowsDump {
+    $parts = @()
+    foreach ($w in (ProcWindows)) {
+        $t = $w.Title
+        if ($t.Length -gt 44) { $t = $t.Substring(0, 44) }
+        $parts += ("{0}'{1}'#{2} visible={3} enabled={4}" -f $w.Class, $t, $w.Hwnd, $w.Visible, $w.Enabled)
+    }
+    if ($parts.Count -eq 0) { return '(this process owns no top-level window at all)' }
+    return ($parts -join ' | ')
+}
+function DialogHwnds {
+    $out = @()
+    foreach ($w in (ProcWindows)) {
+        if (-not $w.Visible) { continue }
+        if ($w.Class -eq $MAIN_WINDOW_CLASS) { continue }
+        if ($NOISE_CLASSES -contains $w.Class) { continue }
+        if ($w.Class -like 'Chrome_*') { continue }
+        # A common dialog counts whether or not it has a caption yet; anything else has to be
+        # showing a caption before it is treated as a window somebody is looking at.
+        if ($w.Class -eq '#32770' -or $w.Title) { $out += $w.Hwnd }
+    }
+    return $out
+}
+function Dialogs {
+    $out = @()
+    foreach ($h in (DialogHwnds)) {
+        try { $e = $A::FromHandle($h); if ($e) { $out += $e } } catch { }
+    }
+    return $out
+}
+function DialogCount { @(DialogHwnds).Count }
 function WaitDialog($seconds) { for ($i = 0; $i -lt $seconds * 4; $i++) { $d = Dialogs; if ($d.Count -gt 0) { return $d[0] }; Start-Sleep -Milliseconds 250 }; return $null }
 function WaitNoDialog($seconds) { for ($i = 0; $i -lt $seconds * 4; $i++) { if ((DialogCount) -eq 0) { return $true }; Start-Sleep -Milliseconds 250 }; return $false }
 function Hwnd($el) { if (-not $el) { return $NULLPTR }; return [IntPtr]$el.Current.NativeWindowHandle }
@@ -384,7 +629,9 @@ function ForceCloseDialogs {
     for ($i = 0; $i -lt 8; $i++) {
         $d = Dialogs
         if ($d.Count -eq 0) { return }
-        $dlg = $d[$d.Count - 1]
+        # EnumWindows answers in Z order, topmost first, so index 0 is the one in front - and a
+        # dialog in front of another dialog is the one that has to go first.
+        $dlg = $d[0]
         $dh = Hwnd $dlg
         $btn = DlgButtonHwnd $dlg $CANCEL $IDCANCEL
         if ($btn -ne $NULLPTR) { [void][W32]::SendMessage($btn, $BM_CLICK, $NULLPTR, $NULLPTR); Start-Sleep -Milliseconds 400 }
@@ -474,8 +721,13 @@ function ReportChooserClosed($what) {
 
 # --- somewhere to work ------------------------------------------------------------------------
 
+# Not under TEMP. A hosted runner hands the process `C:\Users\RUNNER~1\AppData\Local\Temp` - the
+# 8.3 short form - and every path the application gives back has been canonicalised, so the two
+# never match as strings. USERPROFILE has no short form to expand, and LongPath expands it anyway
+# if some other machine disagrees. SamePath is still what the journeys compare with; this only
+# stops the log being full of two spellings of the same folder.
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$sandbox = Join-Path $env:TEMP "encastra-journeys-$stamp"
+$sandbox = Join-Path (Join-Path (LongPath $env:USERPROFILE) 'encastra-journeys') $stamp
 $projectsLocation = Join-Path $sandbox 'projects-location'
 $publishInto = Join-Path $sandbox 'publish-into'
 $grantFolder = Join-Path $sandbox 'grant-to-component'
@@ -490,6 +742,9 @@ $inputFile = Join-Path $inputFolder 'evidence.txt'
 Set-Content -Path $inputFile -Value 'evidence for the run-input journey' -Encoding ASCII
 $projectFile = Join-Path $sandbox 'journeys.encastra'
 "sandbox $sandbox"
+# Said out loud because everything the journeys compare rests on it: if a `~` survived here, the
+# harness and the application would be spelling the same folder two ways.
+Report (-not ($sandbox -like '*~*')) 'the sandbox path carries no 8.3 short name' "$sandbox"
 
 $junctionMade = $false
 try {
@@ -555,11 +810,19 @@ try {
     ReportChooserClosed 'j1'
     Start-Sleep -Milliseconds 800
     $after = ValueOf (ById 'pref-project-folder')
-    Report ($after -eq $projectsLocation) 'j1 chosen folder became the projects preference' "'$after' (expected '$projectsLocation')"
+    # SamePath, not `-eq`: the preference holds what `resolve_grant_directory` canonicalised, and
+    # the harness's own string may be a short-name spelling of the same folder. A different folder
+    # still fails - what is removed is the spelling, not the difference.
+    Report (SamePath $after $projectsLocation) 'j1 chosen folder became the projects preference' "'$after' (expected the same folder as '$projectsLocation')"
 
     # Negative, junction: choose_folder canonicalises before it records (lib.rs, resolve_grant_
     # directory), so a junction must come back as the folder it points at. If the link's own path
     # came back, what was recorded and what the person chose would be two different places.
+    #
+    # Resolving the link to its target IS the pass condition, and the line below says so rather
+    # than leaving it to be inferred. Refusing the link outright is the other acceptable answer -
+    # both are the runtime declining to record one folder under another folder's name. The only
+    # failure is the link path coming back unresolved, or nothing being said at all.
     if (-not $junctionMade) {
         Skip 'j1 junction resolves to its target' 'mklink /J was refused on this machine'
     } else {
@@ -573,14 +836,14 @@ try {
         $refusal = FindText '(cannot be used|no se puede usar|not a folder on this machine|no es una carpeta)' 2
         if (-not $script:chooserConfirmed) {
             Skip 'j1 junction resolves to its target' 'the chooser could not be driven, so the link was never offered to it'
-        } elseif ($afterLink -eq $junctionTarget) {
-            Report $true 'j1 junction resolved to its target, not the link' "'$afterLink'"
-        } elseif ($afterLink -eq $junction) {
-            Report $false 'j1 junction resolved to its target, not the link' "the link path came back unresolved: '$afterLink'"
+        } elseif (SamePath $afterLink $junctionTarget) {
+            Report $true 'j1 junction resolved to its target, not the link (resolving is the pass)' "the preference holds the target '$afterLink', not the link '$junction'"
+        } elseif (SamePath $afterLink $junction) {
+            Report $false 'j1 junction resolved to its target, not the link (resolving is the pass)' "the link path came back unresolved: '$afterLink'"
         } elseif ($refusal) {
             Report $true 'j1 junction refused rather than followed' "'$refusal'"
         } else {
-            Report $false 'j1 junction resolved to its target, not the link' "chooser closed=$closed, field now '$afterLink', no refusal on screen"
+            Report $false 'j1 junction resolved to its target, not the link (resolving is the pass)' "chooser closed=$closed, the preference now holds '$afterLink' - neither the target '$junctionTarget' nor the link '$junction' - and no refusal is on screen"
         }
     }
 } catch {
@@ -607,11 +870,33 @@ try {
     Start-Sleep -Milliseconds 700
     Report ($null -ne (FindText '(Parse JSON)' 5)) 'j2 a step is on the canvas' 'Parse JSON placed'
 
+    # Save is armed by nothing but the store's `busy` flag (App.tsx: `disabled={busy}`) - not by a
+    # name, and not by the project being dirty, though the step just placed made it dirty anyway.
+    # So a Save that reads enabled is a Save that will run, and `saveProject` asks for a path
+    # whenever the project has none (store.ts:753) - which is this one.
+    #
+    # This chooser is NOT the one journeys 1 and 3 to 5 drive. Those go through the application's
+    # own `choose_folder` command, which runs `blocking_pick_folder` on the privileged side
+    # (src-tauri/src/lib.rs:374). Save and Open instead call `@tauri-apps/plugin-dialog` from the
+    # renderer (ipc.ts:214 and :223). Both end in tauri-plugin-dialog, so both should put an
+    # ordinary common dialog on screen - but they arrive by different routes and on different
+    # threads, and the first hosted run found no dialog at all here, so what is on screen is now
+    # asked of the window list rather than of the accessibility tree (see ProcWindows above).
     $save = Wait 'Button' '^(Guardar|Save)$' 10
-    Report ($null -ne $save) 'j2 Save button found' "'$($save.Current.Name)'"
+    Report ($null -ne $save -and $save.Current.IsEnabled) 'j2 Save button found and armed' "'$($save.Current.Name)' enabled=$($save.Current.IsEnabled)"
     Click $save
     $dlg = WaitDialog 12
-    Report ($null -ne $dlg) 'j2 native save dialog opened' "'$($dlg.Current.Name)'"
+    if (-not $dlg) {
+        # Which of the two it is, the log now says. `saveProject` sets busy on the way in and
+        # clears it in a finally, so a Save still greyed out means the promise has not settled -
+        # the chooser is up somewhere this harness cannot reach. A Save that has come back means
+        # the call returned or threw, and if it threw the sentence is already in the status bar.
+        $saveNow = Find (AppWindow) 'Button' '^(Guardar|Save)$'
+        $stillWaiting = ($null -ne $saveNow -and -not $saveNow.Current.IsEnabled)
+        Report $false 'j2 native save dialog opened' ("none on screen; every top-level window this process owns: " + (ProcWindowsDump) + "; Save is now enabled=$($saveNow.Current.IsEnabled) (still disabled means the save is waiting on a chooser that is not in the list above; enabled means the call returned or failed); the interface is saying: " + (AppNotices 6))
+        throw "SKIP: the save chooser never appeared (save still waiting=$stillWaiting), so nothing downstream of a saved project - publish-into included - can be driven"
+    }
+    Report $true 'j2 native save dialog opened' "'$($dlg.Current.Name)' class=$(HwndClass (Hwnd $dlg))"
     ConfirmChooser $dlg $projectFile 'j2-save'
     ReportChooserClosed 'j2-save'
     Start-Sleep -Milliseconds 1500
@@ -696,13 +981,27 @@ EnsureNoDialogs 'j2 after'
 try {
     EnsureNoDialogs 'j3 before'
     [void](GoTo '^(Biblioteca|Library)$' 'Library')
-    $import = Wait 'Button' '^(Importar|Import)' 12
     # Both halves are the check. A chooser left open by an earlier journey is modal to the
     # application, and every button underneath it - this one included - then reads as disabled;
     # that is why `Import... enabled=False` was reported as a find and then threw out of Invoke.
+    #
+    # Waited on rather than read once. Library.tsx greys this button on exactly three things -
+    # `!ipc.live || busy || !canBeginImport(importState)` - and two of them are transient: `busy`
+    # is the store's own flag, raised by whatever ran last and lowered in a finally, and the
+    # import machine is only 'busy' while an import is actually in flight. The third is not
+    # transient at all, and the button's own tooltip is what tells them apart: it reads
+    # "Needs the desktop application" precisely when `ipc.live` is false.
+    $import = WaitEnabled 'Button' '^(Importar|Import)' 25
     $importReady = ($null -ne $import -and $import.Current.IsEnabled)
-    Report $importReady 'j3 Import button is on screen and enabled' "'$($import.Current.Name)' enabled=$($import.Current.IsEnabled)"
-    if (-not $importReady) { throw 'SKIP: the Import button is not on screen or the application has it greyed out, so import-from cannot be driven' }
+    Report $importReady 'j3 Import button is on screen and enabled' "'$($import.Current.Name)' enabled=$($import.Current.IsEnabled) tooltip='$(HelpTextOf $import)'"
+    if (-not $importReady) {
+        if (-not $import) {
+            throw ('SKIP: no Import button is on screen in the Library at all; the automation ids there are: ' + (AutomationIdDump 30))
+        }
+        $why = HelpTextOf $import
+        $live = -not ($why -match '(Needs the desktop application|Necesita la aplicaci)')
+        throw ("SKIP: the Import button stayed greyed out for 25s. Library.tsx disables it on !ipc.live || busy || importState.phase == 'busy'. Its tooltip reads '$why', so ipc.live=$live; with ipc.live true the remaining condition is the store's busy flag or an import already in flight - something earlier in this run has not settled. Windows on screen: " + (ProcWindowsDump) + '; the interface is saying: ' + (AppNotices 6))
+    }
 
     # Negative: cancel. `dismissed` must leave the machine idle - no dialog, nothing taken in.
     Click $import
@@ -822,17 +1121,34 @@ try {
     [void](GoTo '^(Constructor|Builder)$' 'Builder')
     $new = Wait 'Button' '^(Nuevo|New)$' 10
     if ($new) { Click $new; Start-Sleep -Milliseconds 900 }
+    # New does not start a new project while there is unsaved work: it puts the discard question
+    # on screen instead (store.ts:677) and waits. That question is an in-page alertdialog, not a
+    # window, so nothing in the dialog handling above sees it - and the step journey 2 left on the
+    # canvas is exactly what makes it appear here. Answered, so this journey starts on its own
+    # canvas rather than on top of journey 2's.
+    DismissDiscardPrompt
     $palette = Wait 'Button' '(Save File|encastra\.file\.save)' 15
     if (-not $palette) { throw 'the Save File palette item never appeared' }
     Click $palette
     Start-Sleep -Milliseconds 900
 
-    $folderField = ByIdSuffix '-folder' 10
-    Report ($null -ne $folderField) 'j4 the Inspector shows the folder setting for the selected step' "automationId='$($folderField.Current.AutomationId)'"
+    # The Inspector shows a step's settings only for the step that is selected (Inspector.tsx:506
+    # returns the empty panel when `selectedNodeId` names nothing). Placing from the palette is
+    # enough to select: `addNode` sets `selectedNodeId` to the step it just made (store.ts:355,
+    # "a newly placed node is the one you want to configure"). That matters, because selecting by
+    # clicking the step on the canvas is not available from here - React Flow draws each step as a
+    # plain div with, deliberately, no ARIA role and so no Invoke pattern (ComponentNode.tsx).
+    # If the field below is missing, the two dumps say whether a step was placed at all and what
+    # the interface is publishing instead, rather than leaving that to be guessed at.
+    $folderField = ByIdSuffix '-folder' 12
+    if (-not $folderField) {
+        Report $false 'j4 the Inspector shows the folder setting for the selected step' ("no element publishes an id ending in '-folder'. Steps UI Automation can see: " + (PlacedStepsDump) + ' ... ids on screen: ' + (AutomationIdDump 40))
+        throw 'SKIP: the folder setting of the selected step is not exposed to UI Automation - either the step was not placed, or placing it did not select it - so neither chooser below it can be reached'
+    }
+    Report $true 'j4 the Inspector shows the folder setting for the selected step' "automationId='$($folderField.Current.AutomationId)'"
     # Everything below is addressed relative to this field - the Choose button is found by the row
     # it sits in. Without it there is nothing to drive, and carrying on only produced
     # `You cannot call a method on a null-valued expression` three checks later.
-    if (-not $folderField) { throw 'SKIP: the folder setting of the selected step is not exposed to UI Automation, so neither chooser below it can be reached' }
     $nodeId = $folderField.Current.AutomationId -replace '-folder$', ''
     Note "the step is '$nodeId'"
 
@@ -861,7 +1177,7 @@ try {
     ReportChooserClosed 'j4'
     Start-Sleep -Milliseconds 800
     $folderValue = ValueOf (ByIdSuffix '-folder' 5)
-    Report ($folderValue -eq $grantFolder) 'j4 the chosen folder became the step configuration' "'$folderValue' (expected '$grantFolder')"
+    Report (SamePath $folderValue $grantFolder) 'j4 the chosen folder became the step configuration' "'$folderValue' (expected the same folder as '$grantFolder')"
     $allow = Wait 'Button' '^(Permitir esta carpeta|Allow this folder)$' 8
     Report ($null -ne $allow -and $allow.Current.IsEnabled) 'j4 the permission control armed once a folder was chosen' "enabled=$($allow.Current.IsEnabled)"
     Click $allow
@@ -894,7 +1210,7 @@ try {
     ReportChooserClosed 'j5'
     Start-Sleep -Milliseconds 800
     $inputValue = ValueOf $readonlyBox
-    Report ($inputValue -eq $inputFile) 'j5 the chosen file became the input for the run' "'$inputValue' (expected '$inputFile')"
+    Report (SamePath $inputValue $inputFile) 'j5 the chosen file became the input for the run' "'$inputValue' (expected the same file as '$inputFile')"
 
     # The proof that both answers were real: a run that writes into the granted folder.
     $run = Wait 'Button' '^(Ejecutar|Run)$' 10
