@@ -75,6 +75,26 @@ jobs:
             Say "windows sdks   : $((Get-ChildItem $sdkRoot -Directory | Select-Object -ExpandProperty Name) -join ', ')"
           }
 
+          # The import libraries, not just the SDK's version folder.
+          #
+          # After the toolset was pinned and build paths remapped, two builds of one commit came
+          # down to seventy bytes, and all but two of those were /Brepro hashing an image that
+          # differed. The two were import hints for advapi32 symbols — the index the linker copies
+          # out of the import library. A hint is only an optimisation and the loader falls back to
+          # the name, but it is a byte, and two machines with the same SDK *version* can still hold
+          # differently serviced files inside it. This is how to tell.
+          $sdkLib = "${env:ProgramFiles(x86)}\Windows Kits\10\lib"
+          if (Test-Path $sdkLib) {
+            foreach ($lib in Get-ChildItem $sdkLib -Recurse -Filter 'AdvAPI32.Lib' -ErrorAction SilentlyContinue) {
+              if ($lib.FullName -match '\\x64\\') {
+                Say ""
+                Say "AdvAPI32.Lib   : $($lib.FullName)"
+                Say "  size         : $($lib.Length)"
+                Say "  sha256       : $((Get-FileHash $lib.FullName -Algorithm SHA256).Hash.ToLower())"
+              }
+            }
+          }
+
           Say ""
           Say "node           : $(node --version)"
           Say "npm            : $(npm --version)"
