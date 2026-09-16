@@ -174,6 +174,9 @@ public static class W32 {
   // Unicode scan codes rather than virtual keys: what is typed is a path, and a virtual key means
   // a different character under every keyboard layout. This way the same characters arrive on a
   // runner set to any layout at all.
+  // Why SendInput inserted nothing has to be readable afterwards, and the last error is only the
+  // last error for an instant - so it is captured here rather than asked for later.
+  public static int LastTypeError = 0;
   public static int TypeText(string s) {
     var list = new System.Collections.Generic.List<INPUT>();
     foreach (char c in s) {
@@ -182,7 +185,9 @@ public static class W32 {
       list.Add(down); list.Add(up);
     }
     if (list.Count == 0) { return 0; }
-    return (int)SendInput((uint)list.Count, list.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+    uint inserted = SendInput((uint)list.Count, list.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+    LastTypeError = Marshal.GetLastWin32Error();
+    return (int)inserted;
   }
   // One key under a modifier: Alt+N for the file-name accelerator, Ctrl+A to select whatever is
   // already in the box before replacing it.
@@ -1792,42 +1797,79 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
         } catch { $facts = '(the focused element could not be read)' }
     }
     $script:typeNotes += "$what : focus put on the name box by $focusedBy; what has keyboard focus now is $facts"
-    # 3. Through the control where it offers a way in, by keystroke where it does not.
-    $wroteByValue = $false
-    if ($focused -and (HasValuePattern $focused) -and -not (IsReadOnly $focused)) {
-        try {
-            $focused.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($path)
-            $wroteByValue = $true
-            $how = "the focused element's Value pattern, after $focusedBy"
-        } catch { $wroteByValue = $false }
+
+    # 3. The window Alt+N just moved focus to. On run 35069677686 that was, on both dialogs, a
+    # plain Win32 Edit with a dialog control id - `Pane '' class=Edit ctrlId=1001` on Save As and
+    # `class=Edit ctrlId=1148` on Open - which is the same shape of control as the folder picker's
+    # GetDlgItem(1152), the one route in this file that has worked from the first run. The
+    # accelerator was never the problem: it found the real box. What failed was what came next.
+    $edit = $NULLPTR
+    $editHow = ''
+    if ($focused) {
+        $h = $NULLPTR
+        try { $h = [IntPtr]$focused.Current.NativeWindowHandle } catch { $h = $NULLPTR }
+        if ($h -ne $NULLPTR -and (HwndClass $h) -eq 'Edit') {
+            $edit = $h
+            $editHow = "the Edit the accelerator moved focus to (#$h ctrlId=$([W32]::GetDlgCtrlID($h)))"
+        }
     }
-    if (-not $wroteByValue) {
+    # The classic ids, in case focus did not land: 1148 is edt1, the Common Dialog's file-name
+    # edit, and 1001 is the edit inside its combo box. GetDlgItem only reaches direct children and
+    # this edit is nested, so the descendant walk by class is what usually answers - both are asked.
+    if ($edit -eq $NULLPTR) {
+        foreach ($id in @(1148, 1001, 1152, 1090)) {
+            $h = [W32]::GetDlgItem($dh, $id)
+            if ($h -ne $NULLPTR -and (HwndClass $h) -eq 'Edit') { $edit = $h; $editHow = "GetDlgItem($id)"; break }
+        }
+    }
+    if ($edit -eq $NULLPTR) {
+        foreach ($h in @(ChildrenByClass $dh 'Edit' 5)) {
+            $id = [W32]::GetDlgCtrlID($h)
+            if ($id -ne 1148 -and $id -ne 1001) { continue }
+            if (LooksLikeSearch (HwndUiaName $h)) { continue }
+            $edit = $h; $editHow = "the descendant Edit window with ctrlId=$id"; break
+        }
+    }
+
+    # 4. Write, and read back twice from two different places.
+    #
+    # WM_SETTEXT to that handle, because that is the route the folder picker proves works on this
+    # machine, and because SendInput does not: it returned 0 for every character on the runner,
+    # which is what `0 keystrokes typed as Unicode` in that log meant. Injected input needs an
+    # attached interactive input desktop and the runner's session has none - window messages need
+    # no such thing. The typing stays as a last resort and now says what SendInput answered.
+    if ($edit -ne $NULLPTR) {
+        [void][W32]::SendMessageW($edit, $WM_SETTEXT, $NULLPTR, $path)
+        $how = "WM_SETTEXT to $editHow"
+        Start-Sleep -Milliseconds 250
+    } else {
         [void][W32]::KeyUnder($VK_CONTROL, $VK_A)
         Start-Sleep -Milliseconds 120
         $sent = [W32]::TypeText($path)
-        $how = "$sent keystrokes typed as Unicode into whatever had focus, after $focusedBy"
+        $how = "no Edit window was found under this dialog, so the path was typed: SendInput inserted $sent of $(2 * $path.Length) events, last error $([W32]::LastTypeError)$(if ($sent -eq 0) { ' (0 means the injection was refused - this session has no attached input desktop)' })"
+        Start-Sleep -Milliseconds 350
     }
-    Start-Sleep -Milliseconds 350
-    # 4. Read back from the focused element - somewhere the write did not choose.
+
+    # Two readings, from two places, and neither is the thing the write chose to talk to. The
+    # window's own text says what the control holds; the focused element's Value pattern says what
+    # the accessibility layer believes. Where both answer they must agree, which is what would have
+    # caught the label this harness spent a run writing into.
+    $byMessage = ''
+    if ($edit -ne $NULLPTR) { $byMessage = (HwndText $edit).Trim().Trim('"') }
+    $byValue = ''
     $again = FocusedElement
-    $read = ValueOfElement $again
-    if (-not $read) { $read = ValueOfElement $focused }
-    # And if the focused element says nothing useful, anything under the dialog now holding the
-    # whole path counts - still not the control the write picked out.
-    if (([string]$read).Trim().Trim('"') -ne $path) {
-        foreach ($c in (Descendants $dlg)) {
-            $v = ''
-            try { $v = $c.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value } catch { continue }
-            if ($v -and $v.Trim().Trim('"') -eq $path -and -not (LooksLikeSearch $c.Current.Name)) {
-                $read = $v
-                $how = "$how; read back from the dialog's $($c.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '') '$($c.Current.Name)'"
-                break
-            }
-        }
-    } else {
-        $how = "$how; read back from the element that has keyboard focus"
+    foreach ($candidate in @($again, $focused)) {
+        if (-not $candidate) { continue }
+        if (-not (HasValuePattern $candidate)) { continue }
+        $byValue = ([string](ValueOfElement $candidate)).Trim().Trim('"')
+        if ($byValue) { break }
     }
-    return @{ Read = $read; How = $how }
+    $read = if ($byMessage) { $byMessage } else { $byValue }
+    if ($byMessage -and $byValue -and $byMessage -ne $byValue) {
+        $script:typeNotes += "$what : the window text and the accessibility layer disagree about the name box - WM_GETTEXT says '$byMessage', the Value pattern says '$byValue'; the run goes by the window text and this line is the record that they differed"
+    }
+    $how = "$how; read back as '$byMessage' by WM_GETTEXT from the same window and as '$byValue' by the focused element's Value pattern"
+    return @{ Read = $read; How = $how; Edit = $edit }
 }
 
 $CONFIRM = '^(Seleccionar carpeta|Seleccionar|Select Folder|Elegir carpeta|Elegir|Choose|Aceptar|OK|Guardar|Save|Abrir|Open)$'
@@ -1992,6 +2034,7 @@ function ConfirmChooser($dlg, $path, $what, $kind) {
         foreach ($n in $script:typeNotes) { Note $n }
         $landed = ([string]$typed.Read).Trim().Trim('"')
         $route = $typed.How
+        $nameEdit = $typed.Edit
     } else {
         WriteNameField $field $path
         $landed = (ReadNameField $field).Trim().Trim('"')
@@ -2021,11 +2064,30 @@ function ConfirmChooser($dlg, $path, $what, $kind) {
     $script:chooserConfirmed = $true
     [void][W32]::SendMessage($ok, $BM_CLICK, $NULLPTR, $NULLPTR)
     [void](WaitNoDialog 10)
+    # And if the default button did not take it, Enter in the box the name was just written into -
+    # which is what a person does, and is still a message to one specific window handle.
+    if ((DialogCount) -gt 0 -and $nameEdit -and $nameEdit -ne $NULLPTR) {
+        Note "$what : the confirm button was pressed and the chooser is still on screen; sending Enter to the name box (#$nameEdit) instead"
+        [void][W32]::PostMessageW($nameEdit, $WM_KEYDOWN, [IntPtr]$VK_RETURN, [IntPtr]1)
+        Start-Sleep -Milliseconds 60
+        [void][W32]::PostMessageW($nameEdit, $WM_KEYUP, [IntPtr]$VK_RETURN, [IntPtr]1)
+        [void](WaitNoDialog 10)
+    }
     $script:chooserClosed = ((DialogCount) -eq 0)
 }
 # The line that has to be a count, never a hope. It also clears whatever is left, so that a
 # chooser that would not close stops here instead of becoming the next journey's subject.
 function ReportChooserClosed($what) {
+    # A confirm that was never pressed is not a confirm that failed. When the read-back gate
+    # refused - the name never landed in the dialog's own box - that is already one FAIL with the
+    # reason in it, and `FAIL ... chooser closed on confirm -> dialogs left: 0` underneath it was a
+    # second failure counted for the same thing, saying "0" about a dialog this file had just
+    # force-closed itself. The step is marked not attempted instead, and the count stays honest.
+    if (-not $script:chooserConfirmed) {
+        Note "$what chooser confirm was not attempted: the name never landed in the dialog's name box, which is the FAIL above this line"
+        if ((DialogCount) -gt 0) { ForceCloseDialogs }
+        return
+    }
     $left = DialogCount
     Report ($script:chooserClosed -and $left -eq 0) "$what chooser closed on confirm" "dialogs left: $left$(if ($left -gt 0) { ' - ' + (DialogTexts) })"
     if ($left -gt 0) { ForceCloseDialogs }
