@@ -341,8 +341,157 @@ function LaunchSubject($exe, $port) {
     Report $true '-Launch the harness started the application it drives' "$exe as pid $($started.Id), with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=$args_ written onto its own environment block (UseShellExecute=false, so this is not inheritance through a shell)"
 }
 
+# --- asking WebView2 for the port the other way ------------------------------------------------
+#
+# Run 35062783047 ruled out everything else: -Launch had cleared the machine (hosts=0, browsers=0),
+# started the application itself with the variable on the child's own environment block, the
+# browser process was parented to that very host - and its command line still carried no
+# --remote-debugging-port. The documentation says why, and it is not a bug:
+#
+#   "Elevated apps ignore flags that are set via the local device environment"
+#     - WebView2 browser flags, "Setting browser flags in your local device environment"
+#
+#   "To help protect elevated processes from configuration that can be modified by standard users,
+#    WebView2 ignores certain user-scoped override mechanisms when the host process is running
+#    elevated. When the host process is running elevated:
+#      - WEBVIEW2_* environment variable overrides (flags) are ignored, including
+#        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS.
+#      - HKEY_CURRENT_USER (HKCU) policy overrides are ignored.
+#      - AdditionalBrowserArguments registry overrides that are under HKCU are ignored.
+#      - HKEY_LOCAL_MACHINE (HKLM) policy overrides are honored.
+#    Non-elevated WebView2 apps honor all of the supported override mechanisms."
+#     - Develop secure WebView2 apps, "For an elevated host app, use appropriate override flags"
+#
+# A hosted runner runs as an administrator with UAC off, so every host started there is a High
+# Integrity Level process, and the environment variable was never going to reach the browser. The
+# registry route is the same override by another road:
+#
+#   [{Root}]\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments
+#   "{AppId}"=""
+#
+#   "First verify with Root as HKLM and then HKCU. AppId is first set to the Application User Model
+#    ID of the process, then if no corresponding registry key, the AppId is set to the compiled code
+#    name of the process, or if that is not a registry key then *."
+#     - CreateCoreWebView2EnvironmentWithOptions
+#
+# So: HKCU when this process is not elevated (which is the case it is honoured in), and HKLM when it
+# is - which is also exactly when this process has the rights to write there. The value is named for
+# this application and never `*`: a wildcard would put a debugging port into every WebView2 app on
+# the machine, Teams and the shell's own search included.
+#
+# And it is taken back. A debugging-port policy left behind on any machine is a hole somebody else
+# walks into, so every exit path from here on goes through EndRun, which removes what was written -
+# restoring any value that was already there rather than deleting somebody else's configuration.
+$POLICY_KEY = 'Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+# The two spellings of "the compiled code name of the process", because the documentation does not
+# say which one it means and both are specific to this application.
+$POLICY_VALUE_NAMES = @('encastra-desktop.exe', 'encastra-desktop')
+$script:policyWrote = @()
+$script:policyKeysCreated = @()
+$script:policyCleanupFailed = $false
+
+function IsElevated {
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        return (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch { return $false }
+}
+function WriteBrowserArgsPolicy($port) {
+    $wanted = "--remote-debugging-port=$port"
+    $elevated = IsElevated
+    # HKCU is ignored by an elevated host, and HKLM is the one that is honoured - and needs the
+    # rights that being elevated is. So the two cases do not overlap, and each writes where its own
+    # host will actually read.
+    $roots = if ($elevated) { @('HKLM:', 'HKCU:') } else { @('HKCU:') }
+    Note "-Launch : this process is $(if ($elevated) { 'ELEVATED, so WebView2 ignores the environment variable and any HKCU policy; the override has to be under HKLM' } else { 'not elevated, so the environment variable and an HKCU policy are both honoured' })"
+    foreach ($root in $roots) {
+        $path = Join-Path $root $POLICY_KEY
+        try {
+            if (-not (Test-Path $path)) {
+                # Every ancestor that does not exist yet, remembered deepest-first, because
+                # New-Item -Force creates the whole chain and "leave the machine as it was found"
+                # has to mean the chain too - not just the leaf with our value in it.
+                $missing = @()
+                $walk = $path
+                while ($walk -and -not (Test-Path $walk)) {
+                    $missing = @($walk) + $missing
+                    $parent = Split-Path $walk -Parent
+                    if (-not $parent -or $parent -eq $walk) { break }
+                    $walk = $parent
+                }
+                New-Item -Path $path -Force | Out-Null
+                [array]::Reverse($missing)
+                $script:policyKeysCreated += $missing
+            }
+            foreach ($name in $POLICY_VALUE_NAMES) {
+                $had = $false; $old = $null
+                try {
+                    $existing = Get-ItemProperty -Path $path -Name $name -ErrorAction Stop
+                    $had = $true; $old = $existing.$name
+                } catch { $had = $false }
+                if ($had) { Note "-Launch : $path\$name already held '$old'; it will be put back at the end of the run" }
+                New-ItemProperty -Path $path -Name $name -Value $wanted -PropertyType String -Force | Out-Null
+                $script:policyWrote += @{ Path = $path; Name = $name; Had = $had; Old = $old }
+                Note "-Launch : wrote $path\$name = '$wanted'"
+            }
+        } catch {
+            Note "-Launch : could not write the policy under $root ($($_.Exception.GetType().Name) - $($_.Exception.Message))"
+        }
+    }
+}
+# Called on every way out of this script. Idempotent, and it never throws: a run that failed must
+# still leave the machine as it found it.
+function RemoveBrowserArgsPolicy {
+    if (@($script:policyWrote).Count -eq 0 -and @($script:policyKeysCreated).Count -eq 0) { return }
+    foreach ($v in $script:policyWrote) {
+        try {
+            if ($v.Had) {
+                New-ItemProperty -Path $v.Path -Name $v.Name -Value $v.Old -PropertyType String -Force | Out-Null
+                Note "-Launch : put $($v.Path)\$($v.Name) back to the value it held before this run"
+            } else {
+                Remove-ItemProperty -Path $v.Path -Name $v.Name -ErrorAction Stop
+                Note "-Launch : removed $($v.Path)\$($v.Name), so no debugging-port policy is left on this machine"
+            }
+        } catch {
+            $script:policyCleanupFailed = $true
+            Note "-Launch : COULD NOT clean up $($v.Path)\$($v.Name) ($($_.Exception.GetType().Name)) - remove it by hand"
+        }
+    }
+    $script:policyWrote = @()
+    # And the key itself, but only one this run created and only while it is empty: an empty policy
+    # key is litter rather than a hole, and somebody else's key is not ours to remove.
+    foreach ($key in $script:policyKeysCreated) {
+        try {
+            $item = Get-Item -Path $key -ErrorAction Stop
+            if ($item.ValueCount -eq 0 -and $item.SubKeyCount -eq 0) {
+                Remove-Item -Path $key -ErrorAction Stop
+                Note "-Launch : removed the empty policy key $key that this run created"
+            } else {
+                Note "-Launch : left $key in place - it holds $($item.ValueCount) value(s) and $($item.SubKeyCount) subkey(s) that are not this run's"
+            }
+        } catch { }
+    }
+    $script:policyKeysCreated = @()
+}
+# The only way this script ends. Everything below that used to say `exit N` says this instead, so
+# that a debugging-port policy cannot outlive the run that wrote it.
+function EndRun($code) {
+    RemoveBrowserArgsPolicy
+    # A policy this run could not take back is a debugging port left armed on somebody's machine,
+    # which is a worse outcome than any journey failing. It is said in the words release_check.py
+    # reads - `^FAIL` anywhere in the log fails the evidence - and the run cannot exit 0 on it.
+    if ($script:policyCleanupFailed) {
+        Report $false 'the debugging-port policy this run wrote was taken back' 'it could NOT be removed - see the notes above; remove it by hand, the machine is left with a WebView2 AdditionalBrowserArguments policy naming a debugging port'
+        if ($code -eq 0) { $code = 1 }
+    }
+    exit $code
+}
+# And for a terminating error nobody caught, which would otherwise walk straight past EndRun.
+trap { RemoveBrowserArgsPolicy; break }
+
 if ($Launch) {
     StopSubject
+    WriteBrowserArgsPolicy $CdpPort
     LaunchSubject $Exe $CdpPort
 }
 
@@ -350,7 +499,7 @@ $proc = if ($script:launchedPid -gt 0) { Get-Process -Id $script:launchedPid -Er
 if (-not $proc) {
     "FAIL  Encastra is running  -> no encastra-desktop process; start the application first, or pass -Launch and let the harness start it"
     "SUMMARY  passed=0 failed=1 skipped=0  repeat=$Repeat"
-    exit 1
+    EndRun 1
 }
 "app pid $($proc.Id) exited=$($proc.HasExited) exe=$($proc.Path)"
 
@@ -1692,7 +1841,7 @@ if (-not $cdpOk) {
 Report $cdpOk 'CDP reachable' $(if ($cdpOk) { "node $($script:nodeExe) is talking to the page titled '$cdpTitle' on 127.0.0.1:$($script:cdpPort), after $($script:cdpWaitedMs) ms of waiting" } else { "nothing answered on 127.0.0.1:$($script:cdpPort) in $($script:cdpWaitedMs) ms of polling; last: $script:cdpError. The application has to be started with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=$($script:cdpPort) - the webview2 notes above this line say whether that flag reached the browser process - and node has to be on PATH (found: $(if ($script:nodeExe) { $script:nodeExe } else { 'nothing' }))" })
 if (-not $cdpOk) {
     "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  (the page could not be reached, so the canvas cannot be observed)"
-    exit 1
+    EndRun 1
 }
 
 # --- the CDP half of this file, on its own -----------------------------------------------------
@@ -1752,9 +1901,9 @@ function RunSelfTest {
 if ($SelfTest) {
     RunSelfTest
     "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=1  (self test: CDP only, no UI Automation)"
-    if ($script:failed -gt 0) { exit 1 }
-    if ($script:skipped -gt 0) { exit 2 }
-    exit 0
+    if ($script:failed -gt 0) { EndRun 1 }
+    if ($script:skipped -gt 0) { EndRun 2 }
+    EndRun 0
 }
 
 # --- somewhere to work ------------------------------------------------------------------------
@@ -1834,7 +1983,7 @@ function HarnessStart {
     Report ($null -ne $sidebarSettings) 'sidebar exposed to UI Automation' "settings item: '$($sidebarSettings.Current.Name)'"
     if (-not $sidebarSettings) {
         "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  (harness could not reach the interface)"
-        exit 1
+        EndRun 1
     }
 }
 
@@ -2418,6 +2567,6 @@ $proc.Refresh()
 Report (-not $proc.HasExited) 'application still running at the end' "exited=$($proc.HasExited) responding=$($proc.Responding)"
 
 "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  sandbox=$script:sandbox"
-if ($script:failed -gt 0) { exit 1 }
-if ($script:skipped -gt 0) { exit 2 }
-exit 0
+if ($script:failed -gt 0) { EndRun 1 }
+if ($script:skipped -gt 0) { EndRun 2 }
+EndRun 0

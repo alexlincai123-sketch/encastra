@@ -36,6 +36,45 @@ $ErrorActionPreference = 'Continue'
 
 "webview2: port asked about = $Port"
 
+# Elevation, because it decides which overrides WebView2 will even look at. "Develop secure
+# WebView2 apps", under "For an elevated host app, use appropriate override flags": when the host
+# process runs elevated, "WEBVIEW2_* environment variable overrides (flags) are ignored, including
+# WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "HKEY_CURRENT_USER (HKCU) policy overrides are ignored",
+# "AdditionalBrowserArguments registry overrides that are under HKCU are ignored", and
+# "HKEY_LOCAL_MACHINE (HKLM) policy overrides are honored". A hosted runner is an administrator
+# with UAC off, which is exactly what this line is here to put on the record.
+try {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $elevated = (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    "webview2: this process runs as $($identity.Name), elevated=$elevated$(if ($elevated) { ' - so WebView2 IGNORES the environment variable and any HKCU policy here, and only HKLM is honoured' })"
+} catch {
+    "webview2: the current token could not be read ($($_.Exception.GetType().Name))"
+}
+"webview2: WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS in this process = '$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'"
+
+# Whatever WebView2 policy is already on this machine. An image carrying its own
+# AdditionalBrowserArguments - or any other WebView2 policy - would override what the harness asks
+# for, and that would be the finding rather than the harness being wrong.
+foreach ($root in @('HKLM:', 'HKCU:')) {
+    $base = Join-Path $root 'Software\Policies\Microsoft\Edge\WebView2'
+    if (-not (Test-Path $base)) { "webview2: no WebView2 policy key under $base"; continue }
+    try {
+        $keys = @($base) + @(Get-ChildItem -Path $base -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.PSPath })
+        foreach ($key in $keys) {
+            $item = Get-Item -Path $key -ErrorAction SilentlyContinue
+            if (-not $item) { continue }
+            $shown = ($item.PSPath -replace '^Microsoft\.PowerShell\.Core\\Registry::', '')
+            if ($item.ValueCount -eq 0) { "webview2: policy key $shown holds no values"; continue }
+            foreach ($name in $item.GetValueNames()) {
+                $label = if ($name) { $name } else { '(default)' }
+                "webview2: POLICY $shown\$label = '$($item.GetValue($name))'"
+            }
+        }
+    } catch {
+        "webview2: the policy key under $root could not be read ($($_.Exception.GetType().Name))"
+    }
+}
+
 # Anything listening, and whose it is.
 try {
     $listening = @(netstat -ano | Select-String -SimpleMatch ":$Port" | ForEach-Object { $_.Line.Trim() })
