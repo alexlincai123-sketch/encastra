@@ -34,12 +34,45 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 ARTEFACTS = ("target/release/encastra-desktop.exe", "target/release/bundle/nsis")
 
 
+def release_env(tree: pathlib.Path) -> dict[str, str]:
+    """The environment a release is built in, which is part of the recipe.
+
+    A plain `npm run tauri:build` does not produce the published bytes any more. rustc writes the
+    Cargo registry's path into the binary, and that path runs through the user's home directory,
+    so two machines disagree by however much their account names differ — three megabytes of it,
+    before this was remapped. `release.yml` sets RUSTFLAGS through
+    `scripts/verify/toolchain.py --rustflags`; anything that builds a release has to set the same
+    thing or it is measuring a different recipe.
+
+    The flags name *this* tree, so they are composed per worktree rather than inherited: each maps
+    its own paths to the same names, which is the point — what has to match is the output.
+    """
+    environment = dict(os.environ)
+    composed = subprocess.run(
+        [sys.executable, str(tree / "scripts" / "verify" / "toolchain.py"), "--rustflags"],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+    )
+    if composed.returncode == 0 and composed.stdout.strip():
+        environment["RUSTFLAGS"] = composed.stdout.strip()
+    return environment
+
+
 def sh(command: list[str], cwd: pathlib.Path, log: pathlib.Path) -> int:
     with log.open("ab") as handle:
+        env = release_env(cwd)
         handle.write(f"\n$ {' '.join(command)}\n".encode())
+        if "RUSTFLAGS" in env:
+            handle.write(f"  RUSTFLAGS={env['RUSTFLAGS']}\n".encode())
         handle.flush()
         return subprocess.run(
-            command, cwd=cwd, stdout=handle, stderr=subprocess.STDOUT, shell=platform.system() == "Windows"
+            command,
+            cwd=cwd,
+            stdout=handle,
+            stderr=subprocess.STDOUT,
+            env=env,
+            shell=platform.system() == "Windows",
         ).returncode
 
 

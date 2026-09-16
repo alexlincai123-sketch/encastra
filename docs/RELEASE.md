@@ -58,7 +58,22 @@ python -m unittest discover -s scripts/tests
 
 # 2. The build, from the commit that will be the BUILD COMMIT. Compiles the frontend, then the
 #    Rust binary in release, then packages it.
+#
+#    RUSTFLAGS is part of the recipe, not a convenience. Without it rustc writes this machine's
+#    Cargo registry path into the binary — it runs through the user's home directory — and no
+#    other machine can produce the same bytes. `toolchain.py --rustflags` composes it for this
+#    machine and carries `-D warnings` along, because setting RUSTFLAGS replaces whatever was
+#    there. release.yml sets the identical thing, and so does scripts/verify/reproduce.py.
+export RUSTFLAGS="$(python scripts/verify/toolchain.py --rustflags)"   # PowerShell: $env:RUSTFLAGS = ...
 npm run tauri:build
+
+#    Then: does the binary name the machine that built it? One command, and it is the whole
+#    difference between "reproducible" and "reproducible here".
+python scripts/verify/toolchain.py --check-binary target/release/encastra-desktop.exe
+
+#    And: is the installer a function of its inputs? This packages the build a second time with
+#    the dates of everything NSIS packages moved, and requires the same bytes out.
+python scripts/verify/installer_determinism.py
 
 # 3. Record what came out: hashes, signature state, and the build commit read out of the binary.
 #    Writes the block above and the RELEASE constant in apps/web/src/config/site.ts.
