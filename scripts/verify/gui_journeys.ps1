@@ -229,7 +229,7 @@ $T = [System.Windows.Automation.TreeScope]
 $TRUE_COND = [System.Windows.Automation.Condition]::TrueCondition
 $BM_CLICK = 0x00F5; $WM_SETTEXT = 0x000C; $WM_GETTEXT = 0x000D
 $WM_CLOSE = 0x0010; $WM_COMMAND = 0x0111; $IDOK = 1; $IDCANCEL = 2
-$WM_KEYDOWN = 0x0100; $WM_KEYUP = 0x0101
+$WM_KEYDOWN = 0x0100; $WM_KEYUP = 0x0101; $WM_CHAR = 0x0102; $EM_SETSEL = 0x00B1
 $VK_RETURN = 0x0D; $VK_SPACE = 0x20
 $NULLPTR = [IntPtr]::Zero
 
@@ -921,6 +921,10 @@ function ScrollInspectorTo($js, $what) {
 # press it. If it is still off screen after that, it FAILS with what the page said, and never SKIPs.
 function ClickInspector($el, $js, $what) {
     if (-not $el) { throw "SKIP: $what is not on screen at all" }
+    # Which element is about to be pressed, every time. `PASS Run is available -> enabled=True`
+    # followed by a run that never happened leaves exactly one question open - what did it press -
+    # and a log that does not answer it costs another twenty-five minute run to ask again.
+    Note "$what : invoking $(ElementFacts $el)"
     if (-not $el.Current.IsOffscreen) { Click $el; return }
     ScrollInspectorTo $js $what
     for ($i = 0; $i -lt 20; $i++) {
@@ -1833,15 +1837,37 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
 
     # 4. Write, and read back twice from two different places.
     #
-    # WM_SETTEXT to that handle, because that is the route the folder picker proves works on this
-    # machine, and because SendInput does not: it returned 0 for every character on the runner,
-    # which is what `0 keystrokes typed as Unicode` in that log meant. Injected input needs an
-    # attached interactive input desktop and the runner's session has none - window messages need
-    # no such thing. The typing stays as a last resort and now says what SendInput answered.
+    # Typed character by character, through the edit's own window procedure.
+    #
+    # WM_SETTEXT put the string into both boxes and read back perfectly from both, and only one of
+    # the two dialogs then used it. Open's 1148 is a plain edit whose text the dialog reads when OK
+    # is pressed, so it worked - j5 passed three times out of three. Save As's 1001 is the edit
+    # INSIDE the `File name:` combo box, and the Common Item Dialog does not read that window's
+    # text: it keeps its own model, updated from the notifications the edit sends as it is typed
+    # into. WM_SETTEXT sends none of them - it sets the text and raises no CBN_EDITCHANGE - so the
+    # dialog's model kept the default it had been given (`.encastra`, from `pickProjectToSave`'s
+    # defaultPath) and returned that on Save, which the runtime refused, correctly, as a name Rust
+    # reads as having no extension at all.
+    #
+    # WM_CHAR is what a person's typing arrives as, so the notifications fire and the model
+    # follows. It is used for BOTH dialogs rather than only for the combo: it is the more faithful
+    # route on a plain edit too, and WM_SETTEXT stays behind it as a fallback, so the route that
+    # already works on Open is still reachable if the characters ever fail to take. Both are gated
+    # by the same read-back. Every message here goes to one specific window handle, and none of it
+    # needs an input desktop - which is the thing the runner does not have, and why SendInput
+    # inserted nothing.
     if ($edit -ne $NULLPTR) {
-        [void][W32]::SendMessageW($edit, $WM_SETTEXT, $NULLPTR, $path)
-        $how = "WM_SETTEXT to $editHow"
+        [void][W32]::SendMessage($edit, $EM_SETSEL, [IntPtr]0, [IntPtr](-1))
+        foreach ($ch in $path.ToCharArray()) {
+            [void][W32]::SendMessage($edit, $WM_CHAR, [IntPtr][int][char]$ch, [IntPtr]1)
+        }
+        $how = "WM_CHAR per character into $editHow"
         Start-Sleep -Milliseconds 250
+        if ((HwndText $edit).Trim().Trim('"') -ne $path) {
+            [void][W32]::SendMessageW($edit, $WM_SETTEXT, $NULLPTR, $path)
+            $how = "WM_CHAR into $editHow left it holding something else, so WM_SETTEXT was used instead"
+            Start-Sleep -Milliseconds 250
+        }
     } else {
         [void][W32]::KeyUnder($VK_CONTROL, $VK_A)
         Start-Sleep -Milliseconds 120
@@ -2478,15 +2504,24 @@ function Journey2 {
         # writing into a label rather than the dialog's file-name buffer, so the Save As returned
         # its own default (`.encastra`, which Rust reads as a name with no extension at all) and
         # the application said so. What was an accident is now asked for on purpose.
+        #
+        # And it is reported only after the positive save below, because on its own it is not
+        # evidence of anything. Run 35072026878 passed this line for the wrong reason: the harness
+        # had not reached the dialog's model at all, the dialog returned its own default, and the
+        # default is refused too - so the check was green while the name it was supposedly testing
+        # never left this process. A refusal only means the name was refused if the SAME write
+        # route, in the same iteration, can be shown to put a name the runtime accepts through to
+        # a file on disk. The verdict therefore waits for $projectSaved and says so.
         $notAProject = Join-Path $script:sandbox 'journeys.txt'
         ConfirmChooser $dlg $notAProject 'j2-refusal' 'file'
-        if (-not $script:chooserConfirmed) {
-            Skip 'j2 a name that is not a project is refused, in words' 'the chooser could not be driven, so the name was never offered to it'
+        $refusalDriven = $script:chooserConfirmed
+        $refusal = $null
+        $refusalWroteAnyway = $false
+        if (-not $refusalDriven) {
             ForceCloseDialogs
         } else {
             $refusal = FindText '(no es un proyecto de Encastra|not an Encastra project|termina en \.encastra|ends in \.encastra)' 10
-            $wroteAnyway = Test-Path $notAProject
-            Report ($null -ne $refusal -and -not $wroteAnyway) 'j2 a name that is not a project is refused, in words' "the application says '$refusal'; $notAProject exists=$wroteAnyway"
+            $refusalWroteAnyway = Test-Path $notAProject
         }
 
         # And now the real one, with a name the runtime will accept.
@@ -2537,6 +2572,20 @@ function Journey2 {
             $whereInstead = if ($found.Count -gt 0) { '; a .encastra file newer than this run turned up at ' + ($found -join ', ') + ' - so the chooser took a name but not the folder that was typed' } else { '; no .encastra newer than this run is in the profile, Documents, Desktop, Downloads, TEMP or the install directory either' }
         }
         Report $projectSaved 'j2 project saved to disk' "$projectFile exists=$projectSaved$whereInstead"
+
+        # Now the refusal, whose meaning rests on the line above. A refused name is only evidence
+        # that the name was refused if the same write route, this same iteration, also put a name
+        # the runtime accepts all the way through to a file. Without that, a green refusal says
+        # only that something was refused - which is what it said in run 35072026878, when the
+        # harness had never reached the dialog's model and the dialog returned its own default.
+        $refusalRests = "this line means nothing on its own: it rests on 'j2 project saved to disk' above, which used the same write route in this same iteration and came back $projectSaved"
+        if (-not $refusalDriven) {
+            Skip 'j2 a name that is not a project is refused, in words' "the chooser could not be driven, so the name was never offered to it; $refusalRests"
+        } elseif (-not $projectSaved) {
+            Report $false 'j2 a name that is not a project is refused, in words' "undetermined: the application did say '$refusal' and $notAProject exists=$refusalWroteAnyway, but the positive save through the same route did not produce a file, so there is no evidence the typed name is what the dialog returns. $refusalRests"
+        } else {
+            Report ($null -ne $refusal -and -not $refusalWroteAnyway) 'j2 a name that is not a project is refused, in words' "the application says '$refusal'; $notAProject exists=$refusalWroteAnyway. $refusalRests"
+        }
         # Publish.tsx arms Prepare only for a saved project that matches the canvas. Without one the
         # chooser under test never opens, and reporting the greyed-out button as a failure of
         # publish-into would be reporting the save twice under another name.
@@ -2899,7 +2948,34 @@ function Journey45 {
         # it is not. It is the same failure, counted twice, and the second telling hid its cause.
         $run = Wait 'Button' '^(Ejecutar|Run)$' 10
         Report ($null -ne $run -and $run.Current.IsEnabled) 'j4/j5 Run is available with a folder allowed and a file chosen' "enabled=$($run.Current.IsEnabled)"
+        # Whether a run happened at all, asked before whether it wrote anything.
+        #
+        # `run()` (store.ts:604) sets `message: null` and `journal: null` on the way in and, on
+        # every way out, a message: the outcome of the journal, the count of problems that stopped
+        # it, or the error it threw. So a status-bar message that was not there before, or steps in
+        # the run panel - RunPanel.tsx renders `.empty` until it has some - is the application
+        # saying a run took place. It needs no saved project: `run()` calls
+        # `ipc.runGraph(toGraph(), inputs, grants)` directly, so none of this depends on journey 2.
+        #
+        # Compared against what the bar said BEFORE the button was pressed, because the save and
+        # the grant each leave a message of their own, and "there is a message" would have been
+        # true without a run ever starting.
+        #
+        # Run 35072026878 reported `file=''` with the panel still reading "Nothing has run yet",
+        # having polled the folder for thirty seconds without once asking whether the run had
+        # begun. That is the question, and it is asked first now.
+        $RUN_STATE_JS = "(()=>{const m=document.querySelector('[class^=statusbar__message]');const t=m?(m.innerText||'').trim():'';return t+String.fromCharCode(124)+document.querySelectorAll('.run-panel__step').length;})()"
+        $stateBefore = [string](Cdp-Eval $RUN_STATE_JS)
         ClickInspector (MustFind $run 'the Run button is not on screen, so the granted folder cannot be written into') $CDP_SCROLL_RUN 'j4/j5 the Run button'
+        $ranSays = ''
+        for ($i = 0; $i -lt 60; $i++) {
+            $stateNow = [string](Cdp-Eval $RUN_STATE_JS)
+            if ($stateNow -and $stateNow -ne $stateBefore -and $stateNow -ne '|0') { $ranSays = $stateNow; break }
+            Start-Sleep -Milliseconds 300
+        }
+        $panelNow = ''
+        if (-not $ranSays) { $panelNow = OneLine (Cdp-Eval "(document.querySelector('.run-panel')||{innerText:[]}).innerText") }
+        Report ([bool]$ranSays) 'j4/j5 pressing Run actually started a run' "the status bar and run panel went from '$(OneLine $stateBefore)' to '$(OneLine $ranSays)'$(if (-not $ranSays) { "; they never changed, and the run panel still reads '$panelNow' - either nothing was invoked (the note above says which element was) or the run never began" })"
         $saved = $null
         for ($i = 0; $i -lt 60; $i++) {
             $hit = @(Get-ChildItem -Force -Path $grantFolder -File -ErrorAction SilentlyContinue)
@@ -2907,7 +2983,9 @@ function Journey45 {
             Start-Sleep -Milliseconds 500
         }
         $runSays = FindText '(correcto|correctos|ok|fallido|failed|Nada se ha ejecutado|Nothing ran)' 3
-        $because = if ($inputSeeded) { '' } else { " - and the run had no starting material to begin with: the line above says the chooser never seeded one, so this is that failure and not a second one" }
+        $because = ''
+        if (-not $inputSeeded) { $because = " - and the run had no starting material to begin with: the line above says the chooser never seeded one, so this is that failure and not a second one" }
+        elseif (-not $ranSays) { $because = " - and no run started at all: the line above says the application never reported an outcome, so this is that failure and not a second one" }
         Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'$because"
 
         # =========================================================================================
