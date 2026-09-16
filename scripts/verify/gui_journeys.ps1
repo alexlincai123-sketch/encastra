@@ -153,6 +153,47 @@ public static class W32 {
   // redeclared here.
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x; public int y; }
   [DllImport("oleacc.dll")] public static extern int AccessibleObjectFromPoint(POINT pt, [MarshalAs(UnmanagedType.IDispatch)] out object acc, [MarshalAs(UnmanagedType.Struct)] out object child);
+  // Typing into the Common Item Dialog. This is the one place in this file where a message to a
+  // window handle cannot do the job, and the reason is in "the file name a file dialog will
+  // actually use" below: the dialog's file-name box is a DirectUI element with no window of its
+  // own. On Save As it publishes as a ComboBox with ctrlId=0; on Open the only thing carrying the
+  // label is a Static with ctrlId=1090 - the label itself. WM_SETTEXT to either changes what is
+  // displayed and nothing the dialog will read. Keystrokes go to whatever holds keyboard focus,
+  // which is the real control, and the dialog is made foreground and checked to BE foreground
+  // before a single one is sent.
+  [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
+  // 64-bit layout: 4 bytes of type, 4 of padding to align the union, 24 of KEYBDINPUT = 32, which
+  // is what SendInput is told and what it expects. SendInput validates that size, so a 32-bit
+  // PowerShell would fail this call loudly rather than corrupt anything; the harness runs 64-bit.
+  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public uint padding; public KEYBDINPUT ki; }
+  [DllImport("user32.dll", SetLastError=true)] public static extern uint SendInput(uint n, INPUT[] inputs, int size);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  const uint INPUT_KEYBOARD = 1;
+  const uint KEYEVENTF_KEYUP = 0x0002;
+  const uint KEYEVENTF_UNICODE = 0x0004;
+  // Unicode scan codes rather than virtual keys: what is typed is a path, and a virtual key means
+  // a different character under every keyboard layout. This way the same characters arrive on a
+  // runner set to any layout at all.
+  public static int TypeText(string s) {
+    var list = new System.Collections.Generic.List<INPUT>();
+    foreach (char c in s) {
+      INPUT down = new INPUT(); down.type = INPUT_KEYBOARD; down.ki.wScan = (ushort)c; down.ki.dwFlags = KEYEVENTF_UNICODE;
+      INPUT up = new INPUT(); up.type = INPUT_KEYBOARD; up.ki.wScan = (ushort)c; up.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+      list.Add(down); list.Add(up);
+    }
+    if (list.Count == 0) { return 0; }
+    return (int)SendInput((uint)list.Count, list.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+  }
+  // One key under a modifier: Alt+N for the file-name accelerator, Ctrl+A to select whatever is
+  // already in the box before replacing it.
+  public static int KeyUnder(ushort modifier, ushort vk) {
+    INPUT[] seq = new INPUT[4];
+    seq[0].type = INPUT_KEYBOARD; seq[0].ki.wVk = modifier;
+    seq[1].type = INPUT_KEYBOARD; seq[1].ki.wVk = vk;
+    seq[2].type = INPUT_KEYBOARD; seq[2].ki.wVk = vk; seq[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    seq[3].type = INPUT_KEYBOARD; seq[3].ki.wVk = modifier; seq[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    return (int)SendInput(4, seq, Marshal.SizeOf(typeof(INPUT)));
+  }
   // A window's caption, read the way that works across a process boundary for a top-level window.
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, System.Text.StringBuilder s, int max);
   // Every top-level window this process owns, whatever its class and wherever UI Automation
@@ -1669,6 +1710,126 @@ function WriteNameField($f, $path) {
     }
 }
 
+# --- the file name a file dialog will actually use --------------------------------------------
+#
+# Every other control in this file is driven by a message to one specific window handle, and this
+# is the one place that cannot work. The Common Item Dialog's file-name box is a DirectUI element
+# with no window of its own, and run 35067019767 showed what the harness had been talking to
+# instead - three iterations each, every one "passing":
+#
+#   Save As: Pane 'File name:' class=ComboBox ctrlId=0     - a DirectUI pane, not a dialog control
+#   Open:    Pane 'File name:' class=Static  ctrlId=1090   - the LABEL that reads "File name:"
+#
+# WM_SETTEXT to either changes what that window displays. It changes nothing the dialog will read.
+# So the Save As returned its own default instead - `pickProjectToSave` passes
+# `defaultPath: '${suggested}.encastra'` with `suggested` = `projectName`, which starts as `''`
+# (store.ts:1186), so the default name is the bare string `.encastra`; Rust's `Path::extension()`
+# is None for a leading-dot name, `is_project_path` (lib.rs:581) says no, and the application
+# refused it in words. That refusal is correct and is now asserted as a contract of its own. The
+# Open dialog, whose `choose_file` passes no default at all (lib.rs:418), was confirmed with
+# nothing selected and stayed on screen saying "No items match your search."
+#
+# The name is therefore typed, at the dialog, into whatever holds keyboard focus:
+#
+#   1. the dialog is raised and the harness waits until GetForegroundWindow() IS that dialog -
+#      never a key sent at the desktop and hoping;
+#   2. focus is put on the name box - the element's own SetFocus() where UI Automation offers it,
+#      and Alt+N, the file-name accelerator both dialogs carry, where it does not;
+#   3. whatever now has focus is asked what it is, and if it publishes a writable Value pattern the
+#      path goes in through that - no keystrokes at all. Otherwise Ctrl+A and the path is typed as
+#      Unicode scan codes, which arrive the same under any keyboard layout;
+#   4. the read-back comes from the FOCUSED element, which is not the control the write chose. A
+#      read-back from the control you wrote to cannot tell you that you wrote to the wrong one.
+#
+# This is the only global input in the file, and it is fenced: the run happens on a machine with
+# nobody at the keyboard (that is why these journeys run on a runner at all), the dialog is
+# verified to be foreground first, and nothing is confirmed unless the read-back matches.
+$VK_MENU = 0x12; $VK_CONTROL = 0x11; $VK_N = 0x4E; $VK_A = 0x41
+function FocusedElement {
+    try { return [System.Windows.Automation.AutomationElement]::FocusedElement } catch { return $null }
+}
+# What is in a control, asked of the control rather than of its window text.
+function ValueOfElement($el) {
+    if (-not $el) { return '' }
+    try { return $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value } catch { }
+    try { return $el.Current.Name } catch { return '' }
+}
+# Returns its answer and therefore must not print: a function that writes to the success stream
+# cannot also hand a value back - see above Report, and `j1 chooser closed on confirm -> dialogs
+# left: 1` coming out PASS. What it wants said is left in $script:typeNotes for the caller.
+$script:typeNotes = @()
+function TypeIntoDialog($dlg, $field, $path, $what) {
+    $script:typeNotes = @()
+    $dh = Hwnd $dlg
+    $how = 'typed into the dialog'
+    # 1. The dialog in front, proven rather than assumed.
+    [void][W32]::SetForegroundWindow($dh)
+    $front = $false
+    for ($i = 0; $i -lt 30; $i++) {
+        if ([W32]::GetForegroundWindow() -eq $dh) { $front = $true; break }
+        Start-Sleep -Milliseconds 100
+        [void][W32]::SetForegroundWindow($dh)
+    }
+    if (-not $front) {
+        $script:typeNotes += "$what : the chooser would not come to the foreground (it is #$dh, the foreground is #$([W32]::GetForegroundWindow())); nothing is typed at a window that is not in front"
+        return @{ Read = ''; How = 'the dialog never came to the foreground, so nothing was typed' }
+    }
+    # 2. Focus on the name box.
+    $focusedBy = ''
+    if ($field.Element) {
+        try { $field.Element.SetFocus(); $focusedBy = "the name box's own SetFocus()" } catch { $focusedBy = '' }
+    }
+    if (-not $focusedBy) {
+        [void][W32]::KeyUnder($VK_MENU, $VK_N)
+        Start-Sleep -Milliseconds 250
+        $focusedBy = 'Alt+N, the file-name accelerator'
+    }
+    $focused = FocusedElement
+    $facts = '(nothing reports keyboard focus)'
+    if ($focused) {
+        try {
+            $facts = "$($focused.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '') '$($focused.Current.Name)' class=$($focused.Current.ClassName) ctrlId=$([W32]::GetDlgCtrlID([IntPtr]$focused.Current.NativeWindowHandle))"
+        } catch { $facts = '(the focused element could not be read)' }
+    }
+    $script:typeNotes += "$what : focus put on the name box by $focusedBy; what has keyboard focus now is $facts"
+    # 3. Through the control where it offers a way in, by keystroke where it does not.
+    $wroteByValue = $false
+    if ($focused -and (HasValuePattern $focused) -and -not (IsReadOnly $focused)) {
+        try {
+            $focused.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($path)
+            $wroteByValue = $true
+            $how = "the focused element's Value pattern, after $focusedBy"
+        } catch { $wroteByValue = $false }
+    }
+    if (-not $wroteByValue) {
+        [void][W32]::KeyUnder($VK_CONTROL, $VK_A)
+        Start-Sleep -Milliseconds 120
+        $sent = [W32]::TypeText($path)
+        $how = "$sent keystrokes typed as Unicode into whatever had focus, after $focusedBy"
+    }
+    Start-Sleep -Milliseconds 350
+    # 4. Read back from the focused element - somewhere the write did not choose.
+    $again = FocusedElement
+    $read = ValueOfElement $again
+    if (-not $read) { $read = ValueOfElement $focused }
+    # And if the focused element says nothing useful, anything under the dialog now holding the
+    # whole path counts - still not the control the write picked out.
+    if (([string]$read).Trim().Trim('"') -ne $path) {
+        foreach ($c in (Descendants $dlg)) {
+            $v = ''
+            try { $v = $c.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value } catch { continue }
+            if ($v -and $v.Trim().Trim('"') -eq $path -and -not (LooksLikeSearch $c.Current.Name)) {
+                $read = $v
+                $how = "$how; read back from the dialog's $($c.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '') '$($c.Current.Name)'"
+                break
+            }
+        }
+    } else {
+        $how = "$how; read back from the element that has keyboard focus"
+    }
+    return @{ Read = $read; How = $how }
+}
+
 $CONFIRM = '^(Seleccionar carpeta|Seleccionar|Select Folder|Elegir carpeta|Elegir|Choose|Aceptar|OK|Guardar|Save|Abrir|Open)$'
 $CANCEL = '^(Cancelar|Cancel)$'
 # A dialog button by the names it can carry in either display language, and failing that by the
@@ -1822,22 +1983,35 @@ function ConfirmChooser($dlg, $path, $what, $kind) {
     }
     $named = if ($field.Trusted) { "the control the dialog labels as its name box" } else { "not labelled as a name box; nothing better was on this dialog" }
     Report $true "$what : chooser name field found" "via $($field.Route) - $named$turnedDown"
-    WriteNameField $field $path
+    # A file dialog is typed into; a folder picker is written by handle, which works and is left
+    # alone. Why they differ is in "the file name a file dialog will actually use" above TypeIntoDialog.
+    $landed = ''
+    $route = $field.Route
+    if ($kind -eq 'file') {
+        $typed = TypeIntoDialog $dlg $field $path $what
+        foreach ($n in $script:typeNotes) { Note $n }
+        $landed = ([string]$typed.Read).Trim().Trim('"')
+        $route = $typed.How
+    } else {
+        WriteNameField $field $path
+        $landed = (ReadNameField $field).Trim().Trim('"')
+    }
     # `-ne` between strings is case-insensitive here, which is right for a path; the trims are for
     # a shell that quotes what it holds. Anything else and the confirm is not pressed at all.
     #
-    # Which control, as well as what is in it. A path reads back out of a search box exactly as
-    # faithfully as out of a name box, so this line fails on a search box even though the lookup
-    # above already refuses to hand one back - the assertion is about the control the confirm is
-    # about to be pressed on, and it says which one that is.
-    $landed = (ReadNameField $field).Trim().Trim('"')
+    # Which control, as well as what is in it. That distinction is the whole of run 35067019767:
+    # the old read-back read the same control it had just written to, so writing a path into a
+    # Static label and reading it straight back out of that label passed perfectly, three times an
+    # iteration, while the dialog's own file-name buffer still held what it started with. A
+    # read-back is only evidence if it comes from somewhere the write did not choose - which for a
+    # file dialog is now the element that has keyboard focus, whatever that turns out to be.
     $inSearch = LooksLikeSearch $field.Label
     if ($landed -ne $path -or $inSearch) {
-        Report $false "$what : the path is in the chooser's name box before it is confirmed" "the control labelled '$($field.Label)' holds '$landed', wanted '$path' (route: $($field.Route))$(if ($inSearch) { ' - and that control is a search box' }) - not confirming on that. The dialog holds: $(DialogShape $dlg)"
+        Report $false "$what : the path is in the chooser's name box before it is confirmed" "the name box holds '$landed', wanted '$path' (route: $route)$(if ($inSearch) { ' - and that control is a search box' }) - not confirming on that. The dialog holds: $(DialogShape $dlg)"
         ForceCloseDialogs
         return
     }
-    Report $true "$what : the path is in the chooser's name box before it is confirmed" "'$landed' in the control labelled '$($field.Label)' (via $($field.Route))"
+    Report $true "$what : the path is in the chooser's name box before it is confirmed" "'$landed' read back through $route"
     $ok = DlgButtonHwnd $dlg $CONFIRM $IDOK
     if ($ok -eq $NULLPTR) {
         Report $false "$what : chooser confirm button found" "nothing matching $CONFIRM and no IDOK; the dialog holds: $(DialogShape $dlg)"
@@ -2234,6 +2408,30 @@ function Journey2 {
             throw "SKIP: the save chooser never appeared (save still waiting=$stillWaiting), so nothing downstream of a saved project - publish-into included - can be driven"
         }
         Report $true 'j2 native save dialog opened' "'$($dlg.Current.Name)' class=$(HwndClass (Hwnd $dlg))"
+
+        # Negative, and a contract in its own right: a name that is not a project's is refused, in
+        # the reader's own language, and nothing is written. `is_project_path` (lib.rs:581) asks
+        # `Path::extension()` for `encastra`, and the editor never gets to decide otherwise. This
+        # probe exists because run 35067019767 provoked the refusal by accident - the harness was
+        # writing into a label rather than the dialog's file-name buffer, so the Save As returned
+        # its own default (`.encastra`, which Rust reads as a name with no extension at all) and
+        # the application said so. What was an accident is now asked for on purpose.
+        $notAProject = Join-Path $script:sandbox 'journeys.txt'
+        ConfirmChooser $dlg $notAProject 'j2-refusal' 'file'
+        if (-not $script:chooserConfirmed) {
+            Skip 'j2 a name that is not a project is refused, in words' 'the chooser could not be driven, so the name was never offered to it'
+            ForceCloseDialogs
+        } else {
+            $refusal = FindText '(no es un proyecto de Encastra|not an Encastra project|termina en \.encastra|ends in \.encastra)' 10
+            $wroteAnyway = Test-Path $notAProject
+            Report ($null -ne $refusal -and -not $wroteAnyway) 'j2 a name that is not a project is refused, in words' "the application says '$refusal'; $notAProject exists=$wroteAnyway"
+        }
+
+        # And now the real one, with a name the runtime will accept.
+        $save = WaitEnabled 'Button' '^(Guardar|Save)$' 10
+        Click (MustFind $save 'the Save button did not come back after the refused name')
+        $dlg = WaitDialog 12
+        if (-not $dlg) { throw 'SKIP: the save chooser did not reappear after the refused name, so nothing downstream of a saved project can be driven' }
         ConfirmChooser $dlg $projectFile 'j2-save' 'file'
         ReportChooserClosed 'j2-save'
         # Two different questions, asked in the order that tells them apart.
@@ -2628,9 +2826,15 @@ function Journey45 {
         ReportChooserClosed 'j5'
         Start-Sleep -Milliseconds 800
         $inputValue = ValueOf $readonlyBox
-        Report (SamePath $inputValue $inputFile) 'j5 the chosen file became the input for the run' "'$inputValue' (expected the same file as '$inputFile')"
+        $inputSeeded = (SamePath $inputValue $inputFile)
+        Report $inputSeeded 'j5 the chosen file became the input for the run' "'$inputValue' (expected the same file as '$inputFile')"
 
         # The proof that both answers were real: a run that writes into the granted folder.
+        #
+        # Its precondition is the line directly above. A graph whose starting material was never
+        # seeded cannot run at all, and `j4 the granted folder was actually written into by the run
+        # -> file='' status='Nothing has run yet'` reported that as a failure of the grant - which
+        # it is not. It is the same failure, counted twice, and the second telling hid its cause.
         $run = Wait 'Button' '^(Ejecutar|Run)$' 10
         Report ($null -ne $run -and $run.Current.IsEnabled) 'j4/j5 Run is available with a folder allowed and a file chosen' "enabled=$($run.Current.IsEnabled)"
         ClickInspector (MustFind $run 'the Run button is not on screen, so the granted folder cannot be written into') $CDP_SCROLL_RUN 'j4/j5 the Run button'
@@ -2641,7 +2845,8 @@ function Journey45 {
             Start-Sleep -Milliseconds 500
         }
         $runSays = FindText '(correcto|correctos|ok|fallido|failed|Nada se ha ejecutado|Nothing ran)' 3
-        Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'"
+        $because = if ($inputSeeded) { '' } else { " - and the run had no starting material to begin with: the line above says the chooser never seeded one, so this is that failure and not a second one" }
+        Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'$because"
 
         # =========================================================================================
         # NEGATIVE - a folder chosen for one purpose does not answer another.
