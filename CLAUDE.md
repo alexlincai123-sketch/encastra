@@ -74,7 +74,10 @@ propio porque es un proyecto independiente.
 ## Convenciones del repo
 
 - Rust 1.98.1 MSVC + Tauri 2.11.5 (NSIS, no MSI). El toolchain GNU no sirve para Tauri en Windows.
-- `scripts/version.py` es la única fuente de verdad de versión — sincroniza 7 declaraciones.
+- `scripts/version.py` es la única fuente de verdad de versión — sincroniza 9 declaraciones desde
+  `Cargo.toml [workspace.package]`: 6 JSON (los 5 `package.json` y `tauri.conf.json`), 1 TS
+  (`apps/web/src/config/site.ts`) y los dos lockfiles (`Cargo.lock` y `package-lock.json`, que
+  llevan la versión de cada miembro del workspace y que cargo/npm reescriben solos).
   Nunca editar un número de versión a mano en un fichero suelto.
 - `packages/protocol/data/type-graph.json` es la única fuente de las reglas de conexión entre
   tipos; TS y Rust la leen. Si un test de conformidad falla, arreglar la divergencia — nunca

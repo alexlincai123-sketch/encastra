@@ -10,6 +10,11 @@ The other files are ecosystems that insist on their own copy: npm needs it in ea
 `package.json`, Tauri needs it in `tauri.conf.json` to name the installer. They cannot be
 generated away, so they are synchronised here and a test fails if they ever drift.
 
+The two lockfiles are declarations too, not derived files: `Cargo.lock` and `package-lock.json`
+each record the workspace members' own versions, and each package manager rewrites them from the
+manifests the moment it runs. A lockfile left behind is a file that disagrees with the release
+and a build that comes out of a dirty tree, so both are synchronised and checked here.
+
 Usage:
     python scripts/version.py            # show what each file says
     python scripts/version.py --check    # exit 1 if anything disagrees
@@ -146,6 +151,70 @@ def write_lock(text: str, version: str) -> str:
     return "[[package]]".join(parts)
 
 
+NPM_LOCK = ROOT / "package-lock.json"
+
+
+def workspace_paths(root: pathlib.Path = ROOT) -> list[str]:
+    """The workspace directories, resolved the way npm resolves them: the globs in the root
+    `package.json`, kept only where a directory with a `package.json` actually exists."""
+    manifest = root / "package.json"
+    if not manifest.exists():
+        return []
+    declared = json.loads(manifest.read_text("utf-8")).get("workspaces") or []
+    if isinstance(declared, dict):  # the { "packages": [...] } spelling
+        declared = declared.get("packages") or []
+    found = []
+    for pattern in declared:
+        for path in sorted(root.glob(pattern)):
+            if (path / "package.json").exists():
+                relative = path.relative_to(root).as_posix()
+                if relative not in found:
+                    found.append(relative)
+    return found
+
+
+def npm_lock_versions(text: str, paths: list[str]) -> list[tuple[str, str]]:
+    """The versions package-lock.json declares for this repo's own packages: its top-level
+    `version`, the root entry of the `packages` map, and one entry per workspace directory.
+
+    Deliberately not the `node_modules/...` entries — npm writes those as links with no version
+    of their own — and never a third-party package, whose version is not ours to set.
+    """
+    data = json.loads(text)
+    found = []
+    if isinstance(data.get("version"), str):
+        found.append(("version", data["version"]))
+    packages = data.get("packages")
+    if isinstance(packages, dict):
+        for key in ["", *paths]:
+            entry = packages.get(key)
+            if isinstance(entry, dict) and isinstance(entry.get("version"), str):
+                found.append((f'packages["{key}"]', entry["version"]))
+    return found
+
+
+def write_npm_lock(text: str, version: str, paths: list[str]) -> str:
+    """Rewrites those same version fields in place, touching nothing else.
+
+    Textual rather than a re-serialisation: npm's own formatting (two-space JSON, one trailing
+    newline) is the formatting a later `npm install` will produce, and reprinting a 137 kB file
+    to change five strings is how a lockfile acquires an unrelated diff. An entry's fields are
+    the six-space lines under its four-space key, so a replacement cannot leak into the next
+    entry, and a value that already matches leaves the text byte-for-byte unchanged.
+    """
+
+    def replace(pattern: re.Pattern[str], subject: str) -> str:
+        return pattern.sub(lambda m: f"{m.group(1)}{version}{m.group(3)}", subject, count=1)
+
+    updated = replace(re.compile(r'(\n  "version": ")([^"]*)(")'), text)
+    for key in ["", *paths]:
+        entry = re.compile(
+            r'(\n    "' + re.escape(key) + r'": \{\n(?:      [^\n]*\n)*?      "version": ")([^"]*)(")'
+        )
+        updated = replace(entry, updated)
+    return updated
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if anything disagrees")
@@ -209,6 +278,28 @@ def main() -> int:
             disagreements += len(stale)
         else:
             print(f"  Cargo.lock: {len(lock_members(lock_text))} workspace crates at {version}")
+
+    # package-lock.json is the same story on the npm side: it carries a version for the root
+    # package and for every workspace package, and `npm install` rewrites them from the
+    # package.json files. Left out of the sync, they stayed at 0.5.0-beta.1 through a whole
+    # release candidate while --check reported that everything agreed.
+    if NPM_LOCK.exists():
+        npm_text = NPM_LOCK.read_text("utf-8")
+        paths = workspace_paths()
+        stale = [(where, found) for where, found in npm_lock_versions(npm_text, paths) if found != version]
+        if stale and args.sync:
+            rewritten = write_npm_lock(npm_text, version, paths)
+            if rewritten != npm_text:
+                NPM_LOCK.write_text(rewritten, encoding="utf-8", newline="\n")
+            for where, found in stale:
+                print(f"  package-lock.json ({where}): {found} -> {version}")
+        elif stale:
+            for where, found in stale:
+                print(f"  package-lock.json ({where}): {found}   DISAGREES", file=sys.stderr)
+            disagreements += len(stale)
+        else:
+            count = len(npm_lock_versions(npm_text, paths))
+            print(f"  package-lock.json: {count} workspace declarations at {version}")
 
     if args.check and disagreements:
         print(
