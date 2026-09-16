@@ -26,6 +26,15 @@ import type { ComponentManifest } from '../src/types';
  * The three gestures are mouse, Enter and Space, because a `<button>` earns Enter and Space from
  * the platform and a `<div onClick>` does not — and the difference between them is invisible to
  * anything that calls the handler directly.
+ *
+ * The selection is asserted in both of the places a selection lives, because holding only one of
+ * them is exactly how this broke. React Flow owns the selection and `selectedNodeId` mirrors it;
+ * a store that named the new node without marking it `selected` was corrected back on the next
+ * render — React Flow fired `onSelectionChange` with the selection it still held, the inspector
+ * stayed on "select a step to configure it", and the step somebody had just placed could only be
+ * reached again by hunting for it with the arrow keys. `selectedNodeId` alone was green through
+ * all of that, so the node's own `selected` flag — and the absence of it on every other node —
+ * is part of the contract here.
  */
 
 function manifest(overrides: Partial<ComponentManifest> & { id: string }): ComponentManifest {
@@ -126,8 +135,10 @@ describe('pressing it places a step', () => {
     expect(node.position).toEqual({ x: 220, y: 140 });
     expect(node.id).toMatch(/^uppercase-\d+$/);
 
-    // A step you just placed is the step you want to configure.
+    // A step you just placed is the step you want to configure — in the store's mirror and on
+    // the node itself, which is where React Flow reads the selection back from.
     expect(state.selectedNodeId).toBe(node.id);
+    expect(node.selected).toBe(true);
     expect(state.dirty).toBe(true);
   });
 
@@ -143,6 +154,7 @@ describe('pressing it places a step', () => {
     await user.keyboard('{Enter}');
     expect(useEditor.getState().nodes).toHaveLength(1);
     expect(useEditor.getState().nodes[0]?.position).toEqual({ x: 220, y: 140 });
+    expect(useEditor.getState().nodes[0]?.selected).toBe(true);
 
     await user.keyboard(' ');
     const nodes = useEditor.getState().nodes;
@@ -151,6 +163,9 @@ describe('pressing it places a step', () => {
     expect(nodes[1]?.position).toEqual({ x: 480, y: 140 });
     expect(nodes[1]?.data.componentRef).toBe(UPPERCASE_REF);
     expect(useEditor.getState().selectedNodeId).toBe(nodes[1]?.id);
+    // The one placed by Space is the selection, and the one placed by Enter has given it up.
+    expect(nodes[0]?.selected).toBe(false);
+    expect(nodes[1]?.selected).toBe(true);
   });
 
   it('a second click does not hide the second node under the first', async () => {
@@ -167,6 +182,12 @@ describe('pressing it places a step', () => {
     expect(nodes[0]?.position).toEqual({ x: 220, y: 140 });
     expect(nodes[1]?.position).toEqual({ x: 480, y: 140 });
     expect(nodes[0]?.id).not.toBe(nodes[1]?.id);
+    // Nor does it leave two steps looking selected: the second click moves the selection, and
+    // the inspector shows one step because there is one.
+    expect(nodes.filter((n) => n.selected)).toHaveLength(1);
+    expect(nodes[0]?.selected).toBe(false);
+    expect(nodes[1]?.selected).toBe(true);
+    expect(useEditor.getState().selectedNodeId).toBe(nodes[1]?.id);
   });
 
   it('presses the component that was pressed, not the first one in the list', async () => {
