@@ -2199,11 +2199,17 @@ mod tests {
         );
         // And the shape the command turns that into — `folder-not-chosen` on the wire, which
         // `library.ts` already has a sentence for in six languages.
+        //
+        // Through `chosen_publication_folder`, which is the function `inspect_publication` and
+        // `import_publication` actually call, and which pins `FolderPurpose::ImportFrom` itself.
+        // This assertion used to re-derive `ImportError::FolderNotChosen` from a `match` written
+        // out here, which proved only that the test could write the name of a variant: the
+        // purpose the command asks for was never read, so inverting it broke nothing.
+        let harness = Harness::new("publish-not-import");
+        harness.chose_folder(FolderPurpose::PublishInto, &dir);
         assert_eq!(
-            match folder_chosen_for(&chosen, FolderPurpose::ImportFrom, &dir) {
-                Err(ConsentError::NotChosen { .. }) => ImportError::FolderNotChosen,
-                other => panic!("expected a refusal about the record, got {other:?}"),
-            },
+            chosen_publication_folder(&harness.state(), &as_text(&dir))
+                .expect_err("a destination is not a source"),
             ImportError::FolderNotChosen
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -2969,6 +2975,823 @@ mod tests {
             is_hash || commit == "unknown",
             "the stamp is a full commit hash, `-dirty` if the tree did not match, or `unknown`; got {commit:?}"
         );
+    }
+
+    // --- the commands themselves -------------------------------------------------------------
+    //
+    // Everything above this line asks a *helper* whether a folder was chosen for a purpose. No
+    // helper can be wrong about which purpose a command asks for: that is a constant written out
+    // at each call site, and until the tests below existed it was asserted nowhere. Changing
+    // `FolderPurpose::PublishInto` to `ImportFrom` in `prepare_publication` — swapping the
+    // destination check for the source check, so that a folder picked to read a publication out
+    // of became somewhere this software writes into — failed no test in this repository. Neither
+    // did the same swap in `chosen_publication_folder`. The property was asserted where it was
+    // easy to assert and not where it was decided.
+    //
+    // Reaching a command means holding a `tauri::State`, which has no public constructor: the
+    // only way to one is an application that manages the value. `tauri::test` builds one without
+    // a window, and is a dev-dependency feature so the shipped binary does not gain it (see
+    // Cargo.toml).
+    //
+    // Not reachable this way, and deliberately not faked: `start_workflow`, `choose_folder` and
+    // `choose_file` take `tauri::AppHandle`, which is `AppHandle<Wry>` — a concrete runtime, not
+    // a generic one — so a `MockRuntime` application cannot supply the argument. `start_workflow`
+    // reaches the consent record through exactly the same two calls `run_graph` does,
+    // `grant_set(&graph, .., &chosen_folders(&state)?)` and `seed_for(.., &chosen_files(&state)?)`,
+    // and those are what the tests below drive. `choose_folder` and `choose_file` are the two
+    // commands that *write* the record; what they record is asserted by
+    // `a_fresh_runtime_has_chosen_nothing_and_a_restart_forgets_what_the_last_one_chose`.
+
+    /// What this test executable has to say about itself before Windows will start it.
+    ///
+    /// Building a Tauri application — even the mock one — links the window code the real
+    /// application links, and the functions it imports for that (`SetWindowSubclass`,
+    /// `RemoveWindowSubclass`, `DefSubclassProc`, and `TaskDialogIndirect`) exist only in
+    /// version 6 of ComCtl32. A process reaches version 6 by asking for it in its manifest;
+    /// without the request the loader binds the version 5 ComCtl32 in `System32`, which does not
+    /// export them, and the process dies with `STATUS_ENTRYPOINT_NOT_FOUND` before `main` — no
+    /// test output, no failing test, just an exit code.
+    ///
+    /// The shipped binary gets its manifest from `tauri_build`, which writes one into the
+    /// *binary*; a `cargo test` executable is not one. The request is made here instead, in a
+    /// `.drectve` section — the COFF section whose contents the linker reads as further
+    /// switches, and exactly what `#pragma comment(linker, "/manifestdependency:…")` produces in
+    /// a C++ program asking the same question. Inside `mod tests`, so it exists only in the test
+    /// executable: nothing about the shipped binary changes, and `build.rs` — where a linker
+    /// flag would otherwise go, and where it could only be spelled for the whole package — stays
+    /// about the release build.
+    #[cfg(all(windows, target_env = "msvc"))]
+    const COMMON_CONTROLS_V6: &[u8] = br#" /MANIFEST:EMBED /MANIFESTDEPENDENCY:"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'" "#;
+
+    #[cfg(all(windows, target_env = "msvc"))]
+    #[used]
+    #[unsafe(link_section = ".drectve")]
+    static LINKER_DIRECTIVE: [u8; COMMON_CONTROLS_V6.len()] = {
+        let mut bytes = [0u8; COMMON_CONTROLS_V6.len()];
+        let mut i = 0;
+        while i < COMMON_CONTROLS_V6.len() {
+            bytes[i] = COMMON_CONTROLS_V6[i];
+            i += 1;
+        }
+        bytes
+    };
+
+    /// An application that manages a [`Runtime`], so a test can hold the `tauri::State` the
+    /// commands take and call them as the IPC layer does.
+    ///
+    /// The record is written through the same `Mutex` the commands read, rather than handed to a
+    /// helper as an argument — so what a test says somebody chose is what the running application
+    /// would have.
+    struct Harness {
+        app: tauri::App<tauri::test::MockRuntime>,
+        base: PathBuf,
+    }
+
+    impl Harness {
+        fn new(tag: &str) -> Self {
+            let base = temp_dir(&format!("cmd-{tag}"));
+            // Whatever a previous run left is not this run's fixture.
+            let _ = std::fs::remove_dir_all(&base);
+            std::fs::create_dir_all(&base).expect("the fixture sandbox is created");
+
+            let app = tauri::test::mock_builder()
+                .build(tauri::test::mock_context(tauri::test::noop_assets()))
+                .expect("the mock application builds");
+            app.manage(command_runtime(base.join("library")));
+            Harness { app, base }
+        }
+
+        fn state(&self) -> tauri::State<'_, Runtime> {
+            self.app.state::<Runtime>()
+        }
+
+        /// The record [`choose_folder`] would have left after somebody picked `dir` for
+        /// `purpose` — resolved first, exactly as the command resolves it.
+        fn chose_folder(&self, purpose: FolderPurpose, dir: &Path) {
+            self.state().chosen_folders.lock().unwrap().insert((
+                purpose,
+                resolve_grant_directory(dir).expect("the fixture folder must be usable"),
+            ));
+        }
+
+        /// The record [`choose_file`] would have left.
+        fn chose_file(&self, path: &Path) {
+            self.state().chosen_files.lock().unwrap().insert((
+                FilePurpose::RunInput,
+                resolve_input_file(path).expect("the fixture file must be usable"),
+            ));
+        }
+
+        /// Back to a session in which nobody has picked any folder. Used between the arms of a
+        /// loop so that one arm's record cannot be what admits the next.
+        fn forget_folders(&self) {
+            self.state().chosen_folders.lock().unwrap().clear();
+        }
+
+        fn dir(&self, name: &str) -> PathBuf {
+            let path = self.base.join(name);
+            std::fs::create_dir_all(&path).expect("the fixture folder is created");
+            path
+        }
+
+        fn file(&self, name: &str, bytes: &[u8]) -> PathBuf {
+            let path = self.base.join(name);
+            std::fs::write(&path, bytes).expect("the fixture file is written");
+            path
+        }
+    }
+
+    impl Drop for Harness {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.base);
+        }
+    }
+
+    fn as_text(path: &Path) -> String {
+        path.to_string_lossy().into_owned()
+    }
+
+    /// The refusal `prepare_publication` gave, or a failure naming the folder it wrote into.
+    ///
+    /// `Result::expect_err` would want `Prepared` to be `Debug`, and deriving it on a production
+    /// type to satisfy a test is the tail wagging the dog. This says more anyway: when the check
+    /// fails, the message is where the publication actually landed.
+    fn refused_publication(outcome: Result<Prepared, AppError>, expected: &str) -> AppError {
+        match outcome {
+            Err(why) => why,
+            Ok(prepared) => panic!(
+                "{expected}, but a publication was written into {}",
+                prepared.folder
+            ),
+        }
+    }
+
+    /// The `Runtime` these tests manage: what `setup` builds, plus the fixture component.
+    ///
+    /// The fixture component has to be *in the registry*, or `grant_set` finds no manifest for
+    /// the node, drops the grant silently, and reports nothing — which would make every refusal
+    /// below pass for the wrong reason, and the control pass too.
+    fn command_runtime(library_root: PathBuf) -> Runtime {
+        let installed = encastra_builtins::install_all();
+        let mut registry = installed.registry;
+        registry
+            .insert(manifest())
+            .expect("the fixture component is not one of the builtins");
+        Runtime {
+            registry,
+            components: installed.components,
+            triggers: installed.triggers,
+            running: Mutex::new(None),
+            chosen_folders: Mutex::new(BTreeSet::new()),
+            chosen_files: Mutex::new(BTreeSet::new()),
+            library: LibraryHandle::open(library_root),
+            dirty: AtomicBool::new(false),
+            importing: AtomicBool::new(false),
+            closing: AtomicBool::new(false),
+        }
+    }
+
+    fn a_draft() -> PublicationDraft {
+        PublicationDraft {
+            listing_id: "dev.alice.thumbnails".into(),
+            kind: encastra_publish::Kind::Project,
+            version: "1.0.0".into(),
+            title: "Thumbnails".into(),
+            summary: "Makes a small copy of every picture dropped in a folder.".into(),
+            categories: Vec::new(),
+            tags: Vec::new(),
+            license: License::Mit,
+            pricing: encastra_publish::Pricing::Free,
+            changelog: None,
+        }
+    }
+
+    fn a_publisher() -> Publisher {
+        Publisher {
+            id: "dev.alice".into(),
+            display_name: "Alice".into(),
+            bio: None,
+            verified: false,
+        }
+    }
+
+    /// A `.encastra` on disk that `prepare_publication` will get as far as the consent check on.
+    ///
+    /// Built against the fixture component, because the review reads the lockfile: a component
+    /// this build does not have is a blocking finding, and the command would then fail on the
+    /// bundle before the destination was ever looked up — a test that proved nothing about
+    /// consent.
+    fn a_project_to_publish(base: &Path) -> String {
+        use encastra_core::ComponentRef;
+        use encastra_core::graph::{Node, Position};
+
+        let installed = manifest();
+        let mut project = Project::new("Thumbnails", 1_000);
+        project.manifest.runtime = format!(">={}", encastra_core::RUNTIME_VERSION);
+        project.graph = Graph {
+            nodes: BTreeMap::from([(
+                NodeId("save".into()),
+                Node {
+                    component: ComponentRef {
+                        id: installed.id.clone(),
+                        version: installed.version.clone(),
+                    },
+                    label: None,
+                    config: BTreeMap::new(),
+                    position: Position::default(),
+                    disabled: false,
+                },
+            )]),
+            edges: Vec::new(),
+        };
+        project.lock = Lockfile {
+            components: vec![LockedComponent {
+                id: installed.id.clone(),
+                version: installed.version.clone(),
+                manifest_digest: installed.digest(),
+                origin: "builtin".into(),
+            }],
+        };
+
+        let path = base.join("thumbnails.encastra");
+        std::fs::write(
+            &path,
+            project.to_bytes().expect("the fixture project serialises"),
+        )
+        .expect("the fixture project is written");
+        as_text(&path)
+    }
+
+    // -- publish into --------------------------------------------------------------------------
+
+    #[test]
+    fn a_publication_is_written_only_into_a_folder_chosen_to_publish_into() {
+        // The mutation this exists for: `FolderPurpose::PublishInto` at the call site in
+        // `prepare_publication` changed to any other variant makes one arm of this loop admit a
+        // write, and the control below refuse one.
+        let harness = Harness::new("publish-purpose");
+        let into = harness.dir("destination");
+        let project = a_project_to_publish(&harness.base);
+        let text = as_text(&into);
+
+        for wrong in [
+            FolderPurpose::ImportFrom,
+            FolderPurpose::GrantToComponent,
+            FolderPurpose::ProjectsLocation,
+        ] {
+            harness.forget_folders();
+            harness.chose_folder(wrong, &into);
+            let refused = refused_publication(
+                prepare_publication(
+                    harness.state(),
+                    project.clone(),
+                    a_draft(),
+                    a_publisher(),
+                    text.clone(),
+                ),
+                "a folder chosen for something else is not somewhere to write",
+            );
+            assert_eq!(
+                refused.kind(),
+                "destination-not-chosen",
+                "a folder chosen for {wrong:?} was accepted as a destination: {refused}"
+            );
+        }
+
+        // And a folder nobody put in front of anybody at all.
+        harness.forget_folders();
+        let refused = refused_publication(
+            prepare_publication(
+                harness.state(),
+                project.clone(),
+                a_draft(),
+                a_publisher(),
+                text.clone(),
+            ),
+            "a path the editor merely named is not a decision",
+        );
+        assert_eq!(refused.kind(), "destination-not-chosen", "{refused}");
+
+        // The control. Without it every refusal above could be about the project, the draft or
+        // the publisher rather than about the record.
+        harness.chose_folder(FolderPurpose::PublishInto, &into);
+        let prepared = prepare_publication(
+            harness.state(),
+            project,
+            a_draft(),
+            a_publisher(),
+            text.clone(),
+        )
+        .expect("the folder the person chose to publish into is where a publication goes");
+        assert!(
+            Path::new(&prepared.folder)
+                .starts_with(resolve_grant_directory(&into).expect("the destination resolves")),
+            "{} is not inside {text}",
+            prepared.folder
+        );
+    }
+
+    #[test]
+    fn a_destination_is_where_the_path_resolves_to_and_not_how_it_is_spelled() {
+        let harness = Harness::new("publish-spelling");
+        let chosen = harness.dir("chosen");
+        // A sibling that exists and is a perfectly ordinary folder, so the refusal below is
+        // about the record and not about the path being unusable.
+        let elsewhere = harness.dir("elsewhere");
+        let project = a_project_to_publish(&harness.base);
+        harness.chose_folder(FolderPurpose::PublishInto, &chosen);
+
+        let sideways = as_text(&chosen.join("..").join("elsewhere"));
+        let refused = refused_publication(
+            prepare_publication(
+                harness.state(),
+                project.clone(),
+                a_draft(),
+                a_publisher(),
+                sideways,
+            ),
+            "a tail on the chosen folder is a different folder",
+        );
+        assert_eq!(refused.kind(), "destination-not-chosen", "{refused}");
+        assert!(
+            !elsewhere.join("dev.alice.thumbnails-1.0.0").exists(),
+            "the refusal came after the write"
+        );
+
+        // The verbatim form is what `canonicalize` hands back and what the chooser recorded, so
+        // refusing it would be refusing the chooser's own answer.
+        #[cfg(windows)]
+        {
+            let verbatim = as_text(
+                &resolve_grant_directory(&chosen).expect("the chosen folder resolves to itself"),
+            );
+            assert!(verbatim.starts_with(r"\\?\"), "{verbatim} is not verbatim");
+            prepare_publication(harness.state(), project, a_draft(), a_publisher(), verbatim)
+                .expect("the verbatim spelling of the chosen folder is the chosen folder");
+        }
+    }
+
+    #[test]
+    fn a_destination_chosen_and_then_deleted_is_not_a_destination() {
+        // A stale entry. The record still holds the pair; the folder it named is gone, so there
+        // is nothing for the path to resolve to and nothing is written in its place.
+        let harness = Harness::new("publish-stale");
+        let gone = harness.dir("gone");
+        let project = a_project_to_publish(&harness.base);
+        harness.chose_folder(FolderPurpose::PublishInto, &gone);
+        std::fs::remove_dir_all(&gone).expect("the fixture folder goes");
+
+        let refused = refused_publication(
+            prepare_publication(
+                harness.state(),
+                project,
+                a_draft(),
+                a_publisher(),
+                as_text(&gone),
+            ),
+            "a folder that is no longer there is not written into",
+        );
+        // `prepare_publication` looks at the destination before it consults the record, so the
+        // refusal names the absence. What matters is that the entry did not carry the write.
+        assert_eq!(refused.kind(), "destination-missing", "{refused}");
+        assert!(!gone.exists(), "the folder was recreated by the attempt");
+    }
+
+    // -- import from ---------------------------------------------------------------------------
+
+    #[test]
+    fn a_publication_is_read_only_out_of_a_folder_chosen_to_import_from() {
+        // The mutation this exists for: `FolderPurpose::ImportFrom` in
+        // `chosen_publication_folder` changed to any other variant makes one arm of this loop
+        // admit a read.
+        let harness = Harness::new("import-purpose");
+        let folder = harness.dir("publication");
+        let text = as_text(&folder);
+
+        for wrong in [
+            FolderPurpose::PublishInto,
+            FolderPurpose::GrantToComponent,
+            FolderPurpose::ProjectsLocation,
+        ] {
+            harness.forget_folders();
+            harness.chose_folder(wrong, &folder);
+            for refused in [
+                inspect_publication(harness.state(), text.clone())
+                    .expect_err("inspect reads, and reading needs the source question answered"),
+                import_publication(harness.state(), text.clone())
+                    .expect_err("import reads too, through the same check"),
+            ] {
+                assert!(
+                    matches!(
+                        refused,
+                        AppError::Import {
+                            error: ImportError::FolderNotChosen
+                        }
+                    ),
+                    "a folder chosen for {wrong:?} was accepted as a source: {refused}"
+                );
+            }
+        }
+
+        // And a folder nobody chose at all.
+        harness.forget_folders();
+        for refused in [
+            inspect_publication(harness.state(), text.clone()).expect_err("nobody chose it"),
+            import_publication(harness.state(), text.clone()).expect_err("nobody chose it"),
+        ] {
+            assert!(
+                matches!(
+                    refused,
+                    AppError::Import {
+                        error: ImportError::FolderNotChosen
+                    }
+                ),
+                "{refused}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_publication_this_application_just_wrote_is_still_not_one_it_may_read() {
+        // The two questions end to end, on the same machine and in the same session: the folder
+        // a publication was prepared into was chosen to *write* into, and reading it back is a
+        // second question that was not put to anybody. Then it is, and the same call succeeds.
+        let harness = Harness::new("import-roundtrip");
+        let into = harness.dir("destination");
+        let project = a_project_to_publish(&harness.base);
+        harness.chose_folder(FolderPurpose::PublishInto, &into);
+
+        let prepared = prepare_publication(
+            harness.state(),
+            project,
+            a_draft(),
+            a_publisher(),
+            as_text(&into),
+        )
+        .expect("the destination was chosen to publish into");
+
+        let refused = inspect_publication(harness.state(), prepared.folder.clone())
+            .expect_err("writing here was agreed to; reading here was not");
+        assert!(
+            matches!(
+                refused,
+                AppError::Import {
+                    error: ImportError::FolderNotChosen
+                }
+            ),
+            "{refused}"
+        );
+
+        harness.chose_folder(FolderPurpose::ImportFrom, Path::new(&prepared.folder));
+        let inspected = inspect_publication(harness.state(), prepared.folder.clone())
+            .expect("and once somebody has said to read out of it, it is read");
+        assert_eq!(inspected.bundle.draft.listing_id, "dev.alice.thumbnails");
+    }
+
+    #[test]
+    fn a_source_is_where_the_path_resolves_to_and_not_how_it_is_spelled() {
+        let harness = Harness::new("import-spelling");
+        let chosen = harness.dir("chosen");
+        let elsewhere = harness.dir("elsewhere");
+        harness.chose_folder(FolderPurpose::ImportFrom, &chosen);
+
+        let sideways = as_text(&chosen.join("..").join("elsewhere"));
+        let refused = chosen_publication_folder(&harness.state(), &sideways)
+            .expect_err("a tail on the chosen folder is a different folder");
+        assert_eq!(refused, ImportError::FolderNotChosen);
+        assert!(elsewhere.exists(), "the fixture sibling must be real");
+
+        #[cfg(windows)]
+        {
+            let verbatim = as_text(&resolve_grant_directory(&chosen).expect("it resolves"));
+            assert!(verbatim.starts_with(r"\\?\"), "{verbatim} is not verbatim");
+            assert!(
+                chosen_publication_folder(&harness.state(), &verbatim).is_ok(),
+                "the verbatim spelling of the chosen folder is the chosen folder"
+            );
+        }
+    }
+
+    #[test]
+    fn a_source_chosen_and_then_deleted_is_not_a_source() {
+        let harness = Harness::new("import-stale");
+        let gone = harness.dir("gone");
+        harness.chose_folder(FolderPurpose::ImportFrom, &gone);
+        std::fs::remove_dir_all(&gone).expect("the fixture folder goes");
+
+        let refused = inspect_publication(harness.state(), as_text(&gone))
+            .expect_err("a folder that is no longer there is not read");
+        // The path resolves to nothing, which the crate's vocabulary calls `NotAFolder` — the
+        // record never gets a say, which is the point: a stale entry cannot carry a read.
+        assert!(
+            matches!(
+                refused,
+                AppError::Import {
+                    error: ImportError::NotAFolder
+                }
+            ),
+            "{refused}"
+        );
+    }
+
+    // -- give to a component -------------------------------------------------------------------
+
+    #[test]
+    fn a_component_is_given_a_folder_only_when_it_was_chosen_to_give_to_a_component() {
+        // The mutation this exists for: `FolderPurpose::GrantToComponent` in `grant_set` changed
+        // to any other variant. Reached through `run_graph`, which is the command a person
+        // pressing Run actually calls.
+        let harness = Harness::new("grant-purpose");
+        let dir = harness.dir("grantable");
+        let (graph, _) = fixture();
+
+        for wrong in [
+            FolderPurpose::PublishInto,
+            FolderPurpose::ImportFrom,
+            FolderPurpose::ProjectsLocation,
+        ] {
+            harness.forget_folders();
+            harness.chose_folder(wrong, &dir);
+            let refused = run_graph(
+                harness.state(),
+                graph.clone(),
+                Vec::new(),
+                vec![folder_grant(&dir)],
+            )
+            .expect_err("a folder chosen for something else is not a grant");
+            let AppError::GrantsRefused { refusals } = refused else {
+                panic!("a folder chosen for {wrong:?} was granted: {refused}");
+            };
+            assert_eq!(refusals.len(), 1, "{refusals:?}");
+            assert_eq!(refusals[0].kind(), "folder-not-chosen", "{:?}", refusals[0]);
+        }
+
+        harness.forget_folders();
+        let refused = run_graph(
+            harness.state(),
+            graph.clone(),
+            Vec::new(),
+            vec![folder_grant(&dir)],
+        )
+        .expect_err("a folder nobody chose is not a grant");
+        assert_eq!(refused.kind(), "grants-refused", "{refused}");
+
+        // The control. `run_graph` returns `Err(GrantsRefused)` before it runs anything when a
+        // grant does not stand, so "not that error" is the whole of what is asserted here — what
+        // the graph then does is the runtime's business and not this file's.
+        harness.chose_folder(FolderPurpose::GrantToComponent, &dir);
+        let outcome = run_graph(harness.state(), graph, Vec::new(), vec![folder_grant(&dir)]);
+        assert!(
+            !matches!(outcome, Err(AppError::GrantsRefused { .. })),
+            "the folder the person chose to give to a component was refused: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn a_granted_folder_is_where_the_path_resolves_to_and_not_how_it_is_spelled() {
+        let harness = Harness::new("grant-spelling");
+        let chosen = harness.dir("chosen");
+        let elsewhere = harness.dir("elsewhere");
+        let (graph, _) = fixture();
+        harness.chose_folder(FolderPurpose::GrantToComponent, &chosen);
+
+        let sideways = chosen.join("..").join("elsewhere");
+        let refused = run_graph(
+            harness.state(),
+            graph.clone(),
+            Vec::new(),
+            vec![folder_grant(&sideways)],
+        )
+        .expect_err("a tail on the chosen folder is a different folder");
+        let AppError::GrantsRefused { refusals } = refused else {
+            panic!("a walk out of the chosen folder was granted: {refused}");
+        };
+        assert_eq!(refusals[0].kind(), "folder-not-chosen", "{:?}", refusals[0]);
+        assert!(elsewhere.exists(), "the fixture sibling must be real");
+
+        #[cfg(windows)]
+        {
+            let verbatim = resolve_grant_directory(&chosen).expect("it resolves");
+            assert!(
+                as_text(&verbatim).starts_with(r"\\?\"),
+                "{} is not verbatim",
+                as_text(&verbatim)
+            );
+            let outcome = run_graph(
+                harness.state(),
+                graph,
+                Vec::new(),
+                vec![folder_grant(&verbatim)],
+            );
+            assert!(
+                !matches!(outcome, Err(AppError::GrantsRefused { .. })),
+                "the verbatim spelling of the chosen folder was refused: {outcome:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_granted_folder_chosen_and_then_deleted_is_not_granted() {
+        let harness = Harness::new("grant-stale");
+        let gone = harness.dir("gone");
+        let (graph, _) = fixture();
+        harness.chose_folder(FolderPurpose::GrantToComponent, &gone);
+        std::fs::remove_dir_all(&gone).expect("the fixture folder goes");
+
+        let refused = run_graph(
+            harness.state(),
+            graph,
+            Vec::new(),
+            vec![folder_grant(&gone)],
+        )
+        .expect_err("a folder that is no longer there is not granted");
+        let AppError::GrantsRefused { refusals } = refused else {
+            panic!("a stale entry became a grant: {refused}");
+        };
+        // The scope is refused for not resolving, before the record is consulted at all.
+        assert_eq!(refusals[0].kind(), "folder-unusable", "{:?}", refusals[0]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_offered_to_a_command_is_whatever_it_points_at() {
+        // A junction reads as a directory and points anywhere at all, and an ordinary account
+        // can make one. Through the command rather than the helper: the decoy is what the
+        // editor would send, and the folder the person chose is the one the grant is compared
+        // against.
+        let harness = Harness::new("grant-junction");
+        let chosen = harness.dir("chosen");
+        let elsewhere = harness.dir("elsewhere");
+        let (graph, _) = fixture();
+        harness.chose_folder(FolderPurpose::GrantToComponent, &chosen);
+
+        let decoy = harness.base.join("decoy-link");
+        if !make_directory_link(&elsewhere, &decoy) {
+            // The property holds; this machine cannot build the fixture that shows it, and says
+            // so rather than reporting a pass it did not earn.
+            eprintln!("skipped: this machine would not create a directory link");
+            return;
+        }
+
+        let refused = run_graph(
+            harness.state(),
+            graph.clone(),
+            Vec::new(),
+            vec![folder_grant(&decoy)],
+        )
+        .expect_err("a link to somewhere else is not the folder that was chosen");
+        let AppError::GrantsRefused { refusals } = refused else {
+            panic!("a junction to elsewhere was granted: {refused}");
+        };
+        assert_eq!(refusals[0].kind(), "folder-not-chosen", "{:?}", refusals[0]);
+
+        // And a junction pointing at the chosen folder is the chosen folder, because what is
+        // compared is what the path resolves to.
+        let honest = harness.base.join("honest-link");
+        if make_directory_link(&chosen, &honest) {
+            let outcome = run_graph(
+                harness.state(),
+                graph,
+                Vec::new(),
+                vec![folder_grant(&honest)],
+            );
+            assert!(
+                !matches!(outcome, Err(AppError::GrantsRefused { .. })),
+                "a link to the chosen folder resolves to the chosen folder: {outcome:?}"
+            );
+        }
+    }
+
+    // -- the file a run is seeded with -----------------------------------------------------------
+
+    #[test]
+    fn a_run_is_seeded_only_with_a_file_chosen_as_a_run_input() {
+        let harness = Harness::new("input-purpose");
+        let file = harness.file("holiday.png", b"not really a png");
+        let (graph, _) = fixture();
+
+        let refused = run_graph(
+            harness.state(),
+            graph.clone(),
+            vec![input(&file)],
+            Vec::new(),
+        )
+        .expect_err("a path the editor named is not a file anybody picked");
+        assert_eq!(refused.kind(), "input-not-chosen", "{refused}");
+        assert!(
+            !serde_json::to_string(&refused).unwrap().contains("holiday"),
+            "the refusal must not carry the path"
+        );
+
+        // A different file, chosen: the record is of files, not of having chosen at all.
+        let other = harness.file("theirs.png", b"not yours");
+        harness.chose_file(&other);
+        let refused = run_graph(
+            harness.state(),
+            graph.clone(),
+            vec![input(&file)],
+            Vec::new(),
+        )
+        .expect_err("choosing one file does not seed another");
+        assert_eq!(refused.kind(), "input-not-chosen", "{refused}");
+
+        // The control.
+        harness.chose_file(&file);
+        let outcome = run_graph(harness.state(), graph, vec![input(&file)], Vec::new());
+        assert!(
+            !matches!(
+                outcome,
+                Err(AppError::InputNotChosen { .. } | AppError::InputUnusable { .. })
+            ),
+            "the file the person chose was refused: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn a_file_and_a_folder_answer_different_questions_at_the_command() {
+        // The two records are separate and neither stands in for the other. Both directions,
+        // because a single set is what this design replaced.
+        let harness = Harness::new("input-not-folder");
+        let file = harness.file("notes.txt", b"x");
+        let dir = harness.dir("granted");
+        let (graph, _) = fixture();
+
+        // A file chosen for a run is not a folder a component may be given: it does not even
+        // resolve as a folder, so the scope is refused before the record is reached.
+        harness.chose_file(&file);
+        let refused = run_graph(
+            harness.state(),
+            graph.clone(),
+            Vec::new(),
+            vec![folder_grant(&file)],
+        )
+        .expect_err("a file is not a folder");
+        let AppError::GrantsRefused { refusals } = refused else {
+            panic!("a chosen file became a folder grant: {refused}");
+        };
+        assert_eq!(refusals[0].kind(), "folder-unusable", "{:?}", refusals[0]);
+
+        // And a folder chosen to give to a component is not a file a run may read.
+        harness.chose_folder(FolderPurpose::GrantToComponent, &dir);
+        let refused = run_graph(harness.state(), graph, vec![input(&dir)], Vec::new())
+            .expect_err("a folder is not an input file");
+        assert_eq!(refused.kind(), "input-unusable", "{refused}");
+    }
+
+    #[test]
+    fn a_seeded_file_is_where_the_path_resolves_to_and_not_how_it_is_spelled() {
+        let harness = Harness::new("input-spelling");
+        let chosen = harness.file("mine.txt", b"mine");
+        let secret = harness.file("theirs.txt", b"not yours");
+        let (graph, _) = fixture();
+        harness.chose_file(&chosen);
+
+        // A `..` that walks back out of a real subfolder and onto a file that exists — so what
+        // is refused is the record, not a path that could not be opened. `canonicalize` needs
+        // every component to be real, which is why the subfolder is made first.
+        let sub = harness.dir("sub");
+        let sideways = sub.join("..").join("theirs.txt");
+        assert!(secret.exists(), "the file walked onto must be real");
+        let refused = run_graph(
+            harness.state(),
+            graph.clone(),
+            vec![input(&sideways)],
+            Vec::new(),
+        )
+        .expect_err("a walk onto another file is another file");
+        assert_eq!(refused.kind(), "input-not-chosen", "{refused}");
+
+        #[cfg(windows)]
+        {
+            let verbatim = resolve_input_file(&chosen).expect("it resolves");
+            assert!(
+                as_text(&verbatim).starts_with(r"\\?\"),
+                "{} is not verbatim",
+                as_text(&verbatim)
+            );
+            let outcome = run_graph(harness.state(), graph, vec![input(&verbatim)], Vec::new());
+            assert!(
+                !matches!(
+                    outcome,
+                    Err(AppError::InputNotChosen { .. } | AppError::InputUnusable { .. })
+                ),
+                "the verbatim spelling of the chosen file was refused: {outcome:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_file_chosen_and_then_deleted_is_not_seeded() {
+        let harness = Harness::new("input-stale");
+        let file = harness.file("gone.txt", b"x");
+        let (graph, _) = fixture();
+        harness.chose_file(&file);
+        std::fs::remove_file(&file).expect("the fixture file goes");
+
+        let refused = run_graph(harness.state(), graph, vec![input(&file)], Vec::new())
+            .expect_err("a file that is no longer there is not read");
+        // It no longer resolves, so the record never gets a say.
+        assert_eq!(refused.kind(), "input-unusable", "{refused}");
     }
 
     // -- the library's byte ceiling --------------------------------------------------------------
