@@ -61,12 +61,13 @@ try {
         $flag = if ($cmd -match '--remote-debugging-port=(\d+)') { $Matches[1] } else { 'absent' }
         $ours = ($cmd -match '(?i)encastra') -or ($flag -ne 'absent')
         if (-not $ours) { $others += $hosted; continue }
-        "webview2: pid=$($p.ProcessId) host=$hosted type=$kind remote-debugging-port=$flag"
-        if ($kind -eq 'browser') {
-            $short = $cmd
-            if ($short.Length -gt 420) { $short = $short.Substring(0, 420) + ' ...' }
-            "webview2:   command line: $short"
-        }
+        # The parent is the whole of the shared-browser question. WebView2 keeps one browser
+        # process per user-data directory, and whichever host created it first settles its
+        # arguments for everyone after: a browser whose parent is not the host we just started is
+        # a browser somebody else made, and our flag was never going to be on it.
+        "webview2: pid=$($p.ProcessId) parent=$($p.ParentProcessId) host=$hosted type=$kind remote-debugging-port=$flag"
+        # Whole, never truncated. This line is the evidence; a cut one only says where the cut was.
+        if ($kind -eq 'browser') { "webview2:   command line: $cmd" }
     }
     if ($others.Count -gt 0) {
         $names = ($others | Sort-Object -Unique) -join ', '
@@ -74,6 +75,20 @@ try {
     }
 } catch {
     "webview2: the process list could not be read ($($_.Exception.GetType().Name))"
+}
+
+# And the hosts themselves. How many there are is the first question a shared browser raises, and
+# `app pid 5508` in one log beside `pid=7700 host=encastra-desktop.exe` in another does not answer
+# it. Creation times say which host was first, which is the one whose arguments the browser has.
+try {
+    $hosts_ = @(Get-CimInstance Win32_Process -Filter "Name='encastra-desktop.exe'" -ErrorAction Stop)
+    if ($hosts_.Count -eq 0) { "webview2: no encastra-desktop.exe process is running" }
+    else { "webview2: $($hosts_.Count) encastra-desktop.exe process(es) running" }
+    foreach ($h in ($hosts_ | Sort-Object CreationDate)) {
+        "webview2: host pid=$($h.ProcessId) parent=$($h.ParentProcessId) started=$($h.CreationDate.ToString('s')) command line: $($h.CommandLine)"
+    }
+} catch {
+    "webview2: the encastra-desktop process list could not be read ($($_.Exception.GetType().Name))"
 }
 
 # Which runtime. Per-machine first, then per-user.

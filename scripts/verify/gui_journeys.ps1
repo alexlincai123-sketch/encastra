@@ -1,5 +1,7 @@
-# Usage: start Encastra (any build), then `.\scripts\verify\gui_journeys.ps1`. Needs a desktop
-# session; the interface language may be English or Spanish (the two the checks know).
+# Usage: `.\scripts\verify\gui_journeys.ps1 -Launch`, which starts the installed application itself
+# and drives that; or start Encastra by hand (any build) and run the script with no -Launch to
+# attach to it. Needs a desktop session; the interface language may be English or Spanish (the two
+# the checks know).
 #
 # Blocker B5 in docs/RELEASE_CANDIDATE_READINESS.md: every filesystem permission in this
 # application is gated on a folder somebody picked in a *native* chooser, *for a stated purpose*.
@@ -73,6 +75,13 @@
 #     the DevTools protocol - see scripts/verify/cdp.mjs and "the canvas, through the page itself"
 #     below. Everything native stays on UI Automation, which is what UI Automation is for.
 #
+# -Launch makes the harness the owner of what it drives: it stops every Encastra host and every
+# WebView2 browser process belonging to this application, then starts the application with the
+# debugging flag on the child's own environment block. That is not tidiness - WebView2 keeps one
+# browser process per user-data directory and the host that creates it settles its command line for
+# everyone after, so attaching to a window somebody else opened means driving a browser whose
+# arguments nobody in this file chose. See "the application, started by the harness that drives it".
+#
 # -Repeat n runs the whole suite n times, each iteration on its own sandbox and its own empty
 # project, and suffixes every line with `[iteration k/n]`. A journey that passes once and fails the
 # second time has not passed; CI asks for three. -SelfTest exercises only the CDP side of this
@@ -93,9 +102,15 @@ param(
     # Only the part of this file that talks to the page: connectivity, and the canvas oracle driven
     # by DOM clicks. No UI Automation, no native dialog, nothing that needs the desktop to itself.
     [switch]$SelfTest,
-    # Where the application publishes the DevTools protocol. Test-only, and only there because the
-    # application was launched with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port.
-    [int]$CdpPort = 9222
+    # Where the application publishes the DevTools protocol. Test-only, and only there because
+    # whoever started the application set WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS.
+    [int]$CdpPort = 9222,
+    # Start the application here rather than attaching to one somebody else started. What this is
+    # for is in "the application, started by the harness that drives it" below: the flag only ever
+    # reaches the browser process if it is on the environment of the host that CREATES that browser
+    # process, and a harness that attaches to a window it did not open cannot know that it was.
+    [switch]$Launch,
+    [string]$Exe = (Join-Path $env:LOCALAPPDATA 'Encastra\encastra-desktop.exe')
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
@@ -240,12 +255,101 @@ function JourneyEnded($err, $what) {
     else { Report $false $what "$($err.Exception.GetType().Name): $message" }
 }
 
-# --- the application ------------------------------------------------------------------------
+# --- the application, started by the harness that drives it -----------------------------------
+#
+# -Launch exists because of a measurement, not a preference. WebView2 keeps ONE browser process per
+# user-data directory, and the host that creates it settles its command line for every host after
+# it. Measured on this machine, both orders, one browser process each time:
+#
+#   first host without the flag, second host with it -> browser has no --remote-debugging-port,
+#                                                       nothing listens, and the second host's
+#                                                       environment variable changed nothing;
+#   first host with the flag, second host without it -> browser carries the flag, the port listens,
+#                                                       and the second host shares it.
+#
+# So WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS is not a property of the application, it is a property
+# of whichever host happened to be first - and a harness that attaches to a window somebody else
+# opened cannot know whether that host had it. Run 35060930065 is what this is for: the variable
+# was provably set in the process that called Start-Process (install.log line 15), the application
+# was up, and the browser process had no flag on it.
+#
+# With -Launch the harness stops every host AND every browser process belonging to this
+# application's user-data directory, waits until none is left, and then starts the application
+# itself with the variable written onto the child's own environment block - UseShellExecute=false,
+# so this is a CreateProcess with an environment we built, not inheritance through a shell that may
+# or may not carry it. Both candidate causes go at once.
+#
+# Without -Launch the old behaviour is kept: attach to whatever is running, and let the CDP
+# precondition say whether that one has the port open.
+$USER_DATA_MARK = 'dev.encastra.app'   # tauri.conf.json `identifier`; names the EBWebView folder.
 
-$proc = Get-Process encastra-desktop -ErrorAction SilentlyContinue | Select-Object -First 1
+function EncastraHosts { return @(Get-CimInstance Win32_Process -Filter "Name='encastra-desktop.exe'" -ErrorAction SilentlyContinue) }
+function EncastraBrowsers {
+    return @(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -like "*$USER_DATA_MARK*" })
+}
+# Everything of this application that is running, gone, and said out loud - because "there was
+# already one running" and "a browser process outlived its host" are exactly the findings that
+# would explain a run where the flag never reached the browser.
+function StopSubject {
+    $hosts = EncastraHosts
+    $browsers = EncastraBrowsers
+    Note "-Launch : before starting anything, $($hosts.Count) encastra-desktop host(s) and $($browsers.Count) browser process(es) for $USER_DATA_MARK were already running"
+    foreach ($h in $hosts) { Note "-Launch : stopping host pid=$($h.ProcessId) started=$($h.CreationDate.ToString('s'))"; try { Stop-Process -Id $h.ProcessId -Force -ErrorAction Stop } catch { Note "-Launch : host pid=$($h.ProcessId) would not stop ($($_.Exception.GetType().Name))" } }
+    # The browser usually goes when its host does. Usually is not always, and a survivor is the
+    # thing that would silently hand the next launch a browser with the wrong command line.
+    for ($i = 0; $i -lt 60; $i++) {
+        if ((EncastraHosts).Count -eq 0 -and (EncastraBrowsers).Count -eq 0) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    foreach ($b in (EncastraBrowsers)) {
+        Note "-Launch : a browser process outlived its host and is being stopped: pid=$($b.ProcessId) parent=$($b.ParentProcessId) - a survivor here is what makes a later host's WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS do nothing"
+        try { Stop-Process -Id $b.ProcessId -Force -ErrorAction Stop } catch { }
+    }
+    for ($i = 0; $i -lt 30; $i++) {
+        if ((EncastraBrowsers).Count -eq 0) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    $left = (EncastraHosts).Count
+    $leftBrowsers = (EncastraBrowsers).Count
+    Report ($left -eq 0 -and $leftBrowsers -eq 0) '-Launch the machine has no Encastra of its own left before the harness starts one' "hosts left=$left, browser processes left=$leftBrowsers"
+}
+$script:launchedPid = 0
+function LaunchSubject($exe, $port) {
+    if (-not (Test-Path $exe)) {
+        Report $false '-Launch the application to drive is where it was said to be' "$exe does not exist"
+        return
+    }
+    $args_ = "--remote-debugging-port=$port"
+    # Set on this process too, so that anything else started from here agrees with the child.
+    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $args_
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $exe
+    $psi.WorkingDirectory = (Split-Path $exe -Parent)
+    # The whole point. UseShellExecute=false is what makes StartInfo.Environment mean anything: with
+    # it true the variable is whatever the shell decides to pass on, which is the thing that cannot
+    # be relied upon and the thing run 35060930065 could not rule out.
+    $psi.UseShellExecute = $false
+    $psi.Environment['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = $args_
+    try {
+        $started = [System.Diagnostics.Process]::Start($psi)
+    } catch {
+        Report $false '-Launch the harness started the application it drives' "$exe would not start: $($_.Exception.GetType().Name) - $($_.Exception.Message)"
+        return
+    }
+    $script:launchedPid = $started.Id
+    Report $true '-Launch the harness started the application it drives' "$exe as pid $($started.Id), with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=$args_ written onto its own environment block (UseShellExecute=false, so this is not inheritance through a shell)"
+}
+
+if ($Launch) {
+    StopSubject
+    LaunchSubject $Exe $CdpPort
+}
+
+$proc = if ($script:launchedPid -gt 0) { Get-Process -Id $script:launchedPid -ErrorAction SilentlyContinue } else { Get-Process encastra-desktop -ErrorAction SilentlyContinue | Select-Object -First 1 }
 if (-not $proc) {
-    "FAIL  Encastra is running  -> no encastra-desktop process; start the application first"
-    "SUMMARY  passed=0 failed=1 skipped=0"
+    "FAIL  Encastra is running  -> no encastra-desktop process; start the application first, or pass -Launch and let the harness start it"
+    "SUMMARY  passed=0 failed=1 skipped=0  repeat=$Repeat"
     exit 1
 }
 "app pid $($proc.Id) exited=$($proc.HasExited) exe=$($proc.Path)"

@@ -63,22 +63,21 @@ jobs:
 
       # Installed for real, not run out of target/: what is being tested is what a person would
       # have, including the per-user install directory the granted folders are checked against.
-      # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS is set on this step because this step is what
-      # launches the installed copy, and the flag has to be in the environment of the application
-      # itself rather than of the harness. It opens the DevTools protocol on 127.0.0.1:9222 for the
-      # life of that process, which is the only way the canvas can be observed at all: Chromium
-      # does not publish a div with no ARIA role to the accessibility tree, so UI Automation cannot
-      # see a placed step and the harness's canvas check was a permanent false negative. The
-      # reasoning and the measurements are in scripts/verify/cdp.mjs.
+      # This step used to carry WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, because this step is what
+      # launched the application that the journeys then attached to. It no longer does, and run
+      # 35060930065 is why: the variable was provably set in the process that called Start-Process
+      # (install.log line 15), the application came up, and the browser process it created had no
+      # --remote-debugging-port anywhere on its command line. Whether that was the shell not
+      # carrying the variable to the child or a browser process created earlier without it, the
+      # remedy is the same and it belongs to the harness, not here - so the harness now stops
+      # everything of the application that is running and starts it itself, with the flag written
+      # onto the child's own environment block. See scripts/verify/gui_journeys.ps1, "the
+      # application, started by the harness that drives it".
       #
-      # It is test-only. No shipped configuration sets it, nothing else in this repository sets it,
-      # and what an open debugging port on a desktop application means is written down in
-      # docs/security/AI-AGENT-SURFACE.md. It is declared on the two steps that need it rather than
-      # on the job, so that nothing else here inherits it.
+      # install_check still launches the installed copy, because launching and staying up is a
+      # property of the installation and is what this step is checking.
       - name: Install it
         shell: pwsh
-        env:
-          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9222'
         run: |
           $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           $installer = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
@@ -96,7 +95,11 @@ jobs:
         shell: pwsh
         run: ./scripts/verify/webview2_state.ps1 -Port 9222 | Tee-Object -FilePath webview2.log
 
-      # install_check.ps1 leaves the installed copy running, which is what this drives.
+      # -Launch: the harness stops whatever install_check left running, and everything else of this
+      # application, and starts the installed copy itself with the debugging flag on the child's own
+      # environment block. The flag is test-only; what an open debugging port on a desktop
+      # application exposes is written down in docs/security/AI-AGENT-SURFACE.md, no shipped
+      # configuration sets it, and it lives for exactly as long as the process the harness started.
       #
       # -Repeat 3: a chooser that works once and not twice works by accident. The suite runs three
       # times from a clean state, every line says which iteration it came from, and the SUMMARY
@@ -104,10 +107,8 @@ jobs:
       # verified.
       - name: Drive the chooser journeys
         shell: pwsh
-        env:
-          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9222'
         run: |
-          ./scripts/verify/gui_journeys.ps1 -Repeat 3 | Tee-Object -FilePath gui-journeys.log
+          ./scripts/verify/gui_journeys.ps1 -Launch -Repeat 3 | Tee-Object -FilePath gui-journeys.log
           $code = $LASTEXITCODE
           Write-Output "gui_journeys.ps1 exited $code"
           exit $code
