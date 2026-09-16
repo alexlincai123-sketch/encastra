@@ -142,12 +142,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Node 24, the version the developer machine builds with: the frontend bundle is embedded
-      # in the executable, so a different Node is one candidate for the bytes differing between
-      # the two machines (B7 in docs/RELEASE_CANDIDATE_READINESS.md). The gates job keeps 22.
+      # The exact Node the published bytes were built with, not the latest of a line. The frontend
+      # bundle is embedded in the executable, so the tool that produces it is part of the recipe,
+      # and `24` would drift to whatever 24.x the image has that week. The version lives in
+      # .nvmrc, which is also what scripts/verify/toolchain.py reads when it tells a developer
+      # whether their machine would produce the published bytes.
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
 
@@ -158,6 +160,10 @@ jobs:
       # a compiled artefact planted by one of those would be linked into the release without
       # anything in this file noticing. A release is built from nothing but the source and the
       # pinned toolchain; it is slower, and that is the price of the hashes meaning anything.
+
+      # The C toolchain, which rustc does not pin and which decided B7. See the action for what
+      # went wrong and why this is enough to fix it.
+      - uses: ./.github/actions/msvc-toolset
 
       # Signing, when there is something to sign with.
       #
@@ -209,6 +215,19 @@ jobs:
           else
             npm run tauri:build
           fi
+
+      # The installer is a function of its inputs, checked rather than assumed.
+      #
+      # rc.3's two release runs wrapped a byte-identical executable and produced two different
+      # installers, because NSIS stored the date of a file packaged before `SetDateSave off` took
+      # effect — the MUI welcome bitmap, out of the NSIS installation Tauri downloads for every
+      # job. The hooks file covers it now. This packages the build a second time, having moved the
+      # dates of everything NSIS packages, and requires the same bytes out; without the fix it
+      # fails here instead of at the reproduction step, where the cause was unreadable. It leaves
+      # the build's own installer in place for the steps below.
+      - name: The installer does not depend on when its inputs were written
+        shell: bash
+        run: python scripts/verify/installer_determinism.py
 
       # Every artefact in target/ must be this version's and this commit's, read from the
       # artefact itself (the VS_VERSIONINFO resource and the build stamp), not from its name.

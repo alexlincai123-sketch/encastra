@@ -149,7 +149,11 @@ def main() -> int:
     print(f"second {second.name}  {hashlib.sha256(second_bytes).hexdigest()}  {len(second_bytes)} B")
 
     after = sha256(BINARY)
-    keep.unlink(missing_ok=True)
+
+    # Whatever the verdict, leave the first installer where the build left it: the steps after
+    # this one compare the artefact against the published hashes, and they must see the build's
+    # own output rather than this check's second packaging of it.
+    shutil.move(str(keep), str(second))
 
     if after != binary_hash:
         print(
