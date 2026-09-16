@@ -1,0 +1,94 @@
+name: Chooser journeys
+
+# Drive the flows that decide what the application may read and write, through the interface,
+# on a machine where nobody is working.
+#
+# B5. Every filesystem permission in Encastra comes from a folder a person picked in a *native*
+# chooser, for a stated purpose — `publish-into`, `import-from`, `grant-to-component`,
+# `projects-location`, and `run-input` for a file. Until now only `projects-location` had ever
+# been driven end to end, and it is the one purpose that gates nothing. The other four had tests
+# underneath them and no evidence through them.
+#
+# A unit test cannot stand in for this. What is in doubt is the whole path — chooser, IPC, the
+# canonicalising, the registry, and then the operation the folder was picked for — and there is a
+# native modal dialog in the middle of it that no test harness ever opens.
+#
+# It runs here rather than on a developer machine because driving a modal dialog needs a desktop
+# nobody else is using, and because keystrokes aimed at a dialog have landed somewhere else in
+# this project before. The runner has a desktop, and no one is looking at it.
+#
+# The log is the evidence: scripts/release_check.py --evidence-gui reads it, and a SKIP in it is
+# NOT_VERIFIED rather than a pass.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['rc/**']
+    paths:
+      - '.github/workflows/gui-journeys.yml'
+      - 'scripts/verify/gui_journeys.ps1'
+      - 'scripts/verify/install_check.ps1'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  journeys:
+    name: Drive the choosers on a runner
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-03
+        with:
+          toolchain: '1.98.1'
+
+      - uses: ./.github/actions/msvc-toolset
+
+      - name: Build
+        shell: bash
+        run: npm run tauri:build
+
+      # Installed for real, not run out of target/: what is being tested is what a person would
+      # have, including the per-user install directory the granted folders are checked against.
+      - name: Install it
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $installer = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          ./scripts/verify/install_check.ps1 -Installer $installer.FullName -ExpectedVersion $version |
+            Tee-Object -FilePath install.log
+          if (Select-String -Path install.log -Pattern '^FAIL' -Quiet) { throw "install_check reported a failure" }
+
+      # install_check.ps1 leaves the installed copy running, which is what this drives.
+      - name: Drive the chooser journeys
+        shell: pwsh
+        run: |
+          ./scripts/verify/gui_journeys.ps1 | Tee-Object -FilePath gui-journeys.log
+          $code = $LASTEXITCODE
+          Write-Output "gui_journeys.ps1 exited $code"
+          exit $code
+
+      # Kept whatever happened: a failed run is the interesting one, and a log that only survives
+      # success is not evidence of anything.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: chooser-journeys-${{ github.run_id }}
+          path: |
+            gui-journeys.log
+            install.log
+          if-no-files-found: warn
+          retention-days: 90

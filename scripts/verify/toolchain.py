@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -45,6 +46,39 @@ MSVC_TOOLSET = "14.44.35207"
 
 PROGRAM_FILES_X86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
 VSWHERE = Path(PROGRAM_FILES_X86) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+
+
+def cargo_home() -> Path:
+    return Path(os.environ.get("CARGO_HOME") or (Path.home() / ".cargo"))
+
+
+def rustflags() -> list[str]:
+    """The flags a release build needs to come out the same on two machines.
+
+    rustc writes the path of every source file it compiles into the binary, for panic messages and
+    `#[track_caller]`. For a dependency that path is inside the Cargo registry, which lives under
+    the *user's* home directory — `C:\\Users\\alexl\\.cargo\\registry\\...` on this machine,
+    `C:\\Users\\runneradmin\\.cargo\\...` on a hosted runner. The names are different lengths, so
+    every string after the first shifts and two otherwise identical builds come out megabytes
+    apart. Counted in the 0.5.0-rc.3 artefacts: `alexl` 119 times in one, `runneradmin` 120 in the
+    other.
+
+    `--remap-path-prefix` rewrites them to something that does not name the machine. The flags
+    themselves differ between machines — each maps its own home — and that is the point: what has
+    to match is the output, not the command line.
+
+    Cargo's own `trim-paths` would be the tidier way to say this and is not stable in 1.98.1
+    (`feature 'trim-paths' is required`), so it is done with flags.
+
+    `-D warnings` is carried along because setting RUSTFLAGS replaces whatever the workflow had
+    set, and dropping it would quietly stop denying warnings in the one build that ships.
+    """
+    return [
+        "-D",
+        "warnings",
+        f"--remap-path-prefix={cargo_home()}=/cargo",
+        f"--remap-path-prefix={ROOT}=/encastra",
+    ]
 
 
 def expected_node() -> str:
@@ -199,12 +233,36 @@ def survey() -> dict:
     }
 
 
+# An absolute path to somebody's Cargo registry, whoever they are. Looked for structurally rather
+# than by account name, so the answer does not depend on which machine is asking: a binary
+# downloaded from a runner has to be judgeable here.
+REGISTRY_PATH = re.compile(rb"[A-Za-z]:[\\/](?:[^\x00\\/]{1,64}[\\/]){0,8}\.cargo[\\/]registry")
+
+
+def names_the_machine(binary: Path) -> list[str]:
+    """The build paths this binary gives away, if any.
+
+    A remapped build says nothing about where it was built. One that was not says it hundreds of
+    times, in the path of every dependency source file that could appear in a panic message. Those
+    paths run through the user's home directory, so two machines cannot agree on them — and
+    because the names are different lengths, everything after the first one shifts too.
+    """
+    data = binary.read_bytes()
+    seen: dict[str, int] = {}
+    for match in REGISTRY_PATH.finditer(data):
+        text = match.group().decode("utf-8", errors="replace")
+        seen[text] = seen.get(text, 0) + 1
+    return [f"{path} x{count}" for path, count in sorted(seen.items())]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="The tools a release is built with.")
     parser.add_argument("--check", action="store_true", help="exit 1 unless this machine agrees")
     parser.add_argument("--json", action="store_true", help="print the survey as JSON")
     parser.add_argument("--msvc", action="store_true", help="print the pinned MSVC toolset")
     parser.add_argument("--msvc-line", action="store_true", help="print it as vcvarsall wants it")
+    parser.add_argument("--rustflags", action="store_true", help="print the RUSTFLAGS a release build needs")
+    parser.add_argument("--check-binary", type=Path, help="exit 1 if this binary names the machine that built it")
     args = parser.parse_args()
 
     if args.msvc:
@@ -212,6 +270,31 @@ def main() -> int:
         return 0
     if args.msvc_line:
         print(".".join(MSVC_TOOLSET.split(".")[:2]))
+        return 0
+    if args.rustflags:
+        flags = rustflags()
+        # Cargo splits RUSTFLAGS on whitespace and has no way to quote, so a path with a space in
+        # it would be read as two flags and the build would come out unremapped without saying so.
+        spaced = [f for f in flags if " " in f]
+        if spaced:
+            print(f"a path in RUSTFLAGS contains a space and cargo cannot quote it: {spaced[0]}", file=sys.stderr)
+            return 1
+        print(" ".join(flags))
+        return 0
+    if args.check_binary:
+        if not args.check_binary.exists():
+            print(f"{args.check_binary} does not exist", file=sys.stderr)
+            return 1
+        found = names_the_machine(args.check_binary)
+        if found:
+            print(
+                f"{args.check_binary.name} names the machine that built it: {', '.join(found)}. "
+                "It was built without the remapping in `toolchain.py --rustflags`, so no other "
+                "machine can reproduce it.",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"{args.check_binary.name} does not name the machine that built it")
         return 0
 
     report = survey()

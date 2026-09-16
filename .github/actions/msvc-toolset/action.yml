@@ -83,3 +83,20 @@ runs:
     - name: The linker on PATH is that toolset's
       shell: pwsh
       run: python scripts/verify/toolchain.py --check
+
+    # The other half of building the same bytes twice.
+    #
+    # rustc writes the path of every source file into the binary for panic messages, and for a
+    # dependency that path is inside the Cargo registry — under the *user's* home directory, which
+    # is `runneradmin` here and something else everywhere else. The names are different lengths,
+    # so everything after the first one shifts: 433 of them in the rc.3 artefacts, three megabytes
+    # of difference between two builds that were otherwise the same. Setting RUSTFLAGS replaces
+    # whatever the workflow set, so `-D warnings` is carried along inside this value rather than
+    # left behind.
+    - name: Build paths that do not name this machine
+      shell: pwsh
+      run: |
+        $flags = python scripts/verify/toolchain.py --rustflags
+        if ($LASTEXITCODE -ne 0) { throw "could not compose RUSTFLAGS" }
+        "RUSTFLAGS=$flags" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        Write-Output "RUSTFLAGS=$flags"
