@@ -228,6 +228,15 @@ jobs:
   secrets:
     name: Secret scanning
     runs-on: ubuntu-latest
+    # On a pull request this action does not scan the checkout: it asks the API for the pull
+    # request's commits and scans those. With only the workflow-wide `contents: read` that call
+    # came back 403 "Resource not accessible by integration", the action threw, and the job went
+    # red — on every pull request this repository has had, whatever was in it. A gate that fails
+    # the same way for a clean branch and for one carrying a key is not a gate, and this one had
+    # never once run on a pull request. Reading pull requests is the least that fixes it.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -236,3 +245,7 @@ jobs:
       - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Findings belong in this job's log and its exit code, which is what fails the build.
+          # Writing them into the pull request as comments would need write access to it, and a
+          # scanner is the last thing that should be able to write anywhere.
+          GITLEAKS_ENABLE_COMMENTS: 'false'

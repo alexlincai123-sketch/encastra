@@ -45,15 +45,36 @@ runs:
         $keep = 'VCToolsVersion','VCToolsInstallDir','VCINSTALLDIR','VSINSTALLDIR','PATH','LIB',
                 'LIBPATH','INCLUDE','WindowsSdkDir','WindowsSDKVersion','UCRTVersion','WindowsSdkBinPath'
         $selected = $null
+        $toolsDir = $null
         foreach ($entry in $captured) {
           $name, $value = $entry -split '=', 2
           if ($keep -contains $name) {
             "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
             if ($name -eq 'VCToolsVersion') { $selected = $value.Trim() }
+            if ($name -eq 'VCToolsInstallDir') { $toolsDir = $value.Trim() }
           }
         }
         if ($selected -ne $want) { throw "asked for MSVC $want, got '$selected'" }
         Write-Output "MSVC $selected"
+
+        # Name the linker outright instead of leaving it to PATH.
+        #
+        # Until something sets VCINSTALLDIR, rustc asks Visual Studio where the linker is and gets
+        # the right answer whatever PATH says. The moment a developer command prompt exists —
+        # which is the whole point of the step above — rustc takes that as the answer and resolves
+        # `link.exe` on PATH instead. A step that runs `shell: bash` gets Git for Windows' PATH,
+        # where `C:\Program Files\Git\usr\bin` comes first and holds a coreutils `link`. The build
+        # then fails with `/usr/bin/link: extra operand`, blaming the C++ workload for something
+        # it did not do. This is not hypothetical: it is what the first run with the toolset
+        # pinned did, on every crate with a build script.
+        #
+        # Cargo reads this per target and passes it to rustc as -C linker, so it holds in any
+        # shell and does not depend on PATH order at all.
+        if (-not $toolsDir) { throw "vcvarsall did not report VCToolsInstallDir" }
+        $linker = Join-Path $toolsDir 'bin\Hostx64\x64\link.exe'
+        if (-not (Test-Path $linker)) { throw "no link.exe under $toolsDir" }
+        "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        Write-Output "linker $linker"
 
     # Proof that the selection took, rather than an assumption about how rustc searches. Inside a
     # developer command prompt PATH is what decides, and Git for Windows ships a coreutils `link`

@@ -18,7 +18,16 @@ on:
   workflow_dispatch:
   push:
     branches: ['rc/**']
-    paths: ['.github/workflows/cross-machine-reproduction.yml']
+    # The things whose effect this job exists to measure. Not every push: the build takes the
+    # better part of half an hour of Windows minutes, and a private repository on the free plan
+    # has two thousand a month.
+    paths:
+      - '.github/workflows/cross-machine-reproduction.yml'
+      - '.github/actions/msvc-toolset/action.yml'
+      - 'scripts/verify/toolchain.py'
+      - 'scripts/verify/installer_determinism.py'
+      - 'apps/desktop/src-tauri/nsis/hooks.nsh'
+      - '.nvmrc'
 
 permissions:
   contents: read

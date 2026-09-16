@@ -97,17 +97,33 @@ def installed_toolsets() -> list[str]:
     return sorted(p.name for p in tools.iterdir() if p.is_dir())
 
 
-def linker_on_path() -> Path | None:
-    """The `link.exe` PATH resolves to, which is not always the one a build uses.
+LINKER_OVERRIDE = "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER"
 
-    rustc does not look on PATH: it asks Visual Studio where the linker is, so a developer
-    building from Git Bash — where Git's coreutils `link` comes first — still links with MSVC's
-    and still produces the published bytes. PATH only decides when something has deliberately set
-    up a developer command prompt, which is what the release workflow does so it can choose the
-    toolset. So this is reported always and judged only then; see `survey`.
+
+def effective_linker() -> tuple[Path | None, str, bool]:
+    """The `link.exe` a build here would run, how that is decided, and whether it decides.
+
+    Three cases, and they are not interchangeable:
+
+    - Cargo was told outright (`CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER`). It passes it to
+      rustc as `-C linker`, and nothing else gets a say. This is what the release does.
+    - A developer command prompt is active (`VCToolsVersion` is set) and cargo was not told. rustc
+      takes the prompt as the answer and resolves `link.exe` on PATH — so PATH decides, and a
+      `shell: bash` step, where Git for Windows' coreutils `link` comes first, links with the
+      wrong thing and fails claiming the C++ workload is broken.
+    - Neither. rustc asks Visual Studio and ignores PATH, so whatever `link` is on PATH is
+      irrelevant — which is the normal case on a developer machine building from Git Bash.
+
+    The third case is reported and not judged; the first two are judged.
     """
+    override = os.environ.get(LINKER_OVERRIDE, "").strip()
+    if override:
+        return Path(override), f"{LINKER_OVERRIDE} (cargo passes it to rustc)", True
     found = shutil.which("link.exe") or shutil.which("link")
-    return Path(found) if found else None
+    path = Path(found) if found else None
+    if os.environ.get("VCToolsVersion", "").strip():
+        return path, "PATH (a developer command prompt is active, so rustc uses it)", True
+    return path, "PATH (not consulted: rustc asks Visual Studio instead)", False
 
 
 def running_version(exe: Path) -> str:
@@ -129,7 +145,7 @@ def tool_version(command: list[str]) -> str:
 
 def survey() -> dict:
     active, how = active_msvc()
-    linker = linker_on_path()
+    linker, linker_how, linker_decides = effective_linker()
     node = tool_version(["node", "--version"]).lstrip("v")
     rustc = tool_version(["rustc", "--version"])
     rustc_version = rustc.split()[1] if rustc.startswith("rustc ") else rustc
@@ -151,18 +167,14 @@ def survey() -> dict:
                 else "not installed here (installed: " + (", ".join(installed) or "none") + ")"
             )
         )
-    # Only judged inside a developer command prompt. Elsewhere rustc ignores PATH and asks Visual
-    # Studio, so Git's coreutils `link` coming first is untidy rather than wrong. Inside one, PATH
-    # is the whole point: it is how the workflow hands rustc a chosen toolset, and a linker from
-    # anywhere else means the selection did not take and the bytes will not match.
-    in_developer_prompt = bool(os.environ.get("VCToolsVersion", "").strip())
-    if in_developer_prompt and linker is not None and MSVC_TOOLSET not in str(linker):
+    # Judged only where the answer decides the build — see `effective_linker`.
+    if linker_decides and linker is None:
+        problems.append(f"the linker is decided by {linker_how}, and there is no link.exe there")
+    elif linker_decides and MSVC_TOOLSET not in str(linker):
         problems.append(
-            f"this is a developer command prompt for MSVC {active}, but the first link.exe on "
-            f"PATH is {linker} — the toolset selection did not take"
+            f"the linker is decided by {linker_how} and resolves to {linker}, which is not MSVC "
+            f"{MSVC_TOOLSET}'s — this build would link with the wrong thing"
         )
-    elif in_developer_prompt and linker is None:
-        problems.append("this is a developer command prompt, but there is no link.exe on PATH")
 
     if node and node != expected_node():
         problems.append(f"node {node} against the pinned {expected_node()} (.nvmrc)")
@@ -178,6 +190,8 @@ def survey() -> dict:
             "node": node,
             "rustc": rustc_version,
             "linker": str(linker) if linker else None,
+            "linker_decided_by": linker_how,
+            "linker_decides": linker_decides,
             "linker_version": running_version(linker) if linker else None,
         },
         "problems": problems,
@@ -208,7 +222,8 @@ def main() -> int:
         print(f"MSVC   expected {expected['msvc']}  found {found['msvc']}  ({found['msvc_decided_by']})")
         print(f"node   expected {expected['node']}  found {found['node'] or '—'}")
         print(f"rustc  expected {expected['rustc']}  found {found['rustc'] or '—'}")
-        print(f"linker {found['linker'] or '— none on PATH'}")
+        print(f"linker {found['linker'] or '— none found'}")
+        print(f"       decided by {found['linker_decided_by']}")
         if found["linker_version"]:
             print(f"       {found['linker_version']}")
         for problem in report["problems"]:
