@@ -17,6 +17,7 @@
 
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { chooseFolderOrExplain } from '../chooser';
 import {
   formatDate,
   formatNumber,
@@ -285,12 +286,22 @@ function ProjectsSection() {
   const projectFolder = usePreferences((p) => p.projectFolder);
   const set = usePreferences((p) => p.set);
   const about = useEditor((s) => s.about);
+  // The same local-note pattern `LanguageSection` above uses for a locale that would not load:
+  // one string, cleared when the next attempt starts, rendered as an `s-note` under the control
+  // it is about. This category had no error surface at all, which is why a refused folder here
+  // was the most invisible of the four.
+  const [error, setError] = useState<string | null>(null);
 
   const browse = () => {
     // A preference, and only a preference. This used to share one record with grants, publishing
     // and importing, so browsing here quietly made this folder writable by a component and
     // publishable into. Under its own purpose it answers only the question it was asked.
-    void ipc.pickFolder('projects-location').then((chosen) => {
+    //
+    // And the runtime can say no to the folder that was picked — a sensitive root, a startup
+    // folder — which arrived here as an unhandled rejection: the Browse button appeared to do
+    // nothing, forever. Cancelling still does nothing, because nothing was refused.
+    setError(null);
+    void chooseFolderOrExplain('projects-location', setError).then((chosen) => {
       if (chosen) set('projectFolder', chosen);
     });
   };
@@ -314,6 +325,7 @@ function ProjectsSection() {
             browseTitle={ipc.live ? undefined : t('settings.projects.location.browseUnavailable')}
           />
         </SettingRow>
+        {error ? <p className="s-note">{error}</p> : null}
       </SettingCard>
 
       <SettingCard title={t('settings.projects.format.title')}>

@@ -17,8 +17,9 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import { create } from 'zustand';
+import { chooseFile, chooseFolder, describeFailure } from './chooser';
 import type { Demo } from './demos';
-import { describeAppError, describeStatusMessage, importErrorIn } from './errors';
+import { describeStatusMessage, importErrorIn } from './errors';
 import { subscribe, type WorkflowStatus } from './events';
 import {
   cut,
@@ -177,6 +178,21 @@ interface EditorState {
   connect: (connection: Connection) => void;
   setInput: (node: string, port: string, path: string) => void;
   setGrant: (grant: GrantSpec) => void;
+  /**
+   * Asks for the folder a step's setting names, and says so when the runtime refuses the one
+   * that was picked.
+   *
+   * Here rather than on the button for the reason `restoreVersion` is here: the Inspector has no
+   * error surface of its own and never needed one — a failed action of its own puts a sentence in
+   * the status bar, through the store. Opening the chooser from the button and dropping the
+   * rejection on the floor was the one thing in that panel that said nothing at all.
+   *
+   * A chooser closed with nothing changes nothing and shows nothing. That is a cancel, not a
+   * refusal, and it is the distinction this whole method exists to keep.
+   */
+  chooseConfigFolder: (nodeId: string, key: string) => Promise<void>;
+  /** The same for the file an unconnected input needs before the graph can run. */
+  chooseEntryInput: (nodeId: string, port: string) => Promise<void>;
   showRecording: (journal: RunJournal, label: string) => void;
   check: () => Promise<void>;
   run: () => Promise<void>;
@@ -518,6 +534,28 @@ export const useEditor = create<EditorState>((set, get) => ({
     set((s) => ({
       grants: [...s.grants.filter((g) => !(g.node === grant.node && g.kind === grant.kind)), grant],
     }));
+  },
+
+  async chooseConfigFolder(nodeId, key) {
+    // This path becomes a step's folder, and the folder in a grant on the next run. It is chosen
+    // to be given to a component and recorded as nothing else, so it does not also become
+    // somewhere a publication may be written.
+    const choice = await chooseFolder('grant-to-component');
+    if (choice.outcome === 'refused') {
+      set({ message: { tone: 'error', text: choice.text } });
+      return;
+    }
+    // Backed out of. Nothing was chosen, so nothing was refused and there is nothing to say.
+    if (choice.outcome === 'chosen') get().setConfig(nodeId, key, choice.path);
+  },
+
+  async chooseEntryInput(nodeId, port) {
+    const choice = await chooseFile();
+    if (choice.outcome === 'refused') {
+      set({ message: { tone: 'error', text: choice.text } });
+      return;
+    }
+    if (choice.outcome === 'chosen') get().setInput(nodeId, port, choice.path);
   },
 
   showRecording(journal, label) {
@@ -1385,23 +1423,17 @@ function asImportFailure(error: unknown): ImportError | string {
   return importErrorIn(error) ?? describe(error);
 }
 
+/**
+ * One sentence for a rejection, whatever shape it arrived in.
+ *
+ * This was written out here until the chooser needed the same thing. It lives in `chooser.ts`
+ * now — a structured refusal gets its translated sentence, an `Error` or a string keeps its own
+ * words, a bare object with a `message` is a rejected Tauri command that did not cross as an
+ * `Error`, and nothing at all says so. One copy, so a chooser refusal and a failed save cannot
+ * drift into being described two different ways.
+ */
 function describe(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  // A structured refusal from the runtime: a tag, and the values a sentence needs. Every tag has
-  // a sentence in all six languages, which is the point of the whole contract — this line used to
-  // render whatever English the runtime had built, to whoever happened to be reading.
-  const described = describeAppError(error);
-  if (described !== null) return described;
-  // Anything else carrying a `message` is a rejection that crossed the bridge as a plain object
-  // rather than as an `Error` — which is what a rejected Tauri command looks like on this side,
-  // and which used to be reported as silence even though the runtime had said precisely what
-  // was wrong.
-  if (typeof error === 'object' && error !== null) {
-    const { message } = error as { message?: unknown };
-    if (typeof message === 'string' && message.length > 0) return message;
-  }
-  return translate('messages.runtimeSilent');
+  return describeFailure(error);
 }
 
 /**

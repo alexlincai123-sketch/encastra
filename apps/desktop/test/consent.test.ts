@@ -75,45 +75,57 @@ describe('the purposes both sides agree on', () => {
 });
 
 describe('every folder chooser in the editor says what it is for', () => {
-  /** Each file that opens the chooser, and the one purpose that flow may ask for. */
-  const CALLERS: { file: string; purpose: FolderPurpose; why: string }[] = [
+  /**
+   * Anything that opens the folder chooser, however it reaches `choose_folder`.
+   *
+   * `ipc.pickFolder` is the bare call; `chooseFolder` and `chooseFolderOrExplain` in
+   * `chooser.ts` wrap it so that a refusal becomes a sentence somebody can read rather than an
+   * unhandled rejection. All three take the purpose as their first argument, so one pattern
+   * finds every one of them — and a new wrapper that quietly dropped the purpose would show up
+   * as a call with nothing to match.
+   */
+  const OPENS_A_CHOOSER = /(?:ipc\.pickFolder|chooseFolderOrExplain|chooseFolder)\(([^,)]*)/g;
+
+  /** Each file that opens the chooser, and the purposes its flows may ask for. */
+  const CALLERS: { file: string; purposes: FolderPurpose[]; why: string }[] = [
     {
       file: 'apps/desktop/src/store.ts',
-      purpose: 'import-from',
-      why: 'beginImport reads a publication out of the folder',
+      purposes: ['import-from', 'grant-to-component'],
+      why: 'beginImport reads a publication out of a folder, and chooseConfigFolder makes one a grant',
     },
     {
       file: 'apps/desktop/src/panels/Publish.tsx',
-      purpose: 'publish-into',
+      purposes: ['publish-into'],
       why: 'prepare writes a publication into the folder',
     },
     {
-      file: 'apps/desktop/src/panels/Inspector.tsx',
-      purpose: 'grant-to-component',
-      why: "the path becomes a step's folder and then a grant",
-    },
-    {
       file: 'apps/desktop/src/views/Settings.tsx',
-      purpose: 'projects-location',
+      purposes: ['projects-location'],
       why: 'it is a preference and gates nothing',
     },
   ];
 
-  it.each(CALLERS)('$file asks for $purpose — $why', ({ file, purpose }) => {
+  it.each(CALLERS)('$file asks for $purposes — $why', ({ file, purposes }) => {
     const source = read(file);
-    const calls = [...source.matchAll(/ipc\.pickFolder\(([^)]*)\)/g)].map((m) => m[1].trim());
+    const calls = [...source.matchAll(OPENS_A_CHOOSER)].map((m) => m[1].trim());
 
     expect(calls.length, `${file} should open the folder chooser`).toBeGreaterThan(0);
+    const allowed = purposes.map((purpose) => `'${purpose}'`);
     for (const argument of calls) {
       expect(argument, `${file} must name a purpose, not open a bare chooser`).not.toBe('');
-      expect(argument).toBe(`'${purpose}'`);
+      expect(allowed, `${file} named ${argument}`).toContain(argument);
     }
+    // Every purpose claimed above is actually asked for, so an entry cannot go stale by being
+    // widened and then never used.
+    for (const purpose of allowed) expect(calls).toContain(purpose);
   });
 
   it('is the whole list — no other file opens the chooser without being named here', () => {
     // A fifth call site added without a purpose decision is the failure this catches. The
     // search is over the editor's own source; `ipc.ts` declares and implements the method and
-    // is where the four above end up, so it is not a caller.
+    // `chooser.ts` wraps it — both are where the callers above end up, not callers themselves.
+    // The Inspector reaches the chooser through the store (`chooseConfigFolder`), which is what
+    // gives its refusals somewhere to be shown, so it names no purpose of its own.
     const searched = [
       'apps/desktop/src/store.ts',
       'apps/desktop/src/panels/Publish.tsx',
@@ -127,9 +139,11 @@ describe('every folder chooser in the editor says what it is for', () => {
     const named = new Set(CALLERS.map((c) => c.file));
     for (const file of searched) {
       if (named.has(file)) continue;
-      expect(read(file), `${file} opens the folder chooser and is not in CALLERS`).not.toContain(
-        'ipc.pickFolder(',
-      );
+      const source = read(file);
+      expect(
+        [...source.matchAll(OPENS_A_CHOOSER)],
+        `${file} opens the folder chooser and is not in CALLERS`,
+      ).toEqual([]);
     }
   });
 });
@@ -224,11 +238,17 @@ describe('the file an input is given', () => {
     // `setInput` is the single door. If a second place started writing into `inputs`, a path
     // could arrive without a chooser having been opened — and while the runtime would refuse
     // it, the person would be shown a filled-in field for a file that cannot be read.
+    //
+    // The button now calls a store method rather than the chooser directly, because
+    // `choose_file` can *refuse* the file it was handed and a rejection in an `onClick` is a
+    // button that silently does nothing. The door is still one door; it moved by one file.
     const inspector = read('apps/desktop/src/panels/Inspector.tsx');
-    expect(inspector).toContain('const chosen = await ipc.pickFile();');
-    expect(inspector).toContain('if (chosen) setInput(nodeId, port, chosen);');
+    expect(inspector).toContain('onClick={() => void chooseEntryInput(nodeId, port)}');
+    expect(inspector).not.toContain('ipc.pickFile(');
 
     const store = read('apps/desktop/src/store.ts');
+    expect(store).toContain('const choice = await chooseFile();');
+    expect(store).toContain("if (choice.outcome === 'chosen') get().setInput(nodeId, port, choice");
     // One assignment that adds to `inputs`; every other mention clears it or reads it.
     const additions = [...store.matchAll(/\.\.\.s\.inputs\.filter\(/g)];
     expect(additions).toHaveLength(1);
