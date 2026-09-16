@@ -203,5 +203,63 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertTrue(set(report["statuses"]) <= {"PASS", "FAIL", "BLOCKED", "NOT_VERIFIED", "EXTERNAL_REQUIRED"}, report["statuses"])
 
 
+class CiEvidenceTests(unittest.TestCase):
+    """What the CI runs for a commit are taken to mean.
+
+    Asked of the reading directly rather than through the fixture: the thing under test is what
+    `gh run list`'s answer means, not the machinery that fetches it.
+    """
+
+    @staticmethod
+    def judge(*runs: dict):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import release_check
+
+        return release_check.judge_runs(list(runs), "git@example.invalid:x/y.git", "0123456789abcdef")
+
+    @staticmethod
+    def a_run(name: str = "CI", *, status: str, conclusion: str | None) -> dict:
+        return {
+            "name": name,
+            "status": status,
+            "conclusion": conclusion,
+            "url": f"https://example.invalid/{name.replace(' ', '-')}",
+        }
+
+    def test_a_green_run_is_evidence(self) -> None:
+        self.assertEqual(self.judge(self.a_run(status="completed", conclusion="success")).status, "PASS")
+
+    def test_a_run_that_finished_badly_fails(self) -> None:
+        check = self.judge(self.a_run(status="completed", conclusion="failure"))
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("failure", check.evidence)
+
+    def test_a_run_still_going_is_not_yet_known(self) -> None:
+        # An unfinished run has no conclusion at all. Reading that as "not success" said the
+        # release was broken while CI was still running, and said the opposite minutes later.
+        check = self.judge(self.a_run(status="in_progress", conclusion=None))
+        self.assertEqual(check.status, "NOT_VERIFIED")
+        self.assertIn("in progress", check.evidence)
+        self.assertIn("https://example.invalid/CI", check.evidence)
+
+    def test_a_queued_run_is_not_yet_known_either(self) -> None:
+        self.assertEqual(self.judge(self.a_run(status="queued", conclusion=None)).status, "NOT_VERIFIED")
+
+    def test_a_finished_failure_outranks_something_still_going(self) -> None:
+        check = self.judge(
+            self.a_run("CI", status="completed", conclusion="failure"),
+            self.a_run("Cross-machine reproduction", status="in_progress", conclusion=None),
+        )
+        self.assertEqual(check.status, "FAIL", "a run known to have failed is known now")
+
+    def test_a_cancelled_run_is_a_failure_not_an_unknown(self) -> None:
+        self.assertEqual(self.judge(self.a_run(status="completed", conclusion="cancelled")).status, "FAIL")
+
+    def test_no_run_of_a_required_workflow_is_not_yet_known(self) -> None:
+        check = self.judge(self.a_run("Something else", status="completed", conclusion="success"))
+        self.assertEqual(check.status, "NOT_VERIFIED")
+        self.assertIn("no run of CI", check.evidence)
+
+
 if __name__ == "__main__":
     unittest.main()

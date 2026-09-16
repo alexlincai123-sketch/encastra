@@ -318,17 +318,38 @@ def check_ci(no_network: bool) -> Check:
         runs = json.loads(result.stdout or "[]")
     except json.JSONDecodeError:
         runs = []
+    return judge_runs(runs, remote, head)
+
+
+def judge_runs(runs: list[dict], remote: str, head: str) -> Check:
+    """What the runs for this commit say, separated from the business of fetching them.
+
+    A run that has not finished is not a run that failed. Both used to come out FAIL, because the
+    test was `conclusion != "success"` and an unfinished run has no conclusion at all — so asking
+    for the verdict while CI was still going said the release was broken, and asking again a few
+    minutes later said it was fine. NOT_VERIFIED is what "not known yet" means here, and it blocks
+    a release just the same; FAIL is for a run that finished and did not pass.
+    """
     if not runs:
         return Check("ci.evidence", NOT_VERIFIED, f"remote {remote}; no workflow run exists for {head[:12]}", "push this commit and let CI run")
     by_name: dict[str, dict] = {}
     for item in runs:
         by_name.setdefault(item["name"], item)
     missing = [w for w in REQUIRED_WORKFLOWS if w not in by_name]
-    failed = [f"{n}: {r['status']}/{r.get('conclusion')}" for n, r in by_name.items() if r.get("conclusion") != "success"]
     if missing:
         return Check("ci.evidence", NOT_VERIFIED, f"no run of {', '.join(missing)} for {head[:12]}", "push and wait for CI")
+
+    finished = {n: r for n, r in by_name.items() if r.get("status") == "completed"}
+    running = {n: r for n, r in by_name.items() if r.get("status") != "completed"}
+    failed = [f"{n}: {r.get('conclusion')}" for n, r in finished.items() if r.get("conclusion") != "success"]
+
+    # A run that finished badly is known to be bad, whatever else is still going.
     if failed:
         return Check("ci.evidence", FAIL, "; ".join(failed), "fix the workflow before releasing; " + by_name[REQUIRED_WORKFLOWS[0]].get("url", ""))
+    if running:
+        still = "; ".join(f"{name}: {item.get('status')}" for name, item in running.items())
+        where = next(iter(running.values())).get("url", "")
+        return Check("ci.evidence", NOT_VERIFIED, f"run in progress: {still} — {where}", "wait for the run to finish, then ask again")
     return Check("ci.evidence", PASS, f"{', '.join(by_name)} green for {head[:12]}: " + by_name[REQUIRED_WORKFLOWS[0]].get("url", ""))
 
 
