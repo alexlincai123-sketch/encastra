@@ -910,6 +910,27 @@ $CDP_SCROLL_ENTRY_CHOOSE = "(()=>{$CDP_SCROLL_PRELUDE const i=p.querySelector('i
 $CDP_SCROLL_ALLOW = "(()=>{$CDP_SCROLL_PRELUDE const b=[...p.querySelectorAll('button')].find(e=>/^(Permitir|Allow|Permitido|Allowed)/.test((e.innerText||'').trim()));$CDP_SCROLL_EPILOGUE})()"
 # Run is in the toolbar rather than the Inspector, so it is named across the whole page.
 $CDP_SCROLL_RUN = "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/^(Ejecutar|Run)$/.test((e.innerText||'').trim()));if(!b)return 'not found';b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return 'at '+Math.round(r.left)+','+Math.round(r.top)+' '+Math.round(r.width)+'x'+Math.round(r.height);})()"
+# --- and the same for the Publish and Import panels ---------------------------------------------
+#
+# `PASS j2 Prepare is armed for a clean saved project -> enabled=True` and then `SKIP j2
+# publish-into journey ran to the end -> the control 'Prepare...' is off screen`, on the runner's
+# 749px window: the same class as the Inspector's Allow, in a different panel. Every button this
+# file presses in the Publish panel (Prepare, twice; Close) and in the Import panel that shares its
+# shell (Import, Close) now goes through ClickInView as well.
+#
+# Named by the panel's own structure rather than by a guess at the page: Publish.tsx and Import.tsx
+# both render `.publish__panel` with a `footer.publish__actions` holding the buttons, and the button
+# inside it is picked by its words - which the harness already matches in both languages - so Close
+# and Prepare cannot be confused. What the page answers includes where the panel itself ends,
+# because measured over CDP against the rc4 build the panel is taller than the window and its shade
+# (`.publish`, position fixed) does not scroll: scrollIntoView moves nothing, and a FAIL that said
+# only "still off screen" would not say that the reason is the product's layout and not the harness.
+function CdpScrollPanelButton($pattern) {
+    return "(()=>{const f=document.querySelector('.publish__panel .publish__actions');if(!f)return 'no Publish or Import panel footer is on the page';const b=[...f.querySelectorAll('button')].find(e=>/$pattern/.test((e.innerText||'').trim()));if(!b)return 'no button in the panel footer matches $pattern';b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();const p=f.closest('.publish__panel').getBoundingClientRect();const H=document.documentElement.clientHeight;const s=document.querySelector('.publish');return 'at '+Math.round(r.left)+','+Math.round(r.top)+' '+Math.round(r.width)+'x'+Math.round(r.height)+' of a '+H+'px window; the panel runs from '+Math.round(p.top)+' to '+Math.round(p.bottom)+(r.bottom>H&&s?(' - the button ends below the window; the shade the panel sits in has overflow-y '+getComputedStyle(s).overflowY+' and holds '+s.scrollHeight+'px of content in '+s.clientHeight+'px'):'');})()"
+}
+$CDP_SCROLL_PREPARE = CdpScrollPanelButton '^(Preparar|Prepare)'
+$CDP_SCROLL_PANEL_CLOSE = CdpScrollPanelButton '^(Cerrar|Close)$'
+$CDP_SCROLL_IMPORT_CONFIRM = CdpScrollPanelButton '^(Importar|Import)$'
 function ScrollInspectorTo($js, $what) {
     $where = Cdp-Eval $js
     Note "$what : scrolled it into view - $where$(if ($script:cdpError) { " ($script:cdpError)" })"
@@ -919,7 +940,12 @@ function ScrollInspectorTo($js, $what) {
 # the harness can reach, and a SKIP the harness could have avoided is a skip that is really a
 # defect in the harness. So: scroll, wait for the element to say it is on screen, and only then
 # press it. If it is still off screen after that, it FAILS with what the page said, and never SKIPs.
-function ClickInspector($el, $js, $what) {
+#
+# Not the Inspector's alone any more: any panel that can put a control below the fold, with the
+# page expression that names that control. ClickInspector is kept as the name the Inspector's call
+# sites already use.
+function ClickInspector($el, $js, $what) { ClickInView $el $js $what }
+function ClickInView($el, $js, $what) {
     if (-not $el) { throw "SKIP: $what is not on screen at all" }
     # Which element is about to be pressed, every time. `PASS Run is available -> enabled=True`
     # followed by a run that never happened leaves exactly one question open - what did it press -
@@ -2701,7 +2727,7 @@ function Journey2 {
             Report $true 'j2 Prepare is armed for a clean saved project' "enabled=$($prepare.Current.IsEnabled)"
 
             # Negative: cancel. Nothing may be written and the panel must not claim it was.
-            Click $prepare
+            ClickInView $prepare $CDP_SCROLL_PREPARE 'j2 the Prepare button'
             $dlg = WaitDialog 12
             Report ($null -ne $dlg) 'j2 chooser opened for publish-into' "'$($dlg.Current.Name)'"
             CancelChooser $dlg 'j2'
@@ -2711,7 +2737,7 @@ function Journey2 {
             Report ($null -eq $doneSection -and $wrote.Count -eq 0) 'j2 Cancel wrote nothing and claimed nothing' "'Where it went' shown=$($null -ne $doneSection); entries in the folder=$($wrote.Count)"
 
             # Confirm, and then the thing the folder was chosen for actually happening.
-            Click (MustFind (Wait 'Button' '^(Preparar|Prepare)' 10) 'the Prepare button did not come back after the cancelled chooser')
+            ClickInView (MustFind (Wait 'Button' '^(Preparar|Prepare)' 10) 'the Prepare button did not come back after the cancelled chooser') $CDP_SCROLL_PREPARE 'j2 the Prepare button'
             $dlg = WaitDialog 12
             ConfirmChooser $dlg $publishInto 'j2' 'folder'
             ReportChooserClosed 'j2'
@@ -2728,7 +2754,7 @@ function Journey2 {
         }
 
         $close = Wait 'Button' '^(Cerrar|Close)$' 8
-        if ($close) { Click $close; Start-Sleep -Milliseconds 600 }
+        if ($close) { ClickInView $close $CDP_SCROLL_PANEL_CLOSE 'j2 the Publish panel Close button'; Start-Sleep -Milliseconds 600 }
     } catch {
         JourneyEnded $_ 'j2 publish-into journey ran to the end'
     }
@@ -2801,7 +2827,7 @@ function Journey3 {
                     Report $false 'j3 a path that is not there was refused, in words' 'the chooser closed and the application showed no refusal at all'
                 }
                 $close = Wait 'Button' '^(Cerrar|Close)$' 5
-                if ($close) { Click $close; Start-Sleep -Milliseconds 500 }
+                if ($close) { ClickInView $close $CDP_SCROLL_PANEL_CLOSE 'j3 the Import panel Close button'; Start-Sleep -Milliseconds 500 }
             }
         } else {
             Report $false 'j3 chooser opened for the missing-path probe' 'no chooser appeared'
@@ -2834,7 +2860,7 @@ function Journey3 {
                         Report $false 'j3 a junction is resolved or refused, never followed blindly' 'the chooser closed and the application said nothing about it'
                     }
                     $close = Wait 'Button' '^(Cerrar|Close)$' 5
-                    if ($close) { Click $close; Start-Sleep -Milliseconds 500 }
+                    if ($close) { ClickInView $close $CDP_SCROLL_PANEL_CLOSE 'j3 the Import panel Close button'; Start-Sleep -Milliseconds 500 }
                 }
             } else {
                 Report $false 'j3 chooser opened for the junction probe' 'no chooser appeared'
@@ -2857,7 +2883,7 @@ function Journey3 {
                 Report ($null -ne $named) 'j3 the report names what was prepared in journey 2' "'$named'"
                 $confirm = Wait 'Button' '^(Importar|Import)$' 8
                 if ($confirm -and $confirm.Current.IsEnabled) {
-                    Click $confirm
+                    ClickInView $confirm $CDP_SCROLL_IMPORT_CONFIRM 'j3 the Import panel Import button'
                     $taken = FindText '(Recibido Journey evidence|Imported Journey evidence)' 25
                     Report ($null -ne $taken) 'j3 importing put it in the library' "'$taken'"
                 } else {
@@ -2866,7 +2892,7 @@ function Journey3 {
             } else {
                 Report $false 'j3 the chosen folder was read as a publication' "no report on screen; refusal: '$refused'"
                 $close = Wait 'Button' '^(Cerrar|Close)$' 5
-                if ($close) { Click $close }
+                if ($close) { ClickInView $close $CDP_SCROLL_PANEL_CLOSE 'j3 the Import panel Close button' }
             }
         }
     } catch {
