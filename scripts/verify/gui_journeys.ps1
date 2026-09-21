@@ -1678,24 +1678,30 @@ function WriteNameField($f, $path) {
     # The Value pattern first wherever the control publishes one. It goes through the control - the
     # dialog's own edit, windowless or not - where WM_SETTEXT to a container's handle only changes
     # what that window displays. Both are tried; the read-back below still decides.
+    # Which of the routes below put the text there, for the read-back line to name: a folder
+    # picker's name box is written here and never typed into (TypeIntoDialog is the file dialogs').
+    $script:writeHow = 'nothing (no route below took)'
     $wrote = $false
     if ($f.Element) {
         try {
             $f.Element.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($path)
             $wrote = $true
+            $script:writeHow = "the control's UIA Value pattern"
         } catch { $wrote = $false }
     }
-    if (-not $wrote -and $f.Hwnd -ne $NULLPTR) { [void][W32]::SendMessageW($f.Hwnd, $WM_SETTEXT, $NULLPTR, $path) }
+    if (-not $wrote -and $f.Hwnd -ne $NULLPTR) { [void][W32]::SendMessageW($f.Hwnd, $WM_SETTEXT, $NULLPTR, $path); $script:writeHow = "WM_SETTEXT to #$($f.Hwnd) (class $(HwndClass $f.Hwnd), parent class $(HwndClass ([W32]::GetParent($f.Hwnd))))" }
     Start-Sleep -Milliseconds 350
     # And if the Value pattern took the string but the dialog did not, the handle is still there.
     if ((ReadNameField $f) -ne $path -and $f.Hwnd -ne $NULLPTR) {
         [void][W32]::SendMessageW($f.Hwnd, $WM_SETTEXT, $NULLPTR, $path)
+        $script:writeHow = "WM_SETTEXT to #$($f.Hwnd), after the Value pattern did not take"
         Start-Sleep -Milliseconds 350
     }
     # A ComboBoxEx32 hands its own WM_SETTEXT to the edit it owns; if writing the edit directly
     # did not take, the combo is the other documented way in.
     if ((ReadNameField $f) -ne $path -and $f.Combo -ne $NULLPTR) {
         [void][W32]::SendMessageW($f.Combo, $WM_SETTEXT, $NULLPTR, $path)
+        $script:writeHow = "WM_SETTEXT to the combo #$($f.Combo), after its edit did not take"
         Start-Sleep -Milliseconds 350
     }
     # And if the control that was found is a container rather than a box - the labelled Pane the
@@ -1713,6 +1719,7 @@ function WriteNameField($f, $path) {
                 # $f is the caller's own hashtable, so the read-back and the confirm that follow
                 # are about this control; the route says so rather than naming the container.
                 $f.Route = "$($f.Route) -> written through its $cls child #$inner"
+                $script:writeHow = "WM_SETTEXT to its $cls child #$inner"
                 break
             }
         }
@@ -1850,22 +1857,51 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
     # reads as having no extension at all.
     #
     # WM_CHAR is what a person's typing arrives as, so the notifications fire and the model
-    # follows. It is used for BOTH dialogs rather than only for the combo: it is the more faithful
-    # route on a plain edit too, and WM_SETTEXT stays behind it as a fallback, so the route that
-    # already works on Open is still reachable if the characters ever fail to take. Both are gated
-    # by the same read-back. Every message here goes to one specific window handle, and none of it
-    # needs an input desktop - which is the thing the runner does not have, and why SendInput
-    # inserted nothing.
+    # follows. WM_SETTEXT stays behind it as a fallback if the characters ever fail to read back.
+    # Both are gated by the same read-back. Every message here goes to one specific window handle,
+    # and none of it needs an input desktop - which is the thing the runner does not have, and why
+    # SendInput inserted nothing.
+    #
+    # Amended after run 35074744558: WM_CHAR is used ONLY for an edit inside a bare ComboBox. Typing
+    # into every dialog edit moved Open's name box off the route that had passed three times out of
+    # three (run 35072026878: `j5 ... WM_SETTEXT to the Edit the accelerator moved focus to (#852660
+    # ctrlId=1148)`) onto one no run had confirmed, and typing a path one character at a time into
+    # a shell edit also drives its autocomplete - a second thing that can change what the dialog
+    # returns. So each route stays where it is proven:
+    #
+    #   * the edit's parent is a ComboBox that is not itself inside a ComboBoxEx32 (Save As's 1001,
+    #     in the DirectUI host): WM_CHAR, the route run 35074744558 proved (`j2 project saved to
+    #     disk -> ...journeys.encastra exists=True`);
+    #   * anything else - a plain edit, or one whose combo is wrapped in a ComboBoxEx32, the classic
+    #     name box a dialog reads its text out of on OK: WM_SETTEXT, the route Open proved.
+    #
+    # Decided by what the edit's parent windows ARE (GetParent + GetClassName), never by a dialog
+    # title or a control id, and both classes are printed on every write, so a runner whose dialog
+    # is built differently says so in the line that matters. The folder pickers never come through
+    # here at all: ConfirmChooser writes them with WriteNameField (WM_SETTEXT to GetDlgItem(1152)),
+    # which f8107fc did not touch.
     if ($edit -ne $NULLPTR) {
-        [void][W32]::SendMessage($edit, $EM_SETSEL, [IntPtr]0, [IntPtr](-1))
-        foreach ($ch in $path.ToCharArray()) {
-            [void][W32]::SendMessage($edit, $WM_CHAR, [IntPtr][int][char]$ch, [IntPtr]1)
-        }
-        $how = "WM_CHAR per character into $editHow"
-        Start-Sleep -Milliseconds 250
-        if ((HwndText $edit).Trim().Trim('"') -ne $path) {
+        $parentH = [W32]::GetParent($edit)
+        $parentCls = HwndClass $parentH
+        $grandCls = ''
+        if ($parentH -ne $NULLPTR) { $grandCls = HwndClass ([W32]::GetParent($parentH)) }
+        $shape = "its parent window is '$parentCls' and that one's parent is '$grandCls'"
+        $inBareCombo = ($parentCls -eq 'ComboBox' -and $grandCls -ne 'ComboBoxEx32')
+        if ($inBareCombo) {
+            [void][W32]::SendMessage($edit, $EM_SETSEL, [IntPtr]0, [IntPtr](-1))
+            foreach ($ch in $path.ToCharArray()) {
+                [void][W32]::SendMessage($edit, $WM_CHAR, [IntPtr][int][char]$ch, [IntPtr]1)
+            }
+            $how = "WM_CHAR per character into $editHow, because $shape - an edit in a bare combo box, whose dialog keeps its own model and hears only typing"
+            Start-Sleep -Milliseconds 250
+            if ((HwndText $edit).Trim().Trim('"') -ne $path) {
+                [void][W32]::SendMessageW($edit, $WM_SETTEXT, $NULLPTR, $path)
+                $how = "WM_CHAR into $editHow ($shape) left it holding something else, so WM_SETTEXT was used instead - a read-back that passes after this does NOT show the dialog's own model took the name"
+                Start-Sleep -Milliseconds 250
+            }
+        } else {
             [void][W32]::SendMessageW($edit, $WM_SETTEXT, $NULLPTR, $path)
-            $how = "WM_CHAR into $editHow left it holding something else, so WM_SETTEXT was used instead"
+            $how = "WM_SETTEXT to $editHow, because $shape - not an edit in a bare combo box, so the route Open proved"
             Start-Sleep -Milliseconds 250
         }
     } else {
@@ -2064,6 +2100,7 @@ function ConfirmChooser($dlg, $path, $what, $kind) {
     } else {
         WriteNameField $field $path
         $landed = (ReadNameField $field).Trim().Trim('"')
+        $route = "$($field.Route), written by $script:writeHow"
     }
     # `-ne` between strings is case-insensitive here, which is right for a path; the trims are for
     # a shell that quotes what it holds. Anything else and the confirm is not pressed at all.
@@ -2366,6 +2403,50 @@ function GoTo($pattern, $what) {
     return $true
 }
 
+# --- the projects-location preference, waited on rather than read once -------------------------
+#
+# `FAIL j1 chosen folder became the projects preference -> ''` in run 35074744558, iteration 1,
+# directly under `PASS j1 : the path is in the chooser's name box` and `PASS j1 chooser closed on
+# confirm -> dialogs left: 0`, with the junction probe through the very same route passing a
+# minute later. The write route did not change in that run (f8107fc touched TypeIntoDialog, which
+# only file dialogs use; the folder picker is written by WriteNameField, and the log line names the
+# same `GetDlgItem(1152) Edit` as every earlier run). What the harness did was read the field 800ms
+# after the dialog went away - and the application writes the preference asynchronously:
+#
+#   * the dialog closing only returns `blocking_pick_folder` on a spawn_blocking thread;
+#     `choose_folder` (lib.rs) then canonicalises the path, records the grant under a lock, and
+#     only then answers the IPC call;
+#   * `chooseFolderOrExplain(...).then((chosen) => set('projectFolder', chosen))`
+#     (Settings.tsx:304) runs when that promise resolves; `set` (preferences.ts) updates the store
+#     synchronously, React re-renders the input, and Chromium publishes the new value to UI
+#     Automation after that.
+#
+# None of those steps is bounded by 800ms, and the first run of a fresh application is the slowest
+# of them. So the field is polled until it names one of the folders the check accepts, for up to
+# `$seconds`, or until the Projects card shows a refusal in its own note (the `.s-note` inside the
+# `.s-card` holding the field - the error surface `setError` feeds; other cards carry permanent
+# notes, so the page-wide selector would end the wait at once). What is ASSERTED is unchanged - SamePath against the chosen folder -
+# only the moment it is asked moved. Returns the last value; prints nothing. $script:prefWaitSays
+# says how long it waited, and on a timeout what the page itself holds, so an empty answer can be
+# told apart from a value UI Automation had not yet been given.
+$script:prefWaitSays = ''
+function WaitPreference($wanted, $seconds) {
+    $started = Get-Date
+    $value = ''
+    $note = $null
+    while ($true) {
+        $value = ValueOf (ById 'pref-project-folder')
+        foreach ($w in @($wanted)) { if (SamePath $value $w) { $script:prefWaitSays = "it read so after $([int]((Get-Date) - $started).TotalMilliseconds)ms"; return $value } }
+        $note = Cdp-Eval "(()=>{const i=document.getElementById('pref-project-folder');const c=i&&i.closest('.s-card');const n=c&&c.querySelector('.s-note');return n?(n.innerText||'').trim():'';})()"
+        if ($note) { break }
+        if (((Get-Date) - $started).TotalSeconds -ge $seconds) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    $inPage = Cdp-Eval "(()=>{const i=document.getElementById('pref-project-folder');return i?i.value:'(no #pref-project-folder on the page)';})()"
+    $script:prefWaitSays = "after $([int]((Get-Date) - $started).TotalMilliseconds)ms UI Automation still read '$value'; the page's own input holds '$inPage'$(if ($note) { " and the Settings panel says '$(OneLine $note)'" } else { ' and the Settings panel shows no refusal' })$(if ($script:cdpError) { " (the page said: $script:cdpError)" })"
+    return $value
+}
+
 # =============================================================================================
 # JOURNEY 1 - projects-location (views/Settings.tsx:293)
 #
@@ -2401,12 +2482,11 @@ function Journey1 {
         $dlg = WaitDialog 10
         ConfirmChooser $dlg $projectsLocation 'j1' 'folder'
         ReportChooserClosed 'j1'
-        Start-Sleep -Milliseconds 800
-        $after = ValueOf (ById 'pref-project-folder')
+        $after = WaitPreference @($projectsLocation) 10
         # SamePath, not `-eq`: the preference holds what `resolve_grant_directory` canonicalised, and
         # the harness's own string may be a short-name spelling of the same folder. A different folder
         # still fails - what is removed is the spelling, not the difference.
-        Report (SamePath $after $projectsLocation) 'j1 chosen folder became the projects preference' "'$after' (expected the same folder as '$projectsLocation')"
+        Report (SamePath $after $projectsLocation) 'j1 chosen folder became the projects preference' "'$after' (expected the same folder as '$projectsLocation'); $script:prefWaitSays"
 
         # Negative, junction: choose_folder canonicalises before it records (lib.rs, resolve_grant_
         # directory), so a junction must come back as the folder it points at. If the link's own path
@@ -2424,8 +2504,10 @@ function Journey1 {
             ConfirmChooser $dlg $junction 'j1-junction' 'folder'
             $closed = $script:chooserClosed
             if (-not $closed) { ForceCloseDialogs }
-            Start-Sleep -Milliseconds 900
+            # Waited on for the same reason as the line above: either answer, or a refusal in the
+            # panel's own note, ends the wait; a chooser that never closed has nothing to wait for.
             $afterLink = ValueOf (ById 'pref-project-folder')
+            if ($closed) { $afterLink = WaitPreference @($junctionTarget, $junction) 10 }
             $refusal = FindText '(cannot be used|no se puede usar|not a folder on this machine|no es una carpeta)' 2
             if (-not $script:chooserConfirmed) {
                 Skip 'j1 junction resolves to its target' 'the chooser could not be driven, so the link was never offered to it'
