@@ -369,7 +369,11 @@ def check_vm(evidence: pathlib.Path | None) -> Check:
     return Check("clean_vm", PASS, f"{passes} checks passed in {evidence.name} (a log is evidence of a run, not of the machine it ran on — keep the VM record with it)")
 
 
-def check_gui_journeys(evidence: pathlib.Path | None) -> Check:
+GUI_SUBJECT = re.compile(r"^SUBJECT\b.*?\bstamp=([0-9a-f]{40}(?:-dirty)?|unknown|none)(?=\s|$)", re.M)
+GUI_SUMMARY_STAMP = re.compile(r"\bstamp=([0-9a-f]{40}(?:-dirty)?|unknown|none)(?=\s|$)")
+
+
+def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | None) -> Check:
     """Have the chooser journeys that gate permissions been driven through the interface?
 
     B5. Four folder purposes and one file purpose decide what the application may read and write,
@@ -383,10 +387,20 @@ def check_gui_journeys(evidence: pathlib.Path | None) -> Check:
 
     A run of one is not evidence either. These journeys drive a native modal dialog through a
     browser engine, and a chooser that works once and not twice works by accident; the harness's
-    -Repeat runs the whole suite from a clean state each time and writes the number into its
-    SUMMARY line, and fewer than three is NOT_VERIFIED rather than a pass. A log with no SUMMARY
-    line at all is a run that did not reach its end — a killed process, a truncated artefact — and
-    the PASS lines above the cut say nothing about what came after it.
+    -Repeat runs the whole suite again on a fresh sandbox and an empty project each time (with
+    -Launch on a freshly started application, and under CI on cleared per-user state as well — the
+    harness header says exactly what carries over where) and writes the number into its SUMMARY
+    line, and fewer than three is NOT_VERIFIED rather than a pass. A log with no SUMMARY line at all
+    is a run that did not reach its end — a killed process, a truncated artefact — and the PASS
+    lines above the cut say nothing about what came after it.
+
+    And a log is only evidence about the build it drove. The harness names that build: its first
+    line is `SUBJECT exe=... sha256=... stamp=<commit>[-dirty] version=...`, read out of the
+    executable it drove the same way release_identity reads a stamp, and the SUMMARY line repeats
+    `stamp=`. The stamp has to be the commit this release expects (`expected_build_commit`: HEAD,
+    or the build commit on a publication commit). A missing stamp, a `-dirty` one, `unknown`, a
+    SUBJECT and a SUMMARY that disagree, or another commit is a FAIL that names both — a green run
+    of some other program says nothing about this one.
     """
     if evidence is None:
         return Check("gui.journeys", NOT_VERIFIED, "no chooser-journey log given", "run scripts/verify/gui_journeys.ps1 on a machine nobody is using; then --evidence-gui <log>")
@@ -403,6 +417,23 @@ def check_gui_journeys(evidence: pathlib.Path | None) -> Check:
         return Check("gui.journeys", FAIL, f"{evidence.name} has no PASS lines; is it a gui_journeys.ps1 log?")
     if summary is None:
         return Check("gui.journeys", FAIL, f"{evidence.name} has {passes} PASS lines and no SUMMARY line; the run did not reach its end", "run it again and keep the whole log")
+    rerun = "run scripts/verify/gui_journeys.ps1 -Repeat 3 against a build of the expected commit, from a clean tree"
+    subject = GUI_SUBJECT.search(text)
+    summary_stamp = GUI_SUMMARY_STAMP.search(summary.group(0))
+    if subject is None:
+        return Check("gui.journeys", FAIL, f"{evidence.name} has no SUBJECT line naming the build it drove; expected commit {expected_commit or '(unknown)'}, the log's build: (not stated)", rerun)
+    stamp = subject.group(1)
+    if summary_stamp is None or summary_stamp.group(1) != stamp:
+        said = summary_stamp.group(1) if summary_stamp else "(no stamp)"
+        return Check("gui.journeys", FAIL, f"{evidence.name}: the SUBJECT line says the build was {stamp} and the SUMMARY line says {said}; a log that disagrees with itself about its build is evidence of neither", rerun)
+    if stamp in ("none", "unknown"):
+        return Check("gui.journeys", FAIL, f"{evidence.name} drove a build with no commit stamp ({stamp}); expected commit {expected_commit or '(unknown)'}", rerun)
+    if stamp.endswith("-dirty"):
+        return Check("gui.journeys", FAIL, f"{evidence.name} drove a build of a dirty tree ({stamp}); expected commit {expected_commit or '(unknown)'} built clean", rerun)
+    if expected_commit is None:
+        return Check("gui.journeys", FAIL, f"{evidence.name} drove build {stamp}, and the commit this release expects cannot be determined here (no git), so the log cannot be matched to it", rerun)
+    if stamp != expected_commit:
+        return Check("gui.journeys", FAIL, f"{evidence.name} drove build {stamp}; this release expects {expected_commit}", rerun)
     found = re.search(r"repeat=(\d+)", summary.group(0))
     repeat = int(found.group(1)) if found else 0
     if skips:
@@ -411,7 +442,7 @@ def check_gui_journeys(evidence: pathlib.Path | None) -> Check:
         return Check("gui.journeys", NOT_VERIFIED, f"{passes} passed over repeat={repeat} but {len(skips)} skipped: {skips[0][:120]}")
     if repeat < 3:
         return Check("gui.journeys", NOT_VERIFIED, f"{passes} checks passed in {evidence.name} but repeat={repeat}: one run of a chooser is not evidence that it works", "run scripts/verify/gui_journeys.ps1 -Repeat 3")
-    return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name} over repeat={repeat} runs of the suite")
+    return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name} over repeat={repeat} runs of the suite, against build {stamp[:12]}, the commit this release expects")
 
 
 def check_toolchain() -> Check:
@@ -524,7 +555,7 @@ def main() -> int:
     checks.append(check_toolchain())
     checks.append(check_ci(args.no_network))
     checks.append(check_vm(args.evidence_vm))
-    checks.append(check_gui_journeys(args.evidence_gui))
+    checks.append(check_gui_journeys(args.evidence_gui, expected_build_commit(version)))
     checks += check_external(mode)
 
     result, reason = verdict(mode, checks)
