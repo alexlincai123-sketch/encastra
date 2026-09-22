@@ -117,6 +117,46 @@ class NpmLockIsChecked(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn('packages[""]', result.stderr)
 
+    def test_a_missing_workspace_entry_fails_the_check_and_is_named(self) -> None:
+        # Every present declaration agrees; the desktop's entry is simply not there. Counting only
+        # the entries that exist read this as "three declarations, all at rc.3" and exited 0.
+        data = json.loads(lockfile("0.5.0-rc.3"))
+        del data["packages"]["apps/desktop"]
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Tree(pathlib.Path(directory), "0.5.0-rc.3", json.dumps(data, indent=2) + "\n")
+            result = tree.run("--check")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('package-lock.json (packages["apps/desktop"]): missing', result.stderr)
+        self.assertNotIn('packages["packages/protocol"]', result.stderr)
+
+    def test_a_workspace_entry_without_a_string_version_fails_the_check(self) -> None:
+        data = json.loads(lockfile("0.5.0-rc.3"))
+        del data["packages"]["packages/protocol"]["version"]
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Tree(pathlib.Path(directory), "0.5.0-rc.3", json.dumps(data, indent=2) + "\n")
+            result = tree.run("--check")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('package-lock.json (packages["packages/protocol"]): missing', result.stderr)
+
+    def test_a_missing_packages_map_fails_the_check_naming_every_entry(self) -> None:
+        data = json.loads(lockfile("0.5.0-rc.3"))
+        del data["packages"]
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Tree(pathlib.Path(directory), "0.5.0-rc.3", json.dumps(data, indent=2) + "\n")
+            result = tree.run("--check")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        for where in ('packages[""]', 'packages["apps/desktop"]', 'packages["packages/protocol"]'):
+            self.assertIn(f"package-lock.json ({where}): missing", result.stderr)
+
+    def test_a_missing_top_level_version_fails_the_check(self) -> None:
+        data = json.loads(lockfile("0.5.0-rc.3"))
+        del data["version"]
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Tree(pathlib.Path(directory), "0.5.0-rc.3", json.dumps(data, indent=2) + "\n")
+            result = tree.run("--check")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("package-lock.json (version): missing", result.stderr)
+
     def test_a_lockfile_that_agrees_passes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tree = Tree(pathlib.Path(directory), "0.5.0-rc.3")
@@ -150,6 +190,22 @@ class NpmLockIsWritten(unittest.TestCase):
             after = tree.lock.read_bytes()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(before, after)
+
+    def test_sync_does_not_invent_a_missing_entry_and_fails(self) -> None:
+        # A stale root entry alongside a missing workspace entry: the sync must neither create the
+        # missing one nor quietly report success, and it leaves the lockfile as npm wrote it.
+        data = json.loads(lockfile("0.5.0-beta.1"))
+        del data["packages"]["apps/desktop"]
+        text = json.dumps(data, indent=2) + "\n"
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Tree(pathlib.Path(directory), "0.5.0-rc.3", text)
+            result = tree.run("--sync")
+            after = tree.lock.read_text("utf-8")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('package-lock.json (packages["apps/desktop"]): missing', result.stderr)
+        self.assertIn("npm install", result.stderr)
+        self.assertEqual(after, text)
+        self.assertNotIn("apps/desktop", json.loads(after)["packages"])
 
     def test_a_rewrite_keeps_npm_formatting(self) -> None:
         text = lockfile("0.5.0-beta.1")
@@ -187,6 +243,25 @@ class WorkspacesAreResolvedTheWayNpmResolvesThem(unittest.TestCase):
                 ('packages["packages/protocol"]', "0.5.0-rc.3"),
             ],
         )
+
+    def test_an_expected_entry_that_is_absent_is_read_back_as_none_not_dropped(self) -> None:
+        data = json.loads(lockfile("0.5.0-rc.3"))
+        del data["packages"]["apps/desktop"]
+        found = version.npm_lock_versions(json.dumps(data), ["apps/desktop", "packages/protocol"])
+        self.assertIn(('packages["apps/desktop"]', None), found)
+        self.assertEqual(len(found), 4)
+
+
+class TheRepositoryItselfAgrees(unittest.TestCase):
+    def test_the_real_lockfile_passes_the_check(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--check"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("missing", result.stderr)
 
 
 if __name__ == "__main__":
