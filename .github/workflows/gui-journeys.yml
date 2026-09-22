@@ -27,6 +27,8 @@ on:
     paths:
       - '.github/workflows/gui-journeys.yml'
       - 'scripts/verify/gui_journeys.ps1'
+      - 'scripts/verify/cdp.mjs'
+      - 'scripts/verify/webview2_state.ps1'
       - 'scripts/verify/install_check.ps1'
 
 permissions:
@@ -102,15 +104,38 @@ jobs:
       # configuration sets it, and it lives for exactly as long as the process the harness started.
       #
       # -Repeat 3: a chooser that works once and not twice works by accident. The suite runs three
-      # times from a clean state, every line says which iteration it came from, and the SUMMARY
-      # line carries repeat=3 - which release_check.py reads, and below which it will not call this
-      # verified.
+      # times, every line says which iteration it came from, and the SUMMARY line carries repeat=3 -
+      # which release_check.py reads, and below which it will not call this verified. What each
+      # iteration starts from, exactly: under -Launch the application is stopped and started again
+      # before iterations 2 and 3, so the runtime's in-memory grants are empty; and because this is
+      # CI (GITHUB_ACTIONS=true) the application's per-user state - the WebView2 profile holding
+      # the preferences and welcomeSeen, and the imported library - is deleted before every start.
+      # Each iteration also gets its own sandbox folders and its own empty project.
+      #
+      # The log's first line is `SUBJECT exe=... sha256=... stamp=... version=...` and the SUMMARY
+      # carries `stamp=`; release_check.py refuses the log unless that stamp is the commit it expects.
       - name: Drive the chooser journeys
         shell: pwsh
         run: |
           ./scripts/verify/gui_journeys.ps1 -Launch -Repeat 3 | Tee-Object -FilePath gui-journeys.log
           $code = $LASTEXITCODE
           Write-Output "gui_journeys.ps1 exited $code"
+          exit $code
+
+      # The harness writes a WebView2 AdditionalBrowserArguments policy naming a debugging port
+      # (HKLM here, because the runner is elevated) and takes it back when it ends - but a cancelled
+      # or killed job ends it without running another line of it, and run 35074744558 left the
+      # policy behind exactly that way. Before writing, the harness journals what it is about to
+      # write and what was there before; this step runs whatever happened above, restores from that
+      # journal, and prints every action. It fails the job if a debugging-port policy for this
+      # application is still in the registry afterwards.
+      - name: Take the debugging-port policy back, whatever happened above
+        if: always()
+        shell: pwsh
+        run: |
+          ./scripts/verify/gui_journeys.ps1 -RemovePolicyOnly | Tee-Object -FilePath policy-cleanup.log
+          $code = $LASTEXITCODE
+          Write-Output "gui_journeys.ps1 -RemovePolicyOnly exited $code"
           exit $code
 
       # Kept whatever happened: a failed run is the interesting one, and a log that only survives
@@ -123,5 +148,6 @@ jobs:
             gui-journeys.log
             install.log
             webview2.log
+            policy-cleanup.log
           if-no-files-found: warn
           retention-days: 90

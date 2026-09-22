@@ -50,7 +50,10 @@ try {
 } catch {
     "webview2: the current token could not be read ($($_.Exception.GetType().Name))"
 }
-"webview2: WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS in this process = '$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'"
+# gui_journeys.ps1 -Launch writes the flag onto the child's own environment block only and never
+# onto its own process, so an empty value here says nothing about what the application was given;
+# the browser command lines further down are what say that.
+"webview2: WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS in this process = '$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' (gui_journeys.ps1 -Launch sets it on the child only; see the browser command lines below)"
 
 # Whatever WebView2 policy is already on this machine. An image carrying its own
 # AdditionalBrowserArguments - or any other WebView2 policy - would override what the harness asks

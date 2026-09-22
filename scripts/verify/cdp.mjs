@@ -31,18 +31,28 @@
 //   node scripts/verify/cdp.mjs --port 9222 eval "<js expression>"
 //   node scripts/verify/cdp.mjs --port 9222 wait "<js expression>" --timeout-ms 5000 --interval-ms 100
 //
+//   node scripts/verify/cdp.mjs --port 9222 --viewport-height 600 eval "<js expression>"
+//
 // `eval` prints the JSON of what the expression evaluated to. `wait` polls it until it is truthy
 // and prints that value. Either prints {"error": "..."} and exits 1 instead — including when the
 // expression itself throws, which is a different answer from `false` and is never reported as one.
+//
+// `--viewport-height N` evaluates in a window emulated to be N CSS pixels tall and as wide as it is
+// now (Emulation.setDeviceMetricsOverride, deviceScaleFactor 0 = the real one, not mobile), and
+// clears the override again before exiting. It is an option of the evaluation rather than a CDP
+// call of its own because an emulation override belongs to the DevTools session that set it: a
+// separate process that set it and exited would take it away with its session before anything
+// was measured. The expression should wait a frame or two for the layout to follow.
 
 const APP_TITLE = 'encastra';
 
 function parseArgs(argv) {
-  const opts = { port: 9222, timeoutMs: 5000, intervalMs: 100 };
+  const opts = { port: 9222, timeoutMs: 5000, intervalMs: 100, viewportHeight: 0 };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--port') opts.port = Number(argv[++i]);
+    else if (a === '--viewport-height') opts.viewportHeight = Number(argv[++i]);
     else if (a === '--timeout-ms') opts.timeoutMs = Number(argv[++i]);
     else if (a === '--interval-ms') opts.intervalMs = Number(argv[++i]);
     else rest.push(a);
@@ -152,7 +162,24 @@ try {
   const target = await pageTarget(opts.port);
   session = await new Session(target.webSocketDebuggerUrl).open();
   if (opts.command === 'eval') {
-    const value = await session.evaluate(opts.expression);
+    let value;
+    if (opts.viewportHeight > 0) {
+      if (!Number.isInteger(opts.viewportHeight)) fail('--viewport-height must be a whole number');
+      const width = await session.evaluate('window.innerWidth');
+      await session.send('Emulation.setDeviceMetricsOverride', {
+        width,
+        height: opts.viewportHeight,
+        deviceScaleFactor: 0,
+        mobile: false,
+      });
+      try {
+        value = await session.evaluate(opts.expression);
+      } finally {
+        await session.send('Emulation.clearDeviceMetricsOverride');
+      }
+    } else {
+      value = await session.evaluate(opts.expression);
+    }
     process.stdout.write(`${JSON.stringify(value ?? null)}\n`);
     session.close();
     process.exit(0);

@@ -31,8 +31,12 @@
 #     here polls for an element rather than sleeping a fixed time and hoping.
 #   * The chooser is a Win32 common dialog (`#32770`). Its OK/Cancel/name controls surface as
 #     plain panes with no Invoke or Value pattern, so they are driven the way the shell itself
-#     would: BM_CLICK and WM_SETTEXT to their window handles. Never a global SendKeys: every
-#     message in this file goes to one specific window handle.
+#     would: BM_CLICK and WM_SETTEXT to their window handles. Almost every message in this file
+#     goes to one specific window handle. The exceptions are exactly two SendInput calls inside
+#     TypeIntoDialog - Alt+N, and Ctrl+A followed by the typed path - which are GLOBAL input: they
+#     go to whatever window is in front. Both go through SendGuardedInput, which refuses to send
+#     unless GITHUB_ACTIONS is 'true' and re-checks, immediately before each call, that the
+#     foreground window is the chooser itself. See "the file name a file dialog will actually use".
 #   * "What is on screen" is asked of the *window list* (`EnumWindows`), not of the accessibility
 #     tree. Asking the tree only ever found the dialogs some provider had hung under the desktop,
 #     and `j2 native save dialog opened -> ''` is what that costs: a dialog that is up and not
@@ -81,12 +85,33 @@
 # browser process per user-data directory and the host that creates it settles its command line for
 # everyone after, so attaching to a window somebody else opened means driving a browser whose
 # arguments nobody in this file chose. See "the application, started by the harness that drives it".
+# Stopping every Encastra on the machine is only done under CI (GITHUB_ACTIONS=true) or when
+# -KillOtherInstances says so; otherwise -Launch with an Encastra already running FAILS and names
+# the PIDs, and kills nothing.
 #
 # -Repeat n runs the whole suite n times, each iteration on its own sandbox and its own empty
 # project, and suffixes every line with `[iteration k/n]`. A journey that passes once and fails the
-# second time has not passed; CI asks for three. -SelfTest exercises only the CDP side of this
-# file - connectivity and the canvas oracle - and touches no UI Automation at all, so it is safe to
-# run on a desktop somebody is sitting at.
+# second time has not passed; CI asks for three. What "its own" covers depends on the mode, and is
+# stated rather than implied:
+#
+#   * with -Launch, the application is stopped and started again before every iteration, so the
+#     runtime's in-memory grants start empty each time; and under CI (GITHUB_ACTIONS=true) only,
+#     the application's per-user state is deleted before each start as well - the WebView2 profile
+#     under %LOCALAPPDATA%\dev.encastra.app (localStorage: preferences, welcomeSeen, the locale)
+#     and %APPDATA%\dev.encastra.app (the imported library). Outside CI that state is somebody's
+#     own and is never touched, so a local -Launch run is "fresh process, fresh project and
+#     sandbox", with preferences carried over;
+#   * without -Launch, the process somebody else started is attached to once and kept: "same
+#     process, fresh project and sandbox", with preferences and grants carried over.
+#
+# -SelfTest exercises only the CDP side of this file - connectivity, the canvas oracle, and the
+# Publish panel's fit in a short window - and touches no UI Automation at all, so it is safe to
+# run on a desktop somebody is sitting at. -RemovePolicyOnly takes back a debugging-port policy a
+# killed run left behind (see "and it is taken back") and does nothing else.
+#
+# Every log starts with a SUBJECT line naming the executable driven - its path, sha256, the build
+# stamp compiled into it and its ProductVersion - and the SUMMARY line repeats the stamp, so
+# scripts/release_check.py can refuse a log that was produced by some other build.
 #
 # This file is deliberately pure ASCII, so it is safe with or without a BOM (this repo has been
 # bitten by Spanish and CJK literals arriving mangled from a BOM-less file). Where a Spanish
@@ -110,6 +135,14 @@ param(
     # reaches the browser process if it is on the environment of the host that CREATES that browser
     # process, and a harness that attaches to a window it did not open cannot know that it was.
     [switch]$Launch,
+    # -Launch stops every Encastra on the machine before it starts its own. On a runner that is the
+    # point; on a desktop somebody is using it is their work. So outside CI (GITHUB_ACTIONS=true)
+    # -Launch refuses to kill anything unless this is passed, and FAILS naming what is running.
+    [switch]$KillOtherInstances,
+    # Take back a debugging-port policy a run that was killed left in the registry, from its
+    # journal, and do nothing else. Every run does this at its start anyway; this is the mode the
+    # workflow's `if: always()` step runs after a cancelled or killed job.
+    [switch]$RemovePolicyOnly,
     [string]$Exe = (Join-Path $env:LOCALAPPDATA 'Encastra\encastra-desktop.exe')
 )
 $ErrorActionPreference = 'Stop'
@@ -130,7 +163,7 @@ public static class W32 {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowExW(IntPtr parent, IntPtr after, string cls, string title);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassNameW(IntPtr h, System.Text.StringBuilder s, int max);
   // The window WebView2 renders into throttles when it has no focus, which turns a poll into a
-  // false negative. Raised once, by handle, at the start - never a global SendKeys.
+  // false negative. Raised by handle. Raising a window is not input: no key or click goes anywhere.
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
   // Who a window's parent actually is, and what id its dialog template gave it. `child windows=[]`
@@ -141,7 +174,9 @@ public static class W32 {
   [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr h);
   // Keystrokes to one window handle. PostMessage rather than SendMessage because a key press is
   // two messages the target has to see in order and process on its own thread; and to a handle,
-  // never to "whatever has focus on this desktop" - there is no global SendKeys in this file.
+  // never to "whatever has focus on this desktop". The only input in this file that DOES go to
+  // whatever has focus is SendInput below (TypeText, KeyUnder), and it is fenced in PowerShell by
+  // SendGuardedInput: CI only, and only while the chooser is the foreground window.
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
   // MSAA's hit test. This is what the accessibility layer itself answers for a screen point, so it
   // says two things at once: which element is really on top at the palette item's own coordinates
@@ -159,8 +194,9 @@ public static class W32 {
   // own. On Save As it publishes as a ComboBox with ctrlId=0; on Open the only thing carrying the
   // label is a Static with ctrlId=1090 - the label itself. WM_SETTEXT to either changes what is
   // displayed and nothing the dialog will read. Keystrokes go to whatever holds keyboard focus,
-  // which is the real control, and the dialog is made foreground and checked to BE foreground
-  // before a single one is sent.
+  // which is the real control. These two functions are never called directly: SendGuardedInput
+  // calls them, only under CI, and only after checking - immediately before each call - that the
+  // foreground window IS the chooser.
   [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
   // 64-bit layout: 4 bytes of type, 4 of padding to align the union, 24 of KEYBDINPUT = 32, which
   // is what SendInput is told and what it expects. SendInput validates that size, so a 32-bit
@@ -338,26 +374,28 @@ function EncastraBrowsers {
 # already one running" and "a browser process outlived its host" are exactly the findings that
 # would explain a run where the flag never reached the browser.
 function StopSubject {
-    $hosts = EncastraHosts
-    $browsers = EncastraBrowsers
+    # @() around every call: a function returning ONE process hands back the object itself, and its
+    # .Count came out empty - "before starting anything,  encastra-desktop host(s)", no number.
+    $hosts = @(EncastraHosts)
+    $browsers = @(EncastraBrowsers)
     Note "-Launch : before starting anything, $($hosts.Count) encastra-desktop host(s) and $($browsers.Count) browser process(es) for $USER_DATA_MARK were already running"
     foreach ($h in $hosts) { Note "-Launch : stopping host pid=$($h.ProcessId) started=$($h.CreationDate.ToString('s'))"; try { Stop-Process -Id $h.ProcessId -Force -ErrorAction Stop } catch { Note "-Launch : host pid=$($h.ProcessId) would not stop ($($_.Exception.GetType().Name))" } }
     # The browser usually goes when its host does. Usually is not always, and a survivor is the
     # thing that would silently hand the next launch a browser with the wrong command line.
     for ($i = 0; $i -lt 60; $i++) {
-        if ((EncastraHosts).Count -eq 0 -and (EncastraBrowsers).Count -eq 0) { break }
+        if (@(EncastraHosts).Count -eq 0 -and @(EncastraBrowsers).Count -eq 0) { break }
         Start-Sleep -Milliseconds 500
     }
-    foreach ($b in (EncastraBrowsers)) {
+    foreach ($b in @(EncastraBrowsers)) {
         Note "-Launch : a browser process outlived its host and is being stopped: pid=$($b.ProcessId) parent=$($b.ParentProcessId) - a survivor here is what makes a later host's WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS do nothing"
         try { Stop-Process -Id $b.ProcessId -Force -ErrorAction Stop } catch { }
     }
     for ($i = 0; $i -lt 30; $i++) {
-        if ((EncastraBrowsers).Count -eq 0) { break }
+        if (@(EncastraBrowsers).Count -eq 0) { break }
         Start-Sleep -Milliseconds 500
     }
-    $left = (EncastraHosts).Count
-    $leftBrowsers = (EncastraBrowsers).Count
+    $left = @(EncastraHosts).Count
+    $leftBrowsers = @(EncastraBrowsers).Count
     Report ($left -eq 0 -and $leftBrowsers -eq 0) '-Launch the machine has no Encastra of its own left before the harness starts one' "hosts left=$left, browser processes left=$leftBrowsers"
 }
 $script:launchedPid = 0
@@ -367,8 +405,10 @@ function LaunchSubject($exe, $port) {
         return
     }
     $args_ = "--remote-debugging-port=$port"
-    # Set on this process too, so that anything else started from here agrees with the child.
-    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $args_
+    # On the child's environment block ONLY. It used to be set on this process too, which made
+    # every other program this harness started - node for every CDP question, cmd for mklink -
+    # inherit a debugging-port flag it had no use for; and any WebView2 host started from this
+    # shell afterwards would have opened a port nobody asked for.
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $exe
     $psi.WorkingDirectory = (Split-Path $exe -Parent)
@@ -426,15 +466,124 @@ function LaunchSubject($exe, $port) {
 # the machine, Teams and the shell's own search included.
 #
 # And it is taken back. A debugging-port policy left behind on any machine is a hole somebody else
-# walks into, so every exit path from here on goes through EndRun, which removes what was written -
-# restoring any value that was already there rather than deleting somebody else's configuration.
+# walks into. Run 35074744558 is why "every exit path goes through EndRun" was not enough: the job
+# was cancelled, the process was killed, no PowerShell code ran after that - not EndRun, not the
+# trap - and the log has the policy written and not one line saying it was removed. A process
+# cannot clean up after its own kill. So the taking-back no longer lives only in the process that
+# wrote the policy:
+#
+#   1. BEFORE a single value is written, a journal is written - atomically, a temporary file
+#      renamed into place - naming every value about to be written and what was there before it
+#      (the data AND its RegistryValueKind, or that there was none), and for every key on the path
+#      from `Software` down to the policy key, whether it existed. It lives at a fixed place,
+#      %ProgramData%\encastra-journeys\policy-journal.json for an elevated run (which is the run
+#      that writes HKLM) and %LOCALAPPDATA%\encastra-journeys\policy-journal.json otherwise.
+#   2. EVERY start of this harness, whatever mode, looks for a journal in both places and puts back
+#      exactly what it recorded - the old value with its old kind, the values it created deleted,
+#      the keys it created deleted once empty - and only then deletes the journal. -RemovePolicyOnly
+#      does that and nothing else. Each action is a `note`; anything that could not be done is a
+#      FAIL, and the journal is then KEPT so the next attempt can finish the job.
+#   3. The workflow runs -RemovePolicyOnly in an `if: always()` step after the journeys, which is
+#      the step that still runs when the journeys step was cancelled or killed.
+#
+# The normal end of a run goes through the same restore, from the same journal, so there is one way
+# of taking the policy back and it is the one a killed run is recovered by.
 $POLICY_KEY = 'Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
 # The two spellings of "the compiled code name of the process", because the documentation does not
 # say which one it means and both are specific to this application.
 $POLICY_VALUE_NAMES = @('encastra-desktop.exe', 'encastra-desktop')
-$script:policyWrote = @()
-$script:policyKeysCreated = @()
 $script:policyCleanupFailed = $false
+# The journal this run wrote, if it wrote one; the end of the run restores from it.
+$script:journalPath = $null
+# Whether this run has had anything to do with the policy - wrote one, or found a journal - which is
+# when the end of the run also checks that no debugging-port policy for this application is left.
+$script:policyTouched = $false
+# Debugging-port values that were in the registry BEFORE the run that journalled them, put back as
+# found. Not this run's to delete; said out loud at the end rather than failed.
+$script:policyPreexisting = @()
+
+function PolicyJournalPath($elevated) {
+    $base = if ($elevated) { $env:ProgramData } else { $env:LOCALAPPDATA }
+    return (Join-Path (Join-Path $base 'encastra-journeys') 'policy-journal.json')
+}
+# Both places, whichever this run is: a killed elevated run on a runner and a killed ordinary run on
+# a desktop leave their journals in different places, and the next start has to find either.
+function PolicyJournalPaths { return @(@((PolicyJournalPath $true), (PolicyJournalPath $false)) | Select-Object -Unique) }
+# The registry through .NET rather than the PowerShell provider, because the provider cannot say
+# what KIND a value is, and putting back a REG_EXPAND_SZ or a REG_MULTI_SZ as a REG_SZ is not
+# putting it back. Default view: this harness runs 64-bit, so that is the 64-bit hive WebView2 reads.
+function OpenHive($root) {
+    $hive = if ($root -eq 'HKLM') { [Microsoft.Win32.RegistryHive]::LocalMachine } else { [Microsoft.Win32.RegistryHive]::CurrentUser }
+    return [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, [Microsoft.Win32.RegistryView]::Default)
+}
+# `Software`, `Software\Policies`, ... down to the policy key itself: every key New-Item or
+# CreateSubKey would bring into being on the way.
+function PolicyKeyChain {
+    $parts = $POLICY_KEY -split '\\'
+    $out = @()
+    for ($i = 1; $i -le $parts.Count; $i++) { $out += ($parts[0..($i - 1)] -join '\') }
+    return $out
+}
+$INVARIANT = [Globalization.CultureInfo]::InvariantCulture
+# A value as the journal keeps it: its kind, and its data in a form JSON carries without loss -
+# text for the string and number kinds, a list for REG_MULTI_SZ, base64 for everything else.
+function RegValueRecord($key, $name) {
+    $kind = $key.GetValueKind($name)
+    $data = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    $rec = @{ kind = [string]$kind; text = $null; multi = $null; b64 = $null }
+    switch ([string]$kind) {
+        'String' { $rec.text = [string]$data }
+        'ExpandString' { $rec.text = [string]$data }
+        'DWord' { $rec.text = ([int]$data).ToString($INVARIANT) }
+        'QWord' { $rec.text = ([long]$data).ToString($INVARIANT) }
+        'MultiString' { $rec.multi = @([string[]]$data) }
+        default { $rec.b64 = if ($null -eq $data) { '' } else { [Convert]::ToBase64String([byte[]]$data) } }
+    }
+    return $rec
+}
+# The same value back as the object SetValue wants for that kind. The unary comma keeps an array
+# an array: PowerShell unrolls whatever a function returns, and a REG_MULTI_SZ of one string would
+# otherwise come back as a string.
+function RegValueData($rec) {
+    switch ([string]$rec.kind) {
+        'String' { return [string]$rec.text }
+        'ExpandString' { return [string]$rec.text }
+        'DWord' { return [int]::Parse([string]$rec.text, $INVARIANT) }
+        'QWord' { return [long]::Parse([string]$rec.text, $INVARIANT) }
+        'MultiString' {
+            if ($null -eq $rec.multi) { return , ([string[]]@()) }
+            return , ([string[]]@($rec.multi))
+        }
+    }
+    return , ([byte[]][Convert]::FromBase64String([string]$rec.b64))
+}
+function SameRecord($a, $b) {
+    if ($null -eq $a -or $null -eq $b) { return $false }
+    if ([string]$a.kind -ne [string]$b.kind) { return $false }
+    if ([string]$a.text -ne [string]$b.text) { return $false }
+    if ([string]$a.b64 -ne [string]$b.b64) { return $false }
+    return ((@($a.multi) -join [char]0) -ceq (@($b.multi) -join [char]0))
+}
+function DescribeRecord($rec) {
+    if ($null -eq $rec) { return '(none)' }
+    $shown = if ($null -ne $rec.text) { $rec.text } elseif ($null -ne $rec.multi) { (@($rec.multi) -join ' | ') } else { "base64:$($rec.b64)" }
+    return "$($rec.kind) '$shown'"
+}
+# Written to a temporary name and renamed into place, so the journal on disk is either the whole
+# of it or not there: a kill between the two leaves a `.tmp` and no journal, and a kill that early
+# is also before a single registry value was written.
+function WriteJournalAtomically($path, $journal) {
+    $dir = Split-Path $path -Parent
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    if (Test-Path -LiteralPath $path) { throw "a journal is already at $path, so an earlier run's policy has not been taken back" }
+    $tmp = "$path.tmp"
+    $json = $journal | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText($tmp, $json, (New-Object System.Text.UTF8Encoding($false)))
+    # Read back before it is trusted: a journal that does not parse is a journal nothing can restore.
+    $check = Get-Content -LiteralPath $tmp -Raw | ConvertFrom-Json
+    if ([string]$check.written -ne [string]$journal.written) { throw "the journal written to $tmp did not read back" }
+    [System.IO.File]::Move($tmp, $path)
+}
 
 function IsElevated {
     try {
@@ -448,104 +597,396 @@ function WriteBrowserArgsPolicy($port) {
     # HKCU is ignored by an elevated host, and HKLM is the one that is honoured - and needs the
     # rights that being elevated is. So the two cases do not overlap, and each writes where its own
     # host will actually read.
-    $roots = if ($elevated) { @('HKLM:', 'HKCU:') } else { @('HKCU:') }
+    $roots = if ($elevated) { @('HKLM', 'HKCU') } else { @('HKCU') }
     Note "-Launch : this process is $(if ($elevated) { 'ELEVATED, so WebView2 ignores the environment variable and any HKCU policy; the override has to be under HKLM' } else { 'not elevated, so the environment variable and an HKCU policy are both honoured' })"
+
+    # 1. What is there now, everywhere this run is about to write, before anything is written.
+    $journal = @{ version = 1; written = $wanted; pid = $PID; started = (Get-Date).ToString('o'); roots = @() }
     foreach ($root in $roots) {
-        $path = Join-Path $root $POLICY_KEY
         try {
-            if (-not (Test-Path $path)) {
-                # Every ancestor that does not exist yet, remembered deepest-first, because
-                # New-Item -Force creates the whole chain and "leave the machine as it was found"
-                # has to mean the chain too - not just the leaf with our value in it.
-                $missing = @()
-                $walk = $path
-                while ($walk -and -not (Test-Path $walk)) {
-                    $missing = @($walk) + $missing
-                    $parent = Split-Path $walk -Parent
-                    if (-not $parent -or $parent -eq $walk) { break }
-                    $walk = $parent
-                }
-                New-Item -Path $path -Force | Out-Null
-                [array]::Reverse($missing)
-                $script:policyKeysCreated += $missing
+            $hive = OpenHive $root
+            $entry = @{ root = $root; key = $POLICY_KEY; chain = @(); values = @() }
+            foreach ($p in (PolicyKeyChain)) {
+                $k = $hive.OpenSubKey($p)
+                $entry.chain += @{ path = $p; existed = ($null -ne $k) }
+                if ($k) { $k.Close() }
             }
+            $k = $hive.OpenSubKey($POLICY_KEY)
             foreach ($name in $POLICY_VALUE_NAMES) {
-                $had = $false; $old = $null
-                try {
-                    $existing = Get-ItemProperty -Path $path -Name $name -ErrorAction Stop
-                    $had = $true; $old = $existing.$name
-                } catch { $had = $false }
-                if ($had) { Note "-Launch : $path\$name already held '$old'; it will be put back at the end of the run" }
-                New-ItemProperty -Path $path -Name $name -Value $wanted -PropertyType String -Force | Out-Null
-                $script:policyWrote += @{ Path = $path; Name = $name; Had = $had; Old = $old }
-                Note "-Launch : wrote $path\$name = '$wanted'"
+                $had = ($null -ne $k -and (@($k.GetValueNames()) -contains $name))
+                $v = @{ name = $name; had = $had; old = $null }
+                if ($had) {
+                    $v.old = RegValueRecord $k $name
+                    Note "-Launch : $root\$POLICY_KEY\$name already held $(DescribeRecord $v.old); it is recorded in the journal and will be put back, kind and all$(if ([string]$v.old.text -match 'remote-debugging-port') { ' - NOTE it is already a debugging-port flag, with no journal to say who wrote it: if an earlier harness run left it, remove it by hand' })"
+                }
+                $entry.values += $v
             }
+            if ($k) { $k.Close() }
+            $journal.roots += $entry
         } catch {
-            Note "-Launch : could not write the policy under $root ($($_.Exception.GetType().Name) - $($_.Exception.Message))"
+            Note "-Launch : could not read what is under $root\$POLICY_KEY ($($_.Exception.GetType().Name) - $($_.Exception.Message)), so nothing will be written there: a value that cannot be journalled cannot be taken back"
+        }
+    }
+    if (@($journal.roots).Count -eq 0) { return }
+
+    # 2. The journal, on disk, before a single value is written.
+    $path = PolicyJournalPath $elevated
+    try {
+        WriteJournalAtomically $path $journal
+    } catch {
+        Report $false '-Launch the policy journal is on disk before the policy is written' "$path could not be written ($($_.Exception.GetType().Name) - $($_.Exception.Message)); NOTHING was written to the registry, so the debugging port will not be offered through the policy"
+        return
+    }
+    $script:journalPath = $path
+    $script:policyTouched = $true
+    Note "-Launch : wrote the journal $path before touching the registry; if this process is killed from here on, the next start of this harness (or -RemovePolicyOnly) restores from it"
+
+    # 3. The policy itself.
+    foreach ($entry in $journal.roots) {
+        try {
+            $hive = OpenHive $entry.root
+            $k = $hive.CreateSubKey($POLICY_KEY)
+            foreach ($v in $entry.values) {
+                $k.SetValue($v.name, $wanted, [Microsoft.Win32.RegistryValueKind]::String)
+                Note "-Launch : wrote $($entry.root)\$POLICY_KEY\$($v.name) = '$wanted' (REG_SZ)"
+            }
+            $k.Close()
+        } catch {
+            Note "-Launch : could not write the policy under $($entry.root) ($($_.Exception.GetType().Name) - $($_.Exception.Message)); the journal still restores whatever part of it was written"
         }
     }
 }
-# Called on every way out of this script. Idempotent, and it never throws: a run that failed must
-# still leave the machine as it found it.
-function RemoveBrowserArgsPolicy {
-    if (@($script:policyWrote).Count -eq 0 -and @($script:policyKeysCreated).Count -eq 0) { return }
-    foreach ($v in $script:policyWrote) {
-        try {
-            if ($v.Had) {
-                New-ItemProperty -Path $v.Path -Name $v.Name -Value $v.Old -PropertyType String -Force | Out-Null
-                Note "-Launch : put $($v.Path)\$($v.Name) back to the value it held before this run"
-            } else {
-                Remove-ItemProperty -Path $v.Path -Name $v.Name -ErrorAction Stop
-                Note "-Launch : removed $($v.Path)\$($v.Name), so no debugging-port policy is left on this machine"
-            }
-        } catch {
-            $script:policyCleanupFailed = $true
-            Note "-Launch : COULD NOT clean up $($v.Path)\$($v.Name) ($($_.Exception.GetType().Name)) - remove it by hand"
+
+# Puts back exactly what one journal recorded, and deletes the journal only if all of it was put
+# back. Prints every action; returns nothing. A failure is a FAIL and counts, because a policy that
+# could not be taken back is a debugging port left armed on somebody's machine.
+function RestorePolicyJournal($path, $why) {
+    $script:policyTouched = $true
+    $failed = $false
+    try { $j = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json } catch {
+        Report $false "$why : the policy journal $path can be read" "it could not ($($_.Exception.GetType().Name) - $($_.Exception.Message)); it is left where it is - look at it and take the policy back by hand"
+        $script:policyCleanupFailed = $true
+        return
+    }
+    # A journal whose writer is still alive belongs to a run that is still going - another shell,
+    # another -Launch - and ripping its policy out from under it would break that run, not rescue
+    # it. A killed run's pid is gone; that is the case this exists for.
+    $owner = $null
+    try { $owner = Get-Process -Id ([int]$j.pid) -ErrorAction Stop } catch { $owner = $null }
+    if ($owner -and $owner.Id -ne $PID) {
+        $ownerStarted = $null
+        try { $ownerStarted = $owner.StartTime } catch { $ownerStarted = $null }
+        $journalStarted = $null
+        try { $journalStarted = [datetime]::Parse([string]$j.started, $INVARIANT, [Globalization.DateTimeStyles]::RoundtripKind) } catch { $journalStarted = $null }
+        if ($ownerStarted -and $journalStarted -and $ownerStarted -le $journalStarted) {
+            Note "$why : the journal $path belongs to pid $($j.pid) ($($owner.ProcessName)), which is still running and started before it wrote the journal - a run in progress, so its policy is left to it"
+            return
         }
     }
-    $script:policyWrote = @()
-    # And the key itself, but only one this run created and only while it is empty: an empty policy
-    # key is litter rather than a hole, and somebody else's key is not ours to remove.
-    foreach ($key in $script:policyKeysCreated) {
-        try {
-            $item = Get-Item -Path $key -ErrorAction Stop
-            if ($item.ValueCount -eq 0 -and $item.SubKeyCount -eq 0) {
-                Remove-Item -Path $key -ErrorAction Stop
-                Note "-Launch : removed the empty policy key $key that this run created"
-            } else {
-                Note "-Launch : left $key in place - it holds $($item.ValueCount) value(s) and $($item.SubKeyCount) subkey(s) that are not this run's"
+    Note "$why : found the policy journal $path, written by pid $($j.pid) at $($j.started) for '$($j.written)'; putting back exactly what it recorded"
+    foreach ($entry in @($j.roots)) {
+        $root = [string]$entry.root
+        $where = "$root\$($entry.key)"
+        $hive = $null
+        try { $hive = OpenHive $root } catch {
+            Report $false "$why : the $root hive can be opened" "$($_.Exception.GetType().Name) - $($_.Exception.Message)"
+            $failed = $true
+            continue
+        }
+        $k = $null
+        try { $k = $hive.OpenSubKey([string]$entry.key, $true) } catch {
+            Report $false "$why : $where can be opened for writing" "$($_.Exception.GetType().Name) - $($_.Exception.Message)$(if ($root -eq 'HKLM') { ' - HKLM needs an elevated shell' })"
+            $failed = $true
+            continue
+        }
+        foreach ($v in @($entry.values)) {
+            $name = [string]$v.name
+            try {
+                $present = ($null -ne $k -and (@($k.GetValueNames()) -contains $name))
+                $now = if ($present) { RegValueRecord $k $name } else { $null }
+                $nowIsOurs = ($present -and $now.kind -eq 'String' -and [string]$now.text -ceq [string]$j.written)
+                if ($v.had) {
+                    if ($present -and -not $nowIsOurs) {
+                        if (SameRecord $now $v.old) { Note "$why : $where\$name already holds what it held before the run, $(DescribeRecord $v.old); nothing to put back" }
+                        else {
+                            Report $false "$why : $where\$name was put back to what it held before" "it now holds $(DescribeRecord $now), which is neither what the run wrote nor what was there before ($(DescribeRecord $v.old)); left alone"
+                            $failed = $true
+                        }
+                    } else {
+                        if (-not $k) { $k = $hive.CreateSubKey([string]$entry.key) }
+                        $kind = [Microsoft.Win32.RegistryValueKind]([string]$v.old.kind)
+                        $k.SetValue($name, (RegValueData $v.old), $kind)
+                        $back = RegValueRecord $k $name
+                        if (SameRecord $back $v.old) {
+                            Note "$why : put $where\$name back to $(DescribeRecord $v.old), the value and the kind it held before the run"
+                        } else {
+                            Report $false "$why : $where\$name was put back to what it held before" "wanted $(DescribeRecord $v.old), it reads back as $(DescribeRecord $back)"
+                            $failed = $true
+                        }
+                    }
+                    if ([string]$v.old.text -match 'remote-debugging-port') { $script:policyPreexisting += "$root\$($entry.key)\$name" }
+                } elseif (-not $present) {
+                    Note "$why : $where\$name is not there - the run never got as far as writing it, or it was already taken back"
+                } elseif ($nowIsOurs) {
+                    $k.DeleteValue($name, $true)
+                    if (@($k.GetValueNames()) -contains $name) {
+                        Report $false "$why : $where\$name, which the run created, was removed" 'DeleteValue returned and the value is still there'
+                        $failed = $true
+                    } else {
+                        Note "$why : removed $where\$name, which the run created, so no debugging-port policy of its is left"
+                    }
+                } else {
+                    Report $false "$why : $where\$name, which the run created, was removed" "it now holds $(DescribeRecord $now), which is not what the run wrote ('$($j.written)'); left alone"
+                    $failed = $true
+                }
+            } catch {
+                Report $false "$why : $where\$name was restored" "$($_.Exception.GetType().Name) - $($_.Exception.Message)"
+                $failed = $true
             }
-        } catch { }
+        }
+        if ($k) { $k.Close() }
+        # And every key on the way that the run brought into being, deepest first, and only while it
+        # is empty: an empty policy key is litter, and a key somebody has since put values in is not
+        # the run's to remove.
+        $created = @(@($entry.chain) | Where-Object { -not $_.existed } | ForEach-Object { [string]$_.path })
+        [array]::Reverse($created)
+        foreach ($p in $created) {
+            try {
+                $sub = $hive.OpenSubKey($p)
+                if (-not $sub) { Note "$why : $root\$p, which the run created, is already gone"; continue }
+                $vc = $sub.ValueCount; $sc = $sub.SubKeyCount
+                $sub.Close()
+                if ($vc -eq 0 -and $sc -eq 0) {
+                    $hive.DeleteSubKey($p, $true)
+                    Note "$why : removed the empty key $root\$p, which the run created"
+                } else {
+                    Note "$why : left $root\$p in place, which the run created but which now holds $vc value(s) and $sc subkey(s) that are not the run's"
+                }
+            } catch {
+                Report $false "$why : the key $root\$p, which the run created, was removed" "$($_.Exception.GetType().Name) - $($_.Exception.Message)"
+                $failed = $true
+            }
+        }
     }
-    $script:policyKeysCreated = @()
+    if ($failed) {
+        $script:policyCleanupFailed = $true
+        Report $false "$why : everything the journal $path recorded was put back" 'not all of it - see the FAIL lines above; the journal is KEPT, so -RemovePolicyOnly (elevated, for HKLM) can finish the job'
+        return
+    }
+    try {
+        Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+        Note "$why : everything the journal recorded is back as it was; deleted the journal $path"
+        # And its folder, once nothing else is in it - it exists only to hold the journal.
+        $dir = Split-Path $path -Parent
+        try { if (@(Get-ChildItem -LiteralPath $dir -Force).Count -eq 0) { [System.IO.Directory]::Delete($dir) } } catch { }
+    } catch {
+        Report $false "$why : the journal $path was deleted once everything it recorded was put back" "$($_.Exception.GetType().Name) - $($_.Exception.Message)"
+        $script:policyCleanupFailed = $true
+    }
 }
-# The only way this script ends. Everything below that used to say `exit N` says this instead, so
-# that a debugging-port policy cannot outlive the run that wrote it.
-function EndRun($code) {
-    RemoveBrowserArgsPolicy
-    # A policy this run could not take back is a debugging port left armed on somebody's machine,
-    # which is a worse outcome than any journey failing. It is said in the words release_check.py
-    # reads - `^FAIL` anywhere in the log fails the evidence - and the run cannot exit 0 on it.
+function RestorePolicyJournals($why) {
+    foreach ($path in (PolicyJournalPaths)) {
+        if (Test-Path -LiteralPath $path) { RestorePolicyJournal $path $why }
+        else { Note "$why : no policy journal at $path, so no earlier run left a policy to take back there" }
+    }
+}
+# Every debugging-port value naming this application that is in the registry right now, HKLM and
+# HKCU. Reading HKLM needs no elevation. Returns strings; prints nothing.
+function PolicyLeftovers {
+    $out = @()
+    foreach ($root in @('HKLM', 'HKCU')) {
+        $k = $null
+        try { $k = (OpenHive $root).OpenSubKey($POLICY_KEY) } catch { $k = $null }
+        if (-not $k) { continue }
+        foreach ($name in $POLICY_VALUE_NAMES) {
+            if (@($k.GetValueNames()) -contains $name) {
+                $d = [string]$k.GetValue($name)
+                if ($d -match 'remote-debugging-port') { $out += "$root\$POLICY_KEY\$name" }
+            }
+        }
+        $k.Close()
+    }
+    return $out
+}
+function ReportPolicyLeftovers($why) {
+    $left = @(PolicyLeftovers)
+    $theirs = @($left | Where-Object { $script:policyPreexisting -contains $_ })
+    $unexplained = @($left | Where-Object { $script:policyPreexisting -notcontains $_ })
+    foreach ($t in $theirs) { Note "$why : $t still names a debugging port, and it did BEFORE the journalled run - it was put back as found; if it is itself a leftover, remove it by hand" }
+    Report ($unexplained.Count -eq 0) "$why : no WebView2 debugging-port policy naming this application is left that a harness run put there" $(if ($unexplained.Count -eq 0) { "HKLM and HKCU read: $(if ($left.Count -eq 0) { 'none at all' } else { 'only the pre-existing one(s) noted above' })" } else { 'still there: ' + ($unexplained -join ', ') + ' - remove by hand (the notes above say why it was not)' })
+}
+
+# --- the sandboxes, taken away again outside CI -----------------------------------------------
+#
+# A runner is thrown away after the job; a desktop is not, and every iteration leaves a sandbox with
+# a junction in it under the profile. So outside CI they go at the end of the run. By hand rather
+# than `Remove-Item -Recurse`, because Windows PowerShell 5.1 follows a directory junction when it
+# recurses, and the sandbox holds one on purpose: every reparse point is removed as a link (the
+# link itself, never walked into), and everything else is removed bottom-up.
+$script:sandboxes = @()
+function RemoveTreeNoFollow($dir) {
+    $info = New-Object System.IO.DirectoryInfo($dir)
+    if (-not $info.Exists) { return }
+    foreach ($e in $info.GetFileSystemInfos()) {
+        if ($e.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            if ($e -is [System.IO.DirectoryInfo]) { [System.IO.Directory]::Delete($e.FullName) } else { $e.Delete() }
+        } elseif ($e -is [System.IO.DirectoryInfo]) {
+            RemoveTreeNoFollow $e.FullName
+        } else {
+            $e.Attributes = [System.IO.FileAttributes]::Normal
+            $e.Delete()
+        }
+    }
+    [System.IO.Directory]::Delete($dir)
+}
+function RemoveSandboxes {
+    if (@($script:sandboxes).Count -eq 0) { return }
+    if ($env:GITHUB_ACTIONS -eq 'true') { Note "the sandboxes are left on the runner, which is thrown away with the job"; return }
+    foreach ($sb in @($script:sandboxes)) {
+        try {
+            RemoveTreeNoFollow $sb
+            Note "removed the sandbox $sb (its junction removed as a link, never followed)"
+        } catch {
+            Note "COULD NOT remove the sandbox $sb ($($_.Exception.GetType().Name) - $($_.Exception.Message)); remove it by hand, and remove its junction-link with [System.IO.Directory]::Delete rather than a recursive delete"
+        }
+    }
+    $script:sandboxes = @()
+    $parent = Join-Path (LongPath $env:USERPROFILE) 'encastra-journeys'
+    try {
+        if ((Test-Path -LiteralPath $parent) -and @(Get-ChildItem -LiteralPath $parent -Force).Count -eq 0) { [System.IO.Directory]::Delete($parent) }
+    } catch { }
+}
+
+# --- which build this log is about -------------------------------------------------------------
+#
+# A log that does not say which executable it drove is evidence about some build, and
+# scripts/release_check.py cannot tell which. So the first thing every log says is the executable,
+# its sha256, the build stamp compiled into it and its ProductVersion; and the SUMMARY line repeats
+# the stamp. The stamp is read the way scripts/release_identity.py and install_check.ps1 read it:
+# the `encastra-build-commit=<40 hex>[-dirty];` marker the build embeds, found in the file's bytes.
+$script:subjectStamp = 'none'
+function SubjectLine($exe) {
+    if (-not $exe -or -not (Test-Path -LiteralPath $exe)) {
+        "SUBJECT  exe=$(if ($exe) { $exe } else { '(unknown)' }) sha256=none stamp=none version=none"
+        return
+    }
+    $sha = 'none'; $stamp = 'none'; $ver = 'none'
+    try { $sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLower() } catch { }
+    try {
+        $found = [regex]::Match([System.IO.File]::ReadAllText($exe, [System.Text.Encoding]::GetEncoding(28591)), 'encastra-build-commit=([0-9a-f]{40}(?:-dirty)?|unknown);').Groups[1].Value
+        if ($found) { $stamp = $found }
+    } catch { }
+    try { $v = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion; if ($v) { $ver = $v } } catch { }
+    $script:subjectStamp = $stamp
+    "SUBJECT  exe=$exe sha256=$sha stamp=$stamp version=$ver"
+}
+
+# The only way this script ends. The policy is taken back and the sandboxes removed BEFORE the
+# SUMMARY line, so whatever that cleanup found is in the counters the SUMMARY carries and in the
+# exit code - a FAIL printed after the SUMMARY is a FAIL a reader of the SUMMARY never sees.
+function Finish($repeat, $tail) {
+    try {
+        if ($script:journalPath) {
+            $p = $script:journalPath
+            $script:journalPath = $null
+            RestorePolicyJournal $p 'end of run'
+        }
+        if ($script:policyTouched -or $RemovePolicyOnly) { ReportPolicyLeftovers 'end of run' }
+        RemoveSandboxes
+    } catch {
+        Report $false 'the end-of-run cleanup ran to the end' "$($_.Exception.GetType().Name) - $($_.Exception.Message)"
+    }
     if ($script:policyCleanupFailed) {
-        Report $false 'the debugging-port policy this run wrote was taken back' 'it could NOT be removed - see the notes above; remove it by hand, the machine is left with a WebView2 AdditionalBrowserArguments policy naming a debugging port'
-        if ($code -eq 0) { $code = 1 }
+        Report $false 'the debugging-port policy this run found or wrote was taken back' 'it could NOT be, in full - see the FAIL lines above; the journal is kept, run -RemovePolicyOnly (elevated for HKLM) or remove the WebView2 AdditionalBrowserArguments values naming encastra-desktop by hand'
+        $script:policyCleanupFailed = $false
     }
-    exit $code
+    "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$repeat  stamp=$script:subjectStamp$(if ($tail) { "  $tail" })"
+    if ($script:failed -gt 0) { exit 1 }
+    if ($script:skipped -gt 0) { exit 2 }
+    exit 0
 }
-# And for a terminating error nobody caught, which would otherwise walk straight past EndRun.
-trap { RemoveBrowserArgsPolicy; break }
+# And for a terminating error nobody caught, which would otherwise walk straight past Finish. It
+# cannot cover a kill - nothing in the process can - which is what the journal is for.
+trap {
+    if ($script:journalPath) { $p = $script:journalPath; $script:journalPath = $null; RestorePolicyJournal $p 'terminating error' }
+    break
+}
+
+# --- before anything else: what an earlier run left behind -------------------------------------
+RestorePolicyJournals 'harness start'
+if ($RemovePolicyOnly) {
+    Finish 0 '(-RemovePolicyOnly: the policy journal and the registry were the only things touched)'
+}
+
+# --- per-user state, cleared before each start under CI only -----------------------------------
+#
+# What survives a restart of the application: localStorage in the WebView2 profile (preferences,
+# welcomeSeen, the chosen locale) under %LOCALAPPDATA%\dev.encastra.app, and the library of
+# imported publications under %APPDATA%\dev.encastra.app (lib.rs: `app_data_dir().join("library")`).
+# The grants themselves are in memory (`chosen_folders`, `chosen_files`) and go with the process.
+# On a runner nobody else owns that state, and each iteration starts without it; anywhere else it is
+# somebody's own and is left exactly as found.
+function WipeAppState {
+    if ($env:GITHUB_ACTIONS -ne 'true') {
+        Note "-Launch : not under CI, so the application's per-user state (%LOCALAPPDATA%\$USER_DATA_MARK, %APPDATA%\$USER_DATA_MARK) is left exactly as found - preferences and welcomeSeen carry over"
+        return
+    }
+    foreach ($d in @((Join-Path $env:LOCALAPPDATA $USER_DATA_MARK), (Join-Path $env:APPDATA $USER_DATA_MARK))) {
+        if (-not (Test-Path -LiteralPath $d)) { Note "-Launch (CI) : $d does not exist; nothing to clear"; continue }
+        $why = ''
+        try { RemoveTreeNoFollow $d } catch { $why = " ($($_.Exception.GetType().Name) - $($_.Exception.Message))" }
+        $left = Test-Path -LiteralPath $d
+        Report (-not $left) "-Launch (CI) the application's per-user state is cleared before it starts" "$d exists=$left$why"
+    }
+}
+
+# A fresh application for an iteration after the first, under -Launch: the one this harness started
+# is stopped the same way the start stopped everything, the state is cleared under CI, and it is
+# started again with the policy still in place. Prints; the answer is in $script:restartOk.
+$script:restartOk = $false
+function RestartSubject($iter) {
+    $script:restartOk = $false
+    Note "-Launch : iteration $iter starts from a freshly started application; stopping pid $script:launchedPid and starting it again"
+    StopSubject
+    WipeAppState
+    $script:launchedPid = 0
+    LaunchSubject $Exe $CdpPort
+    $script:proc = if ($script:launchedPid -gt 0) { Get-Process -Id $script:launchedPid -ErrorAction SilentlyContinue } else { $null }
+    if (-not $script:proc) { Report $false "iteration $iter : the application was started again" 'it is not running'; return }
+    $script:byPid = New-Object System.Windows.Automation.PropertyCondition($A::ProcessIdProperty, $script:proc.Id)
+    $title = WaitForCdp $CDP_WAIT_SECONDS
+    $reached = -not $script:cdpError
+    Report $reached "iteration $iter : CDP reachable after the restart" $(if ($reached) { "the page titled '$title' answered after $($script:cdpWaitedMs) ms" } else { "nothing answered in $($script:cdpWaitedMs) ms: $script:cdpError" })
+    $script:restartOk = $reached
+}
 
 if ($Launch) {
+    # Stopping other people's Encastra is what -Launch does, and it is only done where there are no
+    # other people: on a runner, or when the caller said so in so many words.
+    $mayKill = ($env:GITHUB_ACTIONS -eq 'true') -or $KillOtherInstances
+    if (-not $mayKill) {
+        $others = @(EncastraHosts)
+        $otherBrowsers = @(EncastraBrowsers)
+        if (($others.Count + $otherBrowsers.Count) -gt 0) {
+            SubjectLine $Exe
+            Report $false '-Launch had no other Encastra to stop' ("running: host pid(s) [" + (@($others | ForEach-Object { $_.ProcessId }) -join ', ') + "], browser pid(s) [" + (@($otherBrowsers | ForEach-Object { $_.ProcessId }) -join ', ') + "]. Nothing was stopped: outside CI -Launch only stops other instances when -KillOtherInstances is passed. Close them, or pass it")
+            Finish $Repeat '(-Launch refused: other Encastra instances are running and -KillOtherInstances was not passed)'
+        }
+    }
     StopSubject
+    WipeAppState
     WriteBrowserArgsPolicy $CdpPort
     LaunchSubject $Exe $CdpPort
 }
 
 $proc = if ($script:launchedPid -gt 0) { Get-Process -Id $script:launchedPid -ErrorAction SilentlyContinue } else { Get-Process encastra-desktop -ErrorAction SilentlyContinue | Select-Object -First 1 }
+$subjectExe = $null
+if ($proc) { try { $subjectExe = $proc.Path } catch { $subjectExe = $null } }
+if (-not $subjectExe -and $Launch) { $subjectExe = $Exe }
+SubjectLine $subjectExe
 if (-not $proc) {
-    "FAIL  Encastra is running  -> no encastra-desktop process; start the application first, or pass -Launch and let the harness start it"
-    "SUMMARY  passed=0 failed=1 skipped=0  repeat=$Repeat"
-    EndRun 1
+    Report $false 'Encastra is running' 'no encastra-desktop process; start the application first, or pass -Launch and let the harness start it'
+    Finish $Repeat ''
 }
 "app pid $($proc.Id) exited=$($proc.HasExited) exe=$($proc.Path)"
 
@@ -822,7 +1263,7 @@ $script:cdpPort = $CdpPort
 $script:nodeExe = $null
 try { $script:nodeExe = (Get-Command node -ErrorAction Stop).Source } catch { $script:nodeExe = $null }
 
-function CdpRun($mode, $expression, $timeoutMs) {
+function CdpRun($mode, $expression, $timeoutMs, $viewportHeight) {
     $script:cdpError = ''
     if (-not $script:nodeExe) {
         $script:cdpError = 'node is not on PATH, so the page cannot be asked anything'
@@ -836,6 +1277,8 @@ function CdpRun($mode, $expression, $timeoutMs) {
     try {
         if ($mode -eq 'wait') {
             $out = & $script:nodeExe $script:cdpHelper '--port' "$script:cdpPort" 'wait' $expression '--timeout-ms' "$timeoutMs" '--interval-ms' '100'
+        } elseif ($viewportHeight -gt 0) {
+            $out = & $script:nodeExe $script:cdpHelper '--port' "$script:cdpPort" '--viewport-height' "$viewportHeight" 'eval' $expression
         } else {
             $out = & $script:nodeExe $script:cdpHelper '--port' "$script:cdpPort" 'eval' $expression
         }
@@ -856,10 +1299,13 @@ function CdpRun($mode, $expression, $timeoutMs) {
 }
 # One evaluation. $null back means either the expression evaluated to null or it could not be
 # evaluated at all, and $script:cdpError is what tells those apart - they are different answers.
-function Cdp-Eval($expression) { return (CdpRun 'eval' $expression 0) }
+function Cdp-Eval($expression) { return (CdpRun 'eval' $expression 0 0) }
+# One evaluation in a window emulated to be $height CSS pixels tall (and as wide as it is now), in
+# the same DevTools session that sets the override; cdp.mjs clears it before it exits.
+function Cdp-EvalInViewport($expression, $height) { return (CdpRun 'eval' $expression 0 $height) }
 # Polls until the expression is truthy. This is what replaces a fixed sleep: the condition itself
 # is what is waited on, so a fast machine does not wait and a slow one is not cut off.
-function Cdp-Wait($expression, $timeoutMs) { return (CdpRun 'wait' $expression $timeoutMs) }
+function Cdp-Wait($expression, $timeoutMs) { return (CdpRun 'wait' $expression $timeoutMs 0) }
 
 # The store's own count of steps, read off the status bar. App.tsx renders it from `nodes.length`
 # into the FIRST span of `footer.statusbar`; the spans after it are run counts and messages, so the
@@ -889,6 +1335,26 @@ function CdpFittedCanvasIds {
     return @(CdpCanvasIds)
 }
 function CdpInspectorText { return (Cdp-Eval "(document.querySelector('.panel--inspector')||{innerText:''}).innerText") }
+# Which steps React Flow has selected, by the id the store gave them. `addNode` marks the node it
+# placed `selected: true` and every other `selected: false` (store.ts), and React Flow puts the
+# class `selected` on that node's wrapper. Fit View first, because a selected step outside the
+# viewport is unmounted like any other and would read as "nothing is selected".
+$CDP_SELECTED_IDS = "[...document.querySelectorAll('.react-flow__node.selected')].map(e=>e.dataset.id)"
+# The Inspector showing the right component reference is what a person sees, and it cannot tell two
+# steps of the same component apart: a second Save File selected instead of the one just placed
+# would read identically. So this asks the node itself - exactly one step selected, and it is the
+# placed one. Prints its line; the answer is in $script:selectedIsPlaced.
+$script:selectedIsPlaced = $false
+function ReportSelectedIsPlaced($what, $placedId) {
+    $script:selectedIsPlaced = $false
+    [void](CdpFittedCanvasIds)
+    $sel = @(Cdp-Eval $CDP_SELECTED_IDS)
+    $trouble = $script:cdpError
+    $sel = @($sel | Where-Object { $null -ne $_ })
+    $ok = ([bool]$placedId -and $sel.Count -eq 1 -and $sel[0] -eq $placedId)
+    $script:selectedIsPlaced = $ok
+    Report $ok "$what the selected step is the one just placed, and it is the only one selected" "selected on the canvas: [$($sel -join ', ')] ($($sel.Count)); placed: '$placedId'$(if ($trouble) { "; the page said: $trouble" })"
+}
 # --- reaching a control the Inspector has scrolled off the bottom ------------------------------
 #
 # `PASS j4 the permission control armed once a folder was chosen -> enabled=True` and then
@@ -1219,7 +1685,11 @@ function PlaceStep($palettePattern, $what, $componentId) {
     $seenByPage = ''
     if ($panelText -and ($panelText -match $wantsRef)) { $seenByPage = $Matches[0] }
     $seenByUia = InspectorShows $refPattern
-    Report ($seenByPage -and $seenByUia) "$what the Inspector is configuring a step of $componentId, seen by the page and by UI Automation" "the page reads '$seenByPage' out of .panel--inspector and UI Automation reads '$(OneLine $seenByUia)'; wanted $wantsRef, the same reference the new id '$script:placedStep' was checked against; the panel currently says: $(OneLine $panelText)"
+    # The reference is what a person sees, and it names a component, not a step: two Save File steps
+    # read the same. So the pass needs the node itself as well - exactly one step selected on the
+    # canvas, and it is the one just placed.
+    ReportSelectedIsPlaced $what $script:placedStep
+    Report ($seenByPage -and $seenByUia -and $script:selectedIsPlaced) "$what the Inspector is configuring the step just placed, a step of $componentId, seen by the page and by UI Automation" "the page reads '$seenByPage' out of .panel--inspector and UI Automation reads '$(OneLine $seenByUia)'; wanted $wantsRef, the same reference the new id '$script:placedStep' was checked against; the canvas has that very step as its only selected one=$script:selectedIsPlaced (the line above); the panel currently says: $(OneLine $panelText)"
 }
 # The sentences the interface is showing. A failed save puts its reason in the status bar
 # (store.ts saveProject: `set({ message: { tone: 'error', text: describe(error) } })`), so when a
@@ -1401,7 +1871,10 @@ function ChooseButtonNear($anchor) {
 #     and the variable had the printed FAIL line in it, so it was true. Every confirm below reads
 #     the count.
 #
-# Everything is still a message to one specific window handle. There is no global SendKeys here.
+# Everything in this section is a message to one specific window handle. The one route that is not
+# - SendInput, global input to whatever is in front - is in TypeIntoDialog below, and goes only
+# through SendGuardedInput: refused outside CI, and refused unless the chooser is the foreground
+# window at the instant before each call.
 
 # What is on screen, asked of the window list rather than of the accessibility tree.
 #
@@ -1783,10 +2256,46 @@ function WriteNameField($f, $path) {
 #   4. the read-back comes from the FOCUSED element, which is not the control the write chose. A
 #      read-back from the control you wrote to cannot tell you that you wrote to the wrong one.
 #
-# This is the only global input in the file, and it is fenced: the run happens on a machine with
-# nobody at the keyboard (that is why these journeys run on a runner at all), the dialog is
-# verified to be foreground first, and nothing is confirmed unless the read-back matches.
+# Global input exists in exactly two places in this file, both below: Alt+N (only when the name box
+# offers no SetFocus of its own) and Ctrl+A followed by the typed path (only when no Edit window
+# could be found to message). Both go through SendGuardedInput, and it is fenced twice:
+#
+#   * outside CI (GITHUB_ACTIONS is not 'true') it sends NOTHING and records a FAIL: global input
+#     on a desktop somebody is sitting at goes wherever their focus is, and "the dialog was in front
+#     a moment ago" is not a promise about the moment the keys arrive;
+#   * under CI it re-checks GetForegroundWindow() against the chooser's own handle immediately
+#     before EACH SendInput call - not once at the start of the routine - and if anything else is
+#     in front it sends nothing and records a FAIL naming that window.
+#
+# And nothing is confirmed unless the read-back matches.
 $VK_MENU = 0x12; $VK_CONTROL = 0x11; $VK_N = 0x4E; $VK_A = 0x41
+# A window described well enough to say what was in front instead of the chooser.
+function WindowFacts($h) {
+    if ($h -eq $NULLPTR) { return '#0 (no foreground window at all)' }
+    $sb = New-Object System.Text.StringBuilder 256
+    [void][W32]::GetWindowTextW($h, $sb, 256)
+    $wpid = [uint32]0
+    [void][W32]::GetWindowThreadProcessId($h, [ref]$wpid)
+    $pname = ''
+    try { $pname = (Get-Process -Id ([int]$wpid) -ErrorAction Stop).ProcessName } catch { $pname = '?' }
+    return ("#{0} class={1} title='{2}' pid={3} ({4})" -f $h, (HwndClass $h), $sb.ToString(), $wpid, $pname)
+}
+# The only door global input goes through. Returns what $send returned, or $null when it refused;
+# prints nothing (TypeIntoDialog returns a value, so it may not) - a refusal is left in
+# $script:typeFails, which ConfirmChooser reports as FAIL lines.
+$script:typeFails = @()
+function SendGuardedInput($dh, $what, $label, [scriptblock]$send) {
+    if ($env:GITHUB_ACTIONS -ne 'true') {
+        $script:typeFails += "$what : $label was NOT sent - it is global input (SendInput goes to whatever window is in front), and outside CI (GITHUB_ACTIONS is not 'true') this harness refuses to type at a desktop somebody may be using"
+        return $null
+    }
+    $fg = [W32]::GetForegroundWindow()
+    if ($fg -ne $dh) {
+        $script:typeFails += "$what : $label was NOT sent - the chooser #$dh is not the foreground window at the moment of sending; in front is $(WindowFacts $fg)"
+        return $null
+    }
+    return (& $send)
+}
 function FocusedElement {
     try { return [System.Windows.Automation.AutomationElement]::FocusedElement } catch { return $null }
 }
@@ -1802,6 +2311,7 @@ function ValueOfElement($el) {
 $script:typeNotes = @()
 function TypeIntoDialog($dlg, $field, $path, $what) {
     $script:typeNotes = @()
+    $script:typeFails = @()
     $dh = Hwnd $dlg
     $how = 'typed into the dialog'
     # 1. The dialog in front, proven rather than assumed.
@@ -1822,9 +2332,13 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
         try { $field.Element.SetFocus(); $focusedBy = "the name box's own SetFocus()" } catch { $focusedBy = '' }
     }
     if (-not $focusedBy) {
-        [void][W32]::KeyUnder($VK_MENU, $VK_N)
-        Start-Sleep -Milliseconds 250
-        $focusedBy = 'Alt+N, the file-name accelerator'
+        $sentAltN = SendGuardedInput $dh $what 'Alt+N (the file-name accelerator)' { [W32]::KeyUnder($VK_MENU, $VK_N) }
+        if ($null -ne $sentAltN) {
+            Start-Sleep -Milliseconds 250
+            $focusedBy = 'Alt+N, the file-name accelerator'
+        } else {
+            $focusedBy = 'nothing: Alt+N was refused (see the FAIL line), so the edit is looked for by id and class instead'
+        }
     }
     $focused = FocusedElement
     $facts = '(nothing reports keyboard focus)'
@@ -1931,11 +2445,21 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
             Start-Sleep -Milliseconds 250
         }
     } else {
-        [void][W32]::KeyUnder($VK_CONTROL, $VK_A)
-        Start-Sleep -Milliseconds 120
-        $sent = [W32]::TypeText($path)
-        $how = "no Edit window was found under this dialog, so the path was typed: SendInput inserted $sent of $(2 * $path.Length) events, last error $([W32]::LastTypeError)$(if ($sent -eq 0) { ' (0 means the injection was refused - this session has no attached input desktop)' })"
-        Start-Sleep -Milliseconds 350
+        # Two SendInput calls, and the foreground is asked again before each: Ctrl+A could itself
+        # be what moves something else to the front, and the path must not follow it there.
+        $selAll = SendGuardedInput $dh $what 'Ctrl+A' { [W32]::KeyUnder($VK_CONTROL, $VK_A) }
+        if ($null -eq $selAll) {
+            $how = 'no Edit window was found under this dialog and typing was refused (see the FAIL line), so nothing was written'
+        } else {
+            Start-Sleep -Milliseconds 120
+            $sent = SendGuardedInput $dh $what 'the typed path' { [W32]::TypeText($path) }
+            if ($null -eq $sent) {
+                $how = 'no Edit window was found under this dialog; Ctrl+A was sent, and then typing the path was refused (see the FAIL line)'
+            } else {
+                $how = "no Edit window was found under this dialog, so the path was typed: SendInput inserted $sent of $(2 * $path.Length) events, last error $([W32]::LastTypeError)$(if ($sent -eq 0) { ' (0 means the injection was refused - this session has no attached input desktop)' })"
+                Start-Sleep -Milliseconds 350
+            }
+        }
     }
 
     # Two readings, from two places, and neither is the thing the write chose to talk to. The
@@ -2120,6 +2644,7 @@ function ConfirmChooser($dlg, $path, $what, $kind) {
     if ($kind -eq 'file') {
         $typed = TypeIntoDialog $dlg $field $path $what
         foreach ($n in $script:typeNotes) { Note $n }
+        foreach ($f in $script:typeFails) { Report $false "$what : global input went only to the chooser, and only under CI" $f }
         $landed = ([string]$typed.Read).Trim().Trim('"')
         $route = $typed.How
         $nameEdit = $typed.Edit
@@ -2270,16 +2795,19 @@ if (-not $cdpOk) {
 }
 Report $cdpOk 'CDP reachable' $(if ($cdpOk) { "node $($script:nodeExe) is talking to the page titled '$cdpTitle' on 127.0.0.1:$($script:cdpPort), after $($script:cdpWaitedMs) ms of waiting" } else { "nothing answered on 127.0.0.1:$($script:cdpPort) in $($script:cdpWaitedMs) ms of polling; last: $script:cdpError. The application has to be started with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=$($script:cdpPort) - the webview2 notes above this line say whether that flag reached the browser process - and node has to be on PATH (found: $(if ($script:nodeExe) { $script:nodeExe } else { 'nothing' }))" })
 if (-not $cdpOk) {
-    "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  (the page could not be reached, so the canvas cannot be observed)"
-    EndRun 1
+    Finish $Repeat '(the page could not be reached, so the canvas cannot be observed)'
 }
 
 # --- the CDP half of this file, on its own -----------------------------------------------------
 #
 # -SelfTest exercises the parts that talk to the page and nothing else: no UI Automation, no native
 # dialog, no window raised. It is therefore safe on a desktop somebody is using, which is where the
-# rest of this file is not. It places one step by clicking the palette item in the DOM - the route
-# does not matter here, the oracle does - and reports what the oracle saw. It leaves that step on
+# rest of this file is not. It places one Parse JSON step by clicking the palette item in the DOM -
+# the route does not matter here, the oracle does - and reports what the oracle saw, including
+# that the placed step is the one step React Flow has selected. Then it opens the Publish panel
+# (the toolbar button, clicked in the DOM - it opens a panel, never a chooser; Prepare is not
+# pressed) and checks the panel's buttons are inside a 600px-tall window: the guard on the
+# `.publish { grid-template-rows: minmax(0, 1fr) }` fix in styles.css. It leaves the step on
 # whatever project is open.
 function RunSelfTest {
     '--- self test: the page, the canvas oracle, and nothing native ---'
@@ -2300,7 +2828,10 @@ function RunSelfTest {
     # Whatever the palette is offering first, taken from the page rather than assumed, so this runs
     # against any build. The reference without its version is what everything downstream expects:
     # the id the store will make and the reference the Inspector has to show.
-    $componentId = Cdp-Eval "(()=>{const b=document.querySelector('.palette-item');if(!b)return '';return (b.title||'').split('@')[0];})()"
+    # Parse JSON when the palette offers it - the step journey 2 publishes, which asks for no
+    # capability - and whatever comes first otherwise.
+    $PICK_ITEM = "const all=[...document.querySelectorAll('.palette-item')];const b=all.find(e=>(e.title||'').startsWith('encastra.data.json@'))||all[0];"
+    $componentId = Cdp-Eval "(()=>{$PICK_ITEM if(!b)return '';return (b.title||'').split('@')[0];})()"
     Report ([bool]$componentId) 'self test: the palette is offering a component to place' "'$componentId'"
     if (-not $componentId) { return }
 
@@ -2308,7 +2839,7 @@ function RunSelfTest {
     # Read after Fit View, exactly as PlaceStep does, so a culled step cannot turn up in the set
     # difference later and be reported as the one just placed.
     $beforeIds = CdpFittedCanvasIds
-    $ref = Cdp-Eval "(()=>{const b=document.querySelector('.palette-item');if(!b)return '';b.click();return b.title.split(String.fromCharCode(10))[0];})()"
+    $ref = Cdp-Eval "(()=>{$PICK_ITEM if(!b)return '';b.click();return b.title.split(String.fromCharCode(10))[0];})()"
     Report ([bool]$ref) 'self test: a palette item was activated in the page' "'$ref' (this is the route, not the oracle)"
     if (-not $ref) { return }
 
@@ -2327,13 +2858,48 @@ function RunSelfTest {
     $seen = ''
     if ($panelText -and ($panelText -match $wantsRef)) { $seen = $Matches[0] }
     Report ([bool]$seen) "self test: the Inspector is configuring a step of $componentId" "the panel reads '$seen'; wanted $wantsRef, the same reference the new id '$script:freshStep' was checked against. The panel currently says: $(OneLine $panelText)"
+    # And that it is configuring THAT step, not merely a step of the same component - the same
+    # function the journeys use, so the self test is what proves the check itself works.
+    ReportSelectedIsPlaced 'self test:' $script:freshStep
+
+    RunPublishFitCheck
+}
+
+# --- the Publish panel, in a short window ------------------------------------------------------
+#
+# The guard on the styles.css fix `.publish { grid-template-rows: minmax(0, 1fr) }`. Without it the
+# shade's implicit grid row sizes itself to the panel, so the panel's `max-height: 100%` limits
+# nothing and on a short window its footer - Close, Prepare - ends below the bottom edge where no
+# scrolling reaches it (the shade is position: fixed). That is `the control 'Prepare...' is off
+# screen` on the runner's 749px window.
+#
+# Everything here is the page: the toolbar's Publish button is clicked in the DOM (it opens the
+# panel and nothing else - no chooser, no save), the window is made 600px tall with
+# Emulation.setDeviceMetricsOverride in the same DevTools session that measures (an override lives
+# only as long as the session that set it, which is why cdp.mjs takes it as an option of the
+# evaluation rather than as a call of its own), and the panel is closed with its own Close button.
+$PUBLISH_FIT_HEIGHT = 600
+$PUBLISH_FIT_JS = "new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>{const p=document.querySelector('.publish__panel');if(!p){r('no .publish__panel on the page');return;}const H=window.innerHeight;const pr=p.getBoundingClientRect();const bs=[...p.querySelectorAll('.publish__actions button')];const out=bs.filter(b=>b.getBoundingClientRect().bottom>H+0.5);const shown=bs.map(b=>(b.innerText||'').trim()+'@'+Math.round(b.getBoundingClientRect().bottom)).join(', ');r((bs.length>0&&out.length===0&&pr.bottom<=H+0.5?'fits':'overflows')+': innerHeight='+H+', panel '+Math.round(pr.top)+'..'+Math.round(pr.bottom)+', buttons (bottom edge) ['+shown+']'+(out.length?', below the window: '+out.map(b=>(b.innerText||'').trim()).join(', '):''));})))"
+function RunPublishFitCheck {
+    $opened = Cdp-Eval "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/^(Publicar|Publish)$/.test((e.innerText||'').trim()));if(!b)return 'no toolbar Publish button';b.click();return 'clicked';})()"
+    $panel = Cdp-Wait "!!document.querySelector('.publish__panel .publish__actions')" 6000
+    Report ($opened -eq 'clicked' -and $panel -eq $true) 'self test: the Publish panel opened from the toolbar' "the page said '$opened'; panel with its footer on the page=$($panel -eq $true)$(if ($script:cdpError) { " ($script:cdpError)" })"
+    if ($panel -ne $true) { return }
+    $normal = Cdp-Eval 'window.innerHeight'
+    $measured = Cdp-EvalInViewport $PUBLISH_FIT_JS $PUBLISH_FIT_HEIGHT
+    $trouble = $script:cdpError
+    Report ([string]$measured -like 'fits:*') "self test: in a ${PUBLISH_FIT_HEIGHT}px-tall window every Publish panel button ends inside the window" "$measured$(if ($trouble) { " ($trouble)" })"
+    # The override went with the session that set it, and cdp.mjs cleared it explicitly as well;
+    # asked again from a fresh session, so a window left 600px tall is caught rather than assumed.
+    $after = Cdp-Eval 'window.innerHeight'
+    Report ($null -ne $after -and $after -eq $normal) 'self test: the viewport override was cleared afterwards' "innerHeight $normal before, $after after"
+    $closed = Cdp-Eval "(()=>{const f=document.querySelector('.publish__panel .publish__actions');if(!f)return 'no panel';const b=[...f.querySelectorAll('button')].find(e=>/^(Cerrar|Close)$/.test((e.innerText||'').trim()));if(!b)return 'no Close button';b.click();return 'clicked';})()"
+    $gone = Cdp-Wait "!document.querySelector('.publish__panel')" 5000
+    Report ($gone -eq $true) 'self test: the Publish panel closed' "Close: '$closed'; panel gone=$($gone -eq $true)"
 }
 if ($SelfTest) {
     RunSelfTest
-    "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=1  (self test: CDP only, no UI Automation)"
-    if ($script:failed -gt 0) { EndRun 1 }
-    if ($script:skipped -gt 0) { EndRun 2 }
-    EndRun 0
+    Finish 1 '(self test: CDP only, no UI Automation)'
 }
 
 # --- somewhere to work ------------------------------------------------------------------------
@@ -2356,6 +2922,9 @@ function NewSandbox($tag) {
     $script:junctionTarget = Join-Path $script:sandbox 'junction-target'
     $script:junction = Join-Path $script:sandbox 'junction-link'
     $script:missing = Join-Path $script:sandbox 'this-folder-does-not-exist'
+    # Recorded before anything is created in it, so a run that dies half way through building it
+    # still takes away what it did build (outside CI; see RemoveSandboxes).
+    $script:sandboxes += $script:sandbox
     foreach ($d in @($script:sandbox, $script:projectsLocation, $script:publishInto, $script:grantFolder, $script:inputFolder, $script:junctionTarget)) {
         New-Item -ItemType Directory -Force -Path $d | Out-Null
     }
@@ -2412,8 +2981,7 @@ function HarnessStart {
     $sidebarSettings = Wait 'Button' '^(Ajustes|Settings)$' 30
     Report ($null -ne $sidebarSettings) 'sidebar exposed to UI Automation' "settings item: '$($sidebarSettings.Current.Name)'"
     if (-not $sidebarSettings) {
-        "SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  (harness could not reach the interface)"
-        EndRun 1
+        Finish $Repeat '(harness could not reach the interface)'
     }
 }
 
@@ -2962,7 +3530,10 @@ function Journey45 {
         # field is not exposed". A step is on the canvas by now - PlaceStep named it - so a failure
         # here is about selection and nothing else.
         $selected = Cdp-Wait "(()=>{const p=document.querySelector('.panel--inspector');if(!p)return '';const t=p.innerText;const i=t.indexOf('encastra.file.save@');if(i<0)return '';return t.substr(i,40);})()" 6000
-        Report ([bool]$selected) 'j4 step selected in inspector' "the panel reads '$selected' for the step just placed$(if (-not $selected) { "; the panel is showing instead: $(OneLine (CdpInspectorText))" })"
+        # The reference says a Save File is being configured; the node says WHICH. Both are needed:
+        # a Save File left over from an earlier step would satisfy the first and not the second.
+        ReportSelectedIsPlaced 'j4' $script:placedStep
+        Report ([bool]$selected -and $script:selectedIsPlaced) 'j4 step selected in inspector' "the panel reads '$selected'; the canvas's only selected step is the one just placed ('$script:placedStep')=$script:selectedIsPlaced$(if (-not $selected) { "; the panel is showing instead: $(OneLine (CdpInspectorText))" })"
 
         # The Inspector shows a step's settings only for the step that is selected (Inspector.tsx:506
         # returns the empty panel when `selectedNodeId` names nothing). Placing from the palette is
@@ -3143,10 +3714,24 @@ function Journey45 {
 # A journey that passes once and fails the second time has not passed. Everything the run produced
 # is in one log, each line saying which iteration it came from, and the counters run across all of
 # them: one FAIL anywhere is a failed run.
+#
+# Under -Launch every iteration after the first starts on a freshly started application (and, under
+# CI only, on cleared per-user state) - see RestartSubject. The application surviving an iteration is
+# asserted before it is stopped, so a crash in iteration 1 is not hidden by the restart for 2.
 HarnessStart
 for ($iter = 1; $iter -le $Repeat; $iter++) {
     $script:iteration = "  [iteration $iter/$Repeat]"
     "--- iteration $iter of $Repeat ---"
+    if ($iter -gt 1 -and $Launch) {
+        $proc.Refresh()
+        Report (-not $proc.HasExited) "the application was still running at the end of iteration $($iter - 1), before it was restarted" "pid $($proc.Id) exited=$($proc.HasExited)"
+        RestartSubject $iter
+        if (-not $script:restartOk) {
+            Report $false "iteration $iter could start" 'the application could not be started again with the page reachable, so this and every later iteration did not run'
+            break
+        }
+        HarnessStart
+    }
     NewSandbox "-i$iter"
     ResetProject "iteration $iter"
     $script:preparedFolder = $null
@@ -3159,10 +3744,11 @@ $script:iteration = ''
 
 # --- the application is still standing ---------------------------------------------------------
 ForceCloseDialogs
-$proc.Refresh()
-Report (-not $proc.HasExited) 'application still running at the end' "exited=$($proc.HasExited) responding=$($proc.Responding)"
+if ($proc) {
+    $proc.Refresh()
+    Report (-not $proc.HasExited) 'application still running at the end' "exited=$($proc.HasExited) responding=$($proc.Responding)"
+} else {
+    Report $false 'application still running at the end' 'there is no application process to ask'
+}
 
-"SUMMARY  passed=$script:passed failed=$script:failed skipped=$script:skipped  repeat=$Repeat  sandbox=$script:sandbox"
-if ($script:failed -gt 0) { EndRun 1 }
-if ($script:skipped -gt 0) { EndRun 2 }
-EndRun 0
+Finish $Repeat "sandbox=$script:sandbox$(if ($env:GITHUB_ACTIONS -ne 'true') { ' (removed at the end, outside CI)' })"
