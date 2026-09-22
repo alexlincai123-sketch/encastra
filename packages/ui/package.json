@@ -1,6 +1,6 @@
 {
   "name": "@encastra/ui",
-  "version": "0.5.0-rc.3",
+  "version": "0.5.0-rc.4",
   "private": true,
   "description": "Design tokens and brand assets. One source for the desktop app and the website.",
   "type": "module",
