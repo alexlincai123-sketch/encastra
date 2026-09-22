@@ -371,6 +371,33 @@ def check_vm(evidence: pathlib.Path | None) -> Check:
 
 GUI_SUBJECT = re.compile(r"^SUBJECT\b.*?\bstamp=([0-9a-f]{40}(?:-dirty)?|unknown|none)(?=\s|$)", re.M)
 GUI_SUMMARY_STAMP = re.compile(r"\bstamp=([0-9a-f]{40}(?:-dirty)?|unknown|none)(?=\s|$)")
+GUI_ITERATION = re.compile(r"^--- iteration (\d+) of (\d+) ---$", re.M)
+# The section header each journey prints as it starts (gui_journeys.ps1); every iteration walks all four.
+GUI_JOURNEY_SECTIONS = (
+    "--- journey 1: projects-location ",
+    "--- journey 2: publish-into ",
+    "--- journey 3: import-from ",
+    "--- journeys 4 and 5: grant-to-component and run-input ",
+)
+
+
+def _gui_missing_iterations(text: str, repeat: int) -> list[str]:
+    """What is absent from a log that says it ran the suite `repeat` times; empty if nothing."""
+    headers = list(GUI_ITERATION.finditer(text))
+    numbers = [(int(h.group(1)), int(h.group(2))) for h in headers]
+    if numbers != [(i, repeat) for i in range(1, repeat + 1)]:
+        return [f"its iteration headers are {[f'{i} of {n}' for i, n in numbers] or 'absent'}"]
+    problems = []
+    for index, header in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
+        block = text[header.start():end]
+        iteration = index + 1
+        for section in GUI_JOURNEY_SECTIONS:
+            if not re.search(rf"^{re.escape(section)}", block, re.M):
+                problems.append(f"iteration {iteration} has no '{section.strip()}' section")
+        if not re.search(rf"^PASS.*\[iteration {iteration}/{repeat}\]\s*$", block, re.M):
+            problems.append(f"iteration {iteration} has no PASS line of its own")
+    return problems
 
 
 def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | None) -> Check:
@@ -434,6 +461,13 @@ def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | Non
         return Check("gui.journeys", FAIL, f"{evidence.name} drove build {stamp}, and the commit this release expects cannot be determined here (no git), so the log cannot be matched to it", rerun)
     if stamp != expected_commit:
         return Check("gui.journeys", FAIL, f"{evidence.name} drove build {stamp}; this release expects {expected_commit}", rerun)
+    # The SUMMARY's counters are the harness's own tally of the lines above it. A log whose lines
+    # and tally disagree has been cut, spliced or edited, and is evidence of neither.
+    counted = {"passed": passes, "failed": len(fails), "skipped": len(skips)}
+    for name, lines in counted.items():
+        said_n = re.search(rf"\b{name}=(\d+)", summary.group(0))
+        if said_n is None or int(said_n.group(1)) != lines:
+            return Check("gui.journeys", FAIL, f"{evidence.name}: the SUMMARY line says {name}={said_n.group(1) if said_n else '(nothing)'} and the log has {lines} such lines; a log that disagrees with its own tally is evidence of neither", rerun)
     found = re.search(r"repeat=(\d+)", summary.group(0))
     repeat = int(found.group(1)) if found else 0
     if skips:
@@ -442,6 +476,12 @@ def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | Non
         return Check("gui.journeys", NOT_VERIFIED, f"{passes} passed over repeat={repeat} but {len(skips)} skipped: {skips[0][:120]}")
     if repeat < 3:
         return Check("gui.journeys", NOT_VERIFIED, f"{passes} checks passed in {evidence.name} but repeat={repeat}: one run of a chooser is not evidence that it works", "run scripts/verify/gui_journeys.ps1 -Repeat 3")
+    # `repeat=` is the number the harness was asked for, not the number it ran. Every iteration it
+    # ran opens with a header and walks all four journey sections, and each says so in the log; a
+    # PASS over three iterations is only as good as three iterations that are actually there.
+    missing = _gui_missing_iterations(text, repeat)
+    if missing:
+        return Check("gui.journeys", FAIL, f"{evidence.name} claims repeat={repeat} but {missing[0]}", rerun)
     return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name} over repeat={repeat} runs of the suite, against build {stamp[:12]}, the commit this release expects")
 
 

@@ -288,15 +288,78 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
     def subject(stamp: str) -> str:
         return f"SUBJECT  exe=C:\\Users\\r\\AppData\\Local\\Encastra\\encastra-desktop.exe sha256={'ab' * 32} stamp={stamp} version=0.5.0-rc.4\n"
 
+    @staticmethod
+    def iteration(i: int, n: int = 3) -> str:
+        # The headers gui_journeys.ps1 prints: one per iteration, one per journey section in it.
+        return (
+            f"--- iteration {i} of {n} ---\n"
+            "--- journey 1: projects-location (Settings -> Projects -> Browse) ---\n"
+            f"PASS  j1 something  -> observed  [iteration {i}/{n}]\n"
+            "--- journey 2: publish-into (Builder -> Publish -> Prepare) ---\n"
+            "--- journey 3: import-from (Library -> Import) ---\n"
+            "--- journeys 4 and 5: grant-to-component and run-input (Inspector) ---\n"
+        )
+
     @classmethod
     def three_passing_runs(cls, stamp: str) -> str:
         return (
             cls.subject(stamp)
+            + cls.iteration(1)
+            + cls.iteration(2)
+            + cls.iteration(3)
+            + f"SUMMARY  passed=3 failed=0 skipped=0  repeat=3  stamp={stamp}  sandbox=C:\\x\n"
+        )
+
+    def test_three_pass_lines_without_the_iterations_they_claim_are_a_failure(self) -> None:
+        # The shape this gate used to accept as five journeys driven three times: three PASS lines
+        # and a SUMMARY that says repeat=3, with no iteration ever opened.
+        check = self.judge(
+            self.subject(self.EXPECTED)
             + "PASS  j1 something  -> observed  [iteration 1/3]\n"
             + "PASS  j1 something  -> observed  [iteration 2/3]\n"
             + "PASS  j1 something  -> observed  [iteration 3/3]\n"
-            + f"SUMMARY  passed=3 failed=0 skipped=0  repeat=3  stamp={stamp}  sandbox=C:\\x\n"
+            + f"SUMMARY  passed=3 failed=0 skipped=0  repeat=3  stamp={self.EXPECTED}  sandbox=C:\\x\n",
         )
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("iteration headers", check.evidence)
+
+    def test_a_log_with_windows_line_endings_is_read_the_same(self) -> None:
+        # The runner writes the log on Windows; an artefact with CRLF is the same evidence.
+        sys.path.insert(0, str(SCRIPT.parent))
+        import release_check
+
+        log = pathlib.Path(self._tmp.name) / "gui-journeys.log"
+        log.write_bytes(self.three_passing_runs(self.EXPECTED).replace("\n", "\r\n").encode("utf-8"))
+        check = release_check.check_gui_journeys(log, self.EXPECTED)
+        self.assertEqual(check.status, "PASS")
+
+    def test_two_iterations_under_a_summary_of_three_is_a_failure(self) -> None:
+        text = self.three_passing_runs(self.EXPECTED).replace(self.iteration(3), "").replace("passed=3", "passed=2")
+        check = self.judge(text)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("repeat=3", check.evidence)
+
+    def test_an_iteration_that_skipped_a_journey_section_is_a_failure(self) -> None:
+        text = self.three_passing_runs(self.EXPECTED).replace("--- journey 3: import-from (Library -> Import) ---\n", "", 1)
+        check = self.judge(text)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("import-from", check.evidence)
+        self.assertIn("iteration 1", check.evidence)
+
+    def test_an_iteration_with_no_pass_of_its_own_is_a_failure(self) -> None:
+        # Its PASS line moved into another iteration's block: three headers, one of them empty.
+        text = self.three_passing_runs(self.EXPECTED).replace("PASS  j1 something  -> observed  [iteration 2/3]\n", "", 1)
+        text = text.replace("SUMMARY  passed=3", "PASS  j1 something  -> observed  [iteration 2/3]\nSUMMARY  passed=3")
+        check = self.judge(text)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("iteration 2 has no PASS line of its own", check.evidence)
+
+    def test_a_summary_whose_tally_disagrees_with_the_lines_is_a_failure(self) -> None:
+        # A FAIL line cut out of the middle leaves the harness's own count behind it.
+        text = self.three_passing_runs(self.EXPECTED).replace("failed=0", "failed=1")
+        check = self.judge(text)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("failed=1", check.evidence)
 
     def test_three_runs_of_the_suite_all_passing_is_evidence(self) -> None:
         check = self.judge(self.three_passing_runs(self.EXPECTED))
