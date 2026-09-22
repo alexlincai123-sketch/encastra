@@ -296,8 +296,11 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
             "--- journey 1: projects-location (Settings -> Projects -> Browse) ---\n"
             f"PASS  j1 something  -> observed  [iteration {i}/{n}]\n"
             "--- journey 2: publish-into (Builder -> Publish -> Prepare) ---\n"
+            f"PASS  j2 something  -> observed  [iteration {i}/{n}]\n"
             "--- journey 3: import-from (Library -> Import) ---\n"
+            f"PASS  j3 something  -> observed  [iteration {i}/{n}]\n"
             "--- journeys 4 and 5: grant-to-component and run-input (Inspector) ---\n"
+            f"PASS  j4 something  -> observed  [iteration {i}/{n}]\n"
         )
 
     @classmethod
@@ -307,8 +310,93 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
             + cls.iteration(1)
             + cls.iteration(2)
             + cls.iteration(3)
-            + f"SUMMARY  passed=3 failed=0 skipped=0  repeat=3  stamp={stamp}  sandbox=C:\\x\n"
+            + f"SUMMARY  passed=12 failed=0 skipped=0  repeat=3  stamp={stamp}  sandbox=C:\\x\n"
         )
+
+    def judge_bytes(self, raw: bytes, expected: str | None = EXPECTED, entries: list[dict] | None = None):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import release_check
+
+        log = pathlib.Path(self._tmp.name) / "gui-journeys.log"
+        log.write_bytes(raw)
+        return release_check.check_gui_journeys(log, expected, entries)
+
+    # --- what an adversarial review (2026-09-22) got the gate to accept, each now refused ---------
+
+    def test_a_log_is_bound_to_the_executable_built_here_not_only_to_its_commit(self) -> None:
+        # Same commit, other bytes: a debug build, a patched one, another toolset's.
+        text = self.three_passing_runs(self.EXPECTED).encode("utf-8")
+        here = [{"name": "encastra-desktop.exe", "sha256": "cd" * 32}]
+        check = self.judge_bytes(text, entries=here)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("ab" * 32, check.evidence)
+        self.assertIn("cd" * 32, check.evidence)
+        self.assertEqual(self.judge_bytes(text, entries=[{"name": "encastra-desktop.exe", "sha256": "ab" * 32}]).status, "PASS")
+
+    def test_no_built_executable_to_compare_with_is_not_a_pass(self) -> None:
+        check = self.judge_bytes(self.three_passing_runs(self.EXPECTED).encode("utf-8"), entries=[])
+        self.assertEqual(check.status, "BLOCKED")
+
+    def test_a_repeat_the_harness_would_never_write_is_refused_at_once(self) -> None:
+        # Used to build a list as long as the number: 10**20 hung the gate.
+        text = self.three_passing_runs(self.EXPECTED).replace("repeat=3", "repeat=" + "9" * 20)
+        self.assertEqual(self.judge(text).status, "FAIL")
+
+    def test_counters_in_a_shape_the_harness_does_not_write_are_refused(self) -> None:
+        for bad in ("repeat=03", "repeat=3.0", "repeat=+3"):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.judge(self.three_passing_runs(self.EXPECTED).replace("repeat=3", bad)).status, "FAIL")
+        self.assertEqual(self.judge(self.three_passing_runs(self.EXPECTED).replace("passed=12", "passed=12.0")).status, "FAIL")
+
+    def test_two_subject_lines_are_two_logs(self) -> None:
+        text = self.subject(self.EXPECTED) + self.three_passing_runs(self.EXPECTED)
+        check = self.judge(text)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("SUBJECT", check.evidence)
+
+    def test_a_subject_written_after_the_suite_started_is_refused(self) -> None:
+        good = self.three_passing_runs(self.EXPECTED)
+        subject, rest = good.split("\n", 1)
+        check = self.judge(rest.replace("SUMMARY", subject + "\nSUMMARY"))
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("before the first iteration", check.evidence)
+
+    def test_a_summary_with_two_stamps_is_refused(self) -> None:
+        text = self.three_passing_runs(self.EXPECTED).replace("sandbox=C:\\x", f"stamp={self.OTHER}")
+        self.assertEqual(self.judge(text).status, "FAIL")
+
+    def test_a_summary_that_is_not_the_last_line_is_refused(self) -> None:
+        good = self.three_passing_runs(self.EXPECTED)
+        head, summary = good.rsplit("SUMMARY", 1)
+        subject, body = head.split("\n", 1)
+        check = self.judge(subject + "\nSUMMARY" + summary + body)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("SUMMARY", check.evidence)
+
+    def test_a_journey_announced_but_not_driven_is_a_failure(self) -> None:
+        text = self.three_passing_runs(self.EXPECTED).replace("PASS  j3 something  -> observed  [iteration 2/3]\n", "").replace("passed=12", "passed=11")
+        check = self.judge(text)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("iteration 2: '--- journey 3: import-from' has no PASS", check.evidence)
+
+    def test_a_skip_or_fail_in_a_shape_the_tally_misses_is_refused(self) -> None:
+        good = self.three_passing_runs(self.EXPECTED)
+        for line in ("skip  j2 -> not driven  [iteration 1/3]", "  SKIP  j2 -> not driven", "\tFAIL  j2 -> broken", "Fail  j2 -> broken"):
+            with self.subTest(line=line):
+                self.assertEqual(self.judge(good.replace("SUMMARY", line + "\nSUMMARY")).status, "FAIL")
+
+    def test_a_directory_is_a_failure_not_a_traceback(self) -> None:
+        sys.path.insert(0, str(SCRIPT.parent))
+        import release_check
+
+        self.assertEqual(release_check.check_gui_journeys(pathlib.Path(self._tmp.name), self.EXPECTED).status, "FAIL")
+
+    def test_the_encodings_a_windows_shell_writes_are_the_same_evidence(self) -> None:
+        # Windows PowerShell 5.1's Tee-Object writes a UTF-8 BOM; some of its redirections UTF-16.
+        text = self.three_passing_runs(self.EXPECTED).replace("\n", "\r\n")
+        for raw in (b"\xef\xbb\xbf" + text.encode("utf-8"), text.encode("utf-16"), text.replace("\r\n", "\r").encode("utf-8")):
+            with self.subTest(head=raw[:4]):
+                self.assertEqual(self.judge_bytes(raw).status, "PASS")
 
     def test_three_pass_lines_without_the_iterations_they_claim_are_a_failure(self) -> None:
         # The shape this gate used to accept as five journeys driven three times: three PASS lines
@@ -334,7 +422,7 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
         self.assertEqual(check.status, "PASS")
 
     def test_two_iterations_under_a_summary_of_three_is_a_failure(self) -> None:
-        text = self.three_passing_runs(self.EXPECTED).replace(self.iteration(3), "").replace("passed=3", "passed=2")
+        text = self.three_passing_runs(self.EXPECTED).replace(self.iteration(3), "").replace("passed=12", "passed=8")
         check = self.judge(text)
         self.assertEqual(check.status, "FAIL")
         self.assertIn("repeat=3", check.evidence)
@@ -349,10 +437,11 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
     def test_an_iteration_with_no_pass_of_its_own_is_a_failure(self) -> None:
         # Its PASS line moved into another iteration's block: three headers, one of them empty.
         text = self.three_passing_runs(self.EXPECTED).replace("PASS  j1 something  -> observed  [iteration 2/3]\n", "", 1)
-        text = text.replace("SUMMARY  passed=3", "PASS  j1 something  -> observed  [iteration 2/3]\nSUMMARY  passed=3")
+        text = text.replace("SUMMARY  passed=12", "PASS  j1 something  -> observed  [iteration 2/3]\nSUMMARY  passed=12")
         check = self.judge(text)
         self.assertEqual(check.status, "FAIL")
-        self.assertIn("iteration 2 has no PASS line of its own", check.evidence)
+        self.assertIn("iteration 2", check.evidence)
+        self.assertIn("projects-location' has no PASS line of its own", check.evidence)
 
     def test_a_summary_whose_tally_disagrees_with_the_lines_is_a_failure(self) -> None:
         # A FAIL line cut out of the middle leaves the harness's own count behind it.

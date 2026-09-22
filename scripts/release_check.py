@@ -370,8 +370,19 @@ def check_vm(evidence: pathlib.Path | None) -> Check:
 
 
 GUI_SUBJECT = re.compile(r"^SUBJECT\b.*?\bstamp=([0-9a-f]{40}(?:-dirty)?|unknown|none)(?=\s|$)", re.M)
+GUI_SUBJECT_SHA = re.compile(r"\bsha256=([0-9a-f]{64}|none)(?=\s|$)")
 GUI_SUMMARY_STAMP = re.compile(r"\bstamp=([0-9a-f]{40}(?:-dirty)?|unknown|none)(?=\s|$)")
 GUI_ITERATION = re.compile(r"^--- iteration (\d+) of (\d+) ---$", re.M)
+# The harness prints its counters as plain decimal integers. `03`, `3.0` or `+3` are not something
+# it writes, so a SUMMARY carrying them has been written by something else.
+GUI_NUMBER = r"(0|[1-9]\d{0,5})(?![\w.])"
+# More iterations than anyone would ask the harness for; a repeat above it is not a run, and
+# comparing against it must not cost memory proportional to a number the log chose.
+GUI_MAX_REPEAT = 50
+# A verdict line the harness does not write: indented, or not in capitals. Its own are exactly
+# `PASS  `, `FAIL  ` and `SKIP  ` at the start of a line, and a FAIL or a SKIP in any other shape
+# is one that the tally above would not count.
+GUI_ODD_VERDICT = re.compile(r"^(?!(?:FAIL|SKIP)  )[ \t]*(?i:fail|skip)\b.*$", re.M)
 # The section header each journey prints as it starts (gui_journeys.ps1); every iteration walks all four.
 GUI_JOURNEY_SECTIONS = (
     "--- journey 1: projects-location ",
@@ -385,22 +396,49 @@ def _gui_missing_iterations(text: str, repeat: int) -> list[str]:
     """What is absent from a log that says it ran the suite `repeat` times; empty if nothing."""
     headers = list(GUI_ITERATION.finditer(text))
     numbers = [(int(h.group(1)), int(h.group(2))) for h in headers]
-    if numbers != [(i, repeat) for i in range(1, repeat + 1)]:
+    # Built from what the log contains, never from `repeat`: the list is only as long as the headers.
+    if len(numbers) != repeat or numbers != [(i, repeat) for i in range(1, len(numbers) + 1)]:
         return [f"its iteration headers are {[f'{i} of {n}' for i, n in numbers] or 'absent'}"]
     problems = []
     for index, header in enumerate(headers):
         end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
         block = text[header.start():end]
         iteration = index + 1
-        for section in GUI_JOURNEY_SECTIONS:
-            if not re.search(rf"^{re.escape(section)}", block, re.M):
-                problems.append(f"iteration {iteration} has no '{section.strip()}' section")
         if not re.search(rf"^PASS.*\[iteration {iteration}/{repeat}\]\s*$", block, re.M):
             problems.append(f"iteration {iteration} has no PASS line of its own")
+        # Every journey in every iteration asserts something. A section that is there as a header
+        # and carries no PASS of this iteration is a journey that was announced and not driven.
+        starts = []
+        for section in GUI_JOURNEY_SECTIONS:
+            found = re.search(rf"^{re.escape(section)}", block, re.M)
+            if found is None:
+                problems.append(f"iteration {iteration} has no '{section.strip()}' section")
+            else:
+                starts.append((found.start(), section))
+        starts.sort()
+        for position, (start, section) in enumerate(starts):
+            stop = starts[position + 1][0] if position + 1 < len(starts) else len(block)
+            if not re.search(rf"^PASS.*\[iteration {iteration}/{repeat}\]\s*$", block[start:stop], re.M):
+                problems.append(f"iteration {iteration}: '{section.strip()}' has no PASS line of its own")
     return problems
 
 
-def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | None) -> Check:
+def _gui_read(evidence: pathlib.Path) -> str:
+    """The log as text, whichever way the shell that tee'd it encoded it.
+
+    PowerShell 7 writes UTF-8 without a BOM; Windows PowerShell 5.1's Tee-Object writes a UTF-8 BOM,
+    and some of its redirections write UTF-16. A BOM is not part of the first line.
+    """
+    raw = evidence.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16", errors="replace")
+    else:
+        text = raw.decode("utf-8-sig", errors="replace")
+    # The runner writes CRLF; a line is the same line either way.
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | None, entries: list[dict] | None = None) -> Check:
     """Have the chooser journeys that gate permissions been driven through the interface?
 
     B5. Four folder purposes and one file purpose decide what the application may read and write,
@@ -421,35 +459,55 @@ def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | Non
     is a run that did not reach its end — a killed process, a truncated artefact — and the PASS
     lines above the cut say nothing about what came after it.
 
-    And a log is only evidence about the build it drove. The harness names that build: its first
-    line is `SUBJECT exe=... sha256=... stamp=<commit>[-dirty] version=...`, read out of the
-    executable it drove the same way release_identity reads a stamp, and the SUMMARY line repeats
-    `stamp=`. The stamp has to be the commit this release expects (`expected_build_commit`: HEAD,
-    or the build commit on a publication commit). A missing stamp, a `-dirty` one, `unknown`, a
+    And a log is only evidence about the build it drove. The harness names that build before the
+    first iteration (under -Launch, after a few PASS lines about clearing state), in one line
+    `SUBJECT exe=... sha256=... stamp=<commit>[-dirty] version=...` read out of the executable it
+    drove the same way release_identity reads a stamp, and the SUMMARY line repeats `stamp=`. The
+    sha256 has to be the executable built here (artefacts.identity): the stamp says which commit,
+    the hash says which bytes. The stamp has to be the commit this release expects
+    (`expected_build_commit`: HEAD, or the build commit on a publication commit). A missing stamp, a `-dirty` one, `unknown`, a
     SUBJECT and a SUMMARY that disagree, or another commit is a FAIL that names both — a green run
     of some other program says nothing about this one.
     """
     if evidence is None:
         return Check("gui.journeys", NOT_VERIFIED, "no chooser-journey log given", "run scripts/verify/gui_journeys.ps1 on a machine nobody is using; then --evidence-gui <log>")
-    if not evidence.exists():
-        return Check("gui.journeys", FAIL, f"{evidence} does not exist")
-    text = evidence.read_text("utf-8", errors="replace")
+    if not evidence.is_file():
+        return Check("gui.journeys", FAIL, f"{evidence} does not exist or is not a file")
+    text = _gui_read(evidence)
     fails = re.findall(r"^FAIL.*$", text, re.M)
     skips = re.findall(r"^SKIP.*$", text, re.M)
     passes = len(re.findall(r"^PASS", text, re.M))
+    summaries = re.findall(r"^SUMMARY.*$", text, re.M)
     summary = re.search(r"^SUMMARY.*$", text, re.M)
     if fails:
         return Check("gui.journeys", FAIL, f"{len(fails)} failed: {fails[0][:120]}")
+    odd = GUI_ODD_VERDICT.findall(text)
+    if odd:
+        return Check("gui.journeys", FAIL, f"{evidence.name} has a verdict line the harness does not write, so its tally cannot be trusted: {odd[0][:120]}")
     if passes == 0:
         return Check("gui.journeys", FAIL, f"{evidence.name} has no PASS lines; is it a gui_journeys.ps1 log?")
     if summary is None:
         return Check("gui.journeys", FAIL, f"{evidence.name} has {passes} PASS lines and no SUMMARY line; the run did not reach its end", "run it again and keep the whole log")
     rerun = "run scripts/verify/gui_journeys.ps1 -Repeat 3 against a build of the expected commit, from a clean tree"
+    # One run writes one SUBJECT and ends on one SUMMARY. Two of either is two logs, or an edit, and
+    # whichever the reading happened to pick first would decide the verdict.
+    subjects = re.findall(r"^SUBJECT\b.*$", text, re.M)
+    last_line = next((line for line in reversed(text.splitlines()) if line.strip(" \t\x00")), "")
+    if len(summaries) != 1 or not last_line.startswith("SUMMARY"):
+        return Check("gui.journeys", FAIL, f"{evidence.name} has {len(summaries)} SUMMARY line(s) and ends on {last_line[:60]!r}; one run ends on exactly one", rerun)
+    if len(subjects) > 1:
+        return Check("gui.journeys", FAIL, f"{evidence.name} has {len(subjects)} SUBJECT lines; one run names one build", rerun)
     subject = GUI_SUBJECT.search(text)
-    summary_stamp = GUI_SUMMARY_STAMP.search(summary.group(0))
+    summary_stamps = GUI_SUMMARY_STAMP.findall(summary.group(0))
+    summary_stamp = GUI_SUMMARY_STAMP.search(summary.group(0)) if len(summary_stamps) == 1 else None
     if subject is None:
         return Check("gui.journeys", FAIL, f"{evidence.name} has no SUBJECT line naming the build it drove; expected commit {expected_commit or '(unknown)'}, the log's build: (not stated)", rerun)
     stamp = subject.group(1)
+    # The harness names its build before it drives anything: SubjectLine runs before the first
+    # iteration opens. A SUBJECT below an iteration header was put there afterwards.
+    first_iteration = GUI_ITERATION.search(text)
+    if first_iteration is not None and subject.start() > first_iteration.start():
+        return Check("gui.journeys", FAIL, f"{evidence.name} names its build after the suite started; the harness names it before the first iteration", rerun)
     if summary_stamp is None or summary_stamp.group(1) != stamp:
         said = summary_stamp.group(1) if summary_stamp else "(no stamp)"
         return Check("gui.journeys", FAIL, f"{evidence.name}: the SUBJECT line says the build was {stamp} and the SUMMARY line says {said}; a log that disagrees with itself about its build is evidence of neither", rerun)
@@ -465,11 +523,23 @@ def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | Non
     # and tally disagree has been cut, spliced or edited, and is evidence of neither.
     counted = {"passed": passes, "failed": len(fails), "skipped": len(skips)}
     for name, lines in counted.items():
-        said_n = re.search(rf"\b{name}=(\d+)", summary.group(0))
+        said_n = re.search(rf"(?<![\w.]){name}={GUI_NUMBER}", summary.group(0))
         if said_n is None or int(said_n.group(1)) != lines:
-            return Check("gui.journeys", FAIL, f"{evidence.name}: the SUMMARY line says {name}={said_n.group(1) if said_n else '(nothing)'} and the log has {lines} such lines; a log that disagrees with its own tally is evidence of neither", rerun)
-    found = re.search(r"repeat=(\d+)", summary.group(0))
-    repeat = int(found.group(1)) if found else 0
+            return Check("gui.journeys", FAIL, f"{evidence.name}: the SUMMARY line says {name}={said_n.group(1) if said_n else '(nothing it writes)'} and the log has {lines} such lines; a log that disagrees with its own tally is evidence of neither", rerun)
+    found = re.search(rf"(?<![\w.])repeat={GUI_NUMBER}", summary.group(0))
+    if found is None or int(found.group(1)) > GUI_MAX_REPEAT:
+        return Check("gui.journeys", FAIL, f"{evidence.name}: the SUMMARY line's repeat is not a count the harness writes ({summary.group(0)[:120]})", rerun)
+    repeat = int(found.group(1))
+    # And the build it names is the build here. The stamp says which commit; the hash says which
+    # bytes - a debug build, a patched one or another machine's build of the same commit has the
+    # same stamp and a different hash. The harness hashes the executable it drove.
+    if entries is not None:
+        binary = next((e for e in entries if e.get("name") == "encastra-desktop.exe"), None)
+        sha = GUI_SUBJECT_SHA.search(subject.group(0))
+        if binary is None:
+            return Check("gui.journeys", BLOCKED, f"{evidence.name} drove build {stamp[:12]}, and there is no built encastra-desktop.exe here to compare its hash with", "build the expected commit, then run this again")
+        if sha is None or sha.group(1) != binary.get("sha256"):
+            return Check("gui.journeys", FAIL, f"{evidence.name} drove an executable with sha256={sha.group(1) if sha else '(not stated)'}; the one built here is {binary.get('sha256')}", rerun)
     if skips:
         # A journey that did not run is not a journey that passed, and the two are the same colour
         # unless something says so.
@@ -595,7 +665,7 @@ def main() -> int:
     checks.append(check_toolchain())
     checks.append(check_ci(args.no_network))
     checks.append(check_vm(args.evidence_vm))
-    checks.append(check_gui_journeys(args.evidence_gui, expected_build_commit(version)))
+    checks.append(check_gui_journeys(args.evidence_gui, expected_build_commit(version), entries))
     checks += check_external(mode)
 
     result, reason = verdict(mode, checks)
