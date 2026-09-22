@@ -932,6 +932,9 @@ function WipeAppState {
         return
     }
     foreach ($d in @((Join-Path $env:LOCALAPPDATA $USER_DATA_MARK), (Join-Path $env:APPDATA $USER_DATA_MARK))) {
+        # A recursive delete under %APPDATA% is only ever allowed on the application's own folder.
+        # If the mark were ever empty or changed, Join-Path would hand back %APPDATA% itself.
+        if ((Split-Path -Leaf $d) -ne 'dev.encastra.app') { Report $false "-Launch (CI) the state folder to clear is the application's own" "refused to delete '$d'"; continue }
         if (-not (Test-Path -LiteralPath $d)) { Note "-Launch (CI) : $d does not exist; nothing to clear"; continue }
         $why = ''
         try { RemoveTreeNoFollow $d } catch { $why = " ($($_.Exception.GetType().Name) - $($_.Exception.Message))" }
