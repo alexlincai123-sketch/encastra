@@ -40,7 +40,7 @@ env:
 jobs:
   journeys:
     name: Drive the choosers on a runner
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64, encastra-rc4]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
