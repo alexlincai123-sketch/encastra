@@ -1,16 +1,19 @@
 # Release candidate readiness — Encastra 0.5.0-rc.3, written 2026-09-15
 
 > **This document describes 0.5.0-rc.3 and is kept as the account of it.** Work after it, towards
-> a 0.5.0-rc.4, is in `docs/audits/2026-09-16-rc4-closure.md`, which corrects two conclusions
-> reached here — §6's attribution of the cross-machine difference, and the reason the runner's two
-> installers differed. Where the two disagree, the audit is the later measurement and this is the
-> record of what was believed at the tag.
+> a 0.5.0-rc.4, is in `docs/audits/2026-09-16-rc4-closure.md`, which corrects three conclusions
+> reached here — §6's attribution of the cross-machine difference, the reason the runner's two
+> installers differed, and the count and status of the chooser journeys in §7 (audit §5). Where
+> the two disagree, the audit is the later measurement and this is the record of what was believed
+> at the tag.
 
 **Verdict: RELEASE CANDIDATE — BLOCKED.** Five blockers are external (a certificate, a licence
 and a legal identity, a trademark clearance, an external security assessment, a repository
 plan) and each has an owner, an exact action and the evidence that would close it (§13). Two
-are internal and are stated as such: the four native chooser flows that gate permissions have
-never been driven end to end by a person or by GUI automation on any build (§7, B5), and the
+are internal and are stated as such: the native chooser flows that gate permissions had never been
+driven end to end by a person or by GUI automation on any build at rc.3 (§7, B5 — there are five
+of them, not four; the file purpose `run-input` is the fifth, and work after this tag drives them
+on the hosted runner: audit §5), and the
 candidate's bytes are reproducible on the developer machine but **are not reproduced by the
 hosted Windows runner** (§6, B7) — found by the release workflow itself on rc.1 and measured on
 rc.2: the runner's executable is deterministic *on the runner* and differs from this machine's
@@ -217,7 +220,7 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
 | Clean Windows VM on this machine | **BLOCKED — EXTERNAL INFRASTRUCTURE.** Windows 11 Home: no Hyper-V, no Windows Sandbox; no Docker, no VirtualBox. `docs/release/CLEAN_WINDOWS_VM.md` is the procedure |
 | Hosted Windows runner (`release.yml` → `install`) | **CI EXECUTED on rc.3, twice** (runs 34986561347 and 34986561591, on the runner's own build): installer `NotSigned` as documented · silent install exit 0 in 4 s · binary in the per-user directory · ProductVersion `0.5.0-rc.3` · build stamp `3264e07` read from the installed binary · uninstaller present · HKCU uninstall entry, nothing under HKLM · Start Menu shortcut · the installed application launches and stays up (`title='Encastra'`) · uninstall exit 0 and nothing left. It cannot drive a native chooser (B5) |
 | Real install of the beta on this machine | done by the security session for `c975bd4`; the candidate was **not** installed here (the runtime QA ran the built executable) |
-| **Native chooser journeys with a purpose** | **NOT VERIFIED on any build.** The 17/17 GUI run of 2026-09-15 drove Settings → Projects → Browse — `projects-location`, the one purpose that gates nothing. Publish-into, import-from, grant-to-component and the new file chooser have never been driven by a person or by `gui_chooser.ps1`. This is the internal blocker (B5): it needs a machine where nobody is working, and this session could not use this one for it |
+| **Native chooser journeys with a purpose** | **NOT VERIFIED at rc.3.** The 17/17 GUI run of 2026-09-15 drove Settings → Projects → Browse — `projects-location`, the one purpose that gates nothing. The other four — `publish-into`, `import-from`, `grant-to-component`, and `run-input`, the file purpose added in the `rc/consent` wave, which makes **five** purposes in all and not the four written above — had never been driven by a person or by `gui_chooser.ps1`. This is the internal blocker (B5): it needs a machine where nobody is working, and this session could not use this one for it. **Superseded after this tag:** the hosted runner is that machine, `scripts/verify/gui_journeys.ps1` drives the journeys there three times over, and what is closed, what is not, and the two defects found on the way are in `docs/audits/2026-09-16-rc4-closure.md` §5 |
 
 ## 8. Signing
 
@@ -286,8 +289,9 @@ findings, and what happened to each:
 | F19 | P3 | The two `.encastra` dialogs stay in the editor beside prose saying choosers moved | `DESKTOP.md` says which two stay and why a project path is not a permission |
 
 The reviewer's answer to question 3 — the worst outcome for a tester — was data loss in a folder
-they trusted (F5/F14), not a tampered installer. Both are fixed above; the honest residue is
-that neither fix has been exercised through the GUI on this build (B5).
+they trusted (F5/F14), not a tampered installer. Both are fixed above; the honest residue at this
+tag is that neither fix had been exercised through the GUI on this build (B5). What has been
+exercised since, and on which machine, is in `docs/audits/2026-09-16-rc4-closure.md` §5.
 
 ## 13. Blockers
 
