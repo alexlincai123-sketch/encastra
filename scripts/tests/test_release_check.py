@@ -7,6 +7,7 @@ synthetic artefacts — the same fixture the identity and manifest tests use.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import pathlib
@@ -174,6 +175,21 @@ class ReleaseCheckTests(unittest.TestCase):
         _, report, _ = tree.check("--evidence-vm", str(log))
         self.assertEqual(status_of(report, "clean_vm"), "FAIL")
 
+    def test_the_journey_log_is_judged_against_the_artefacts_of_this_tree(self) -> None:
+        # The command, not the function: main() hands the artefacts to the journey check.
+        tree = self.fixture("0.6.0-beta.1")
+        tree.binary("0.6.0-beta.1")
+        tree.installer("0.6.0-beta.1")
+        built = hashlib.sha256((tree.root / "target/release/encastra-desktop.exe").read_bytes()).hexdigest()
+        text = GuiJourneyEvidenceTests.three_passing_runs(tree.commit)
+        log = tree.root / "gui-journeys.log"
+        log.write_text(text.replace(GuiJourneyEvidenceTests.INSTALLED_SHA, built), "utf-8")
+        _, report, _ = tree.check("--evidence-gui", str(log))
+        self.assertEqual(status_of(report, "gui.journeys"), "PASS")
+        log.write_text(text.replace(GuiJourneyEvidenceTests.INSTALLED_SHA, "cd" * 32), "utf-8")
+        _, report, _ = tree.check("--evidence-gui", str(log))
+        self.assertEqual(status_of(report, "gui.journeys"), "FAIL")
+
     def test_a_published_version_cannot_get_a_second_binary(self) -> None:
         # Release immutability: version + commit + hashes are one identity. The code moves on
         # under the same number, a new binary appears — and the check blocks until the version
@@ -271,10 +287,18 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
     # The commit the release expects, and another one. A log is judged against the first.
     EXPECTED = "0123456789abcdef0123456789abcdef01234567"
     OTHER = "fedcba9876543210fedcba9876543210fedcba98"
+    # The executable built here, and what Tauri's NSIS installer leaves on disk from it: the same
+    # bytes with the bundle marker rewritten. Under -Launch the harness hashes the installed copy.
+    BUILT = b"MZ" + b"\0" * 64 + b"__TAURI_BUNDLE_TYPE_VAR_UNK" + b"\0" * 64 + b"__TAURI_BUNDLE_TYPE_VAR_NSS"
+    BUILT_SHA = hashlib.sha256(BUILT).hexdigest()
+    INSTALLED_SHA = hashlib.sha256(BUILT.replace(b"__TAURI_BUNDLE_TYPE_VAR_UNK", b"__TAURI_BUNDLE_TYPE_VAR_NSS")).hexdigest()
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
+        exe = pathlib.Path(self._tmp.name) / "encastra-desktop.exe"
+        exe.write_bytes(self.BUILT)
+        self.entries = [{"name": "encastra-desktop.exe", "path": str(exe), "sha256": self.BUILT_SHA}]
 
     def judge(self, text: str, expected: str | None = EXPECTED):
         sys.path.insert(0, str(SCRIPT.parent))
@@ -282,11 +306,11 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
 
         log = pathlib.Path(self._tmp.name) / "gui-journeys.log"
         log.write_text(text, "utf-8")
-        return release_check.check_gui_journeys(log, expected)
+        return release_check.check_gui_journeys(log, expected, self.entries)
 
-    @staticmethod
-    def subject(stamp: str) -> str:
-        return f"SUBJECT  exe=C:\\Users\\r\\AppData\\Local\\Encastra\\encastra-desktop.exe sha256={'ab' * 32} stamp={stamp} version=0.5.0-rc.4\n"
+    @classmethod
+    def subject(cls, stamp: str, sha: str | None = None) -> str:
+        return f"SUBJECT  exe=C:\\Users\\r\\AppData\\Local\\Encastra\\encastra-desktop.exe sha256={sha or cls.INSTALLED_SHA} stamp={stamp} version=0.5.0-rc.4\n"
 
     @staticmethod
     def iteration(i: int, n: int = 3) -> str:
@@ -319,23 +343,39 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
 
         log = pathlib.Path(self._tmp.name) / "gui-journeys.log"
         log.write_bytes(raw)
-        return release_check.check_gui_journeys(log, expected, entries)
+        return release_check.check_gui_journeys(log, expected, self.entries if entries is None else entries)
 
     # --- what an adversarial review (2026-09-22) got the gate to accept, each now refused ---------
 
+    def test_the_installed_copy_of_the_executable_built_here_is_the_build_here(self) -> None:
+        # What a -Launch run hashes: the copy the installer left, marker rewritten, three bytes off.
+        check = self.judge(self.three_passing_runs(self.EXPECTED))
+        self.assertEqual(check.status, "PASS")
+        self.assertIn("installer leaves it", check.evidence)
+        # And a run against target/ itself.
+        check = self.judge(self.three_passing_runs(self.EXPECTED).replace(self.INSTALLED_SHA, self.BUILT_SHA))
+        self.assertEqual(check.status, "PASS")
+
     def test_a_log_is_bound_to_the_executable_built_here_not_only_to_its_commit(self) -> None:
         # Same commit, other bytes: a debug build, a patched one, another toolset's.
-        text = self.three_passing_runs(self.EXPECTED).encode("utf-8")
-        here = [{"name": "encastra-desktop.exe", "sha256": "cd" * 32}]
-        check = self.judge_bytes(text, entries=here)
-        self.assertEqual(check.status, "FAIL")
-        self.assertIn("ab" * 32, check.evidence)
-        self.assertIn("cd" * 32, check.evidence)
-        self.assertEqual(self.judge_bytes(text, entries=[{"name": "encastra-desktop.exe", "sha256": "ab" * 32}]).status, "PASS")
+        for other in ("cd" * 32, "none"):
+            with self.subTest(sha=other):
+                check = self.judge(self.three_passing_runs(self.EXPECTED).replace(self.INSTALLED_SHA, other))
+                self.assertEqual(check.status, "FAIL")
+                self.assertIn(other, check.evidence)
+                self.assertIn(self.BUILT_SHA, check.evidence)
+                self.assertIn(self.INSTALLED_SHA, check.evidence)
 
     def test_no_built_executable_to_compare_with_is_not_a_pass(self) -> None:
         check = self.judge_bytes(self.three_passing_runs(self.EXPECTED).encode("utf-8"), entries=[])
         self.assertEqual(check.status, "BLOCKED")
+
+    def test_two_summary_lines_are_two_runs(self) -> None:
+        good = self.three_passing_runs(self.EXPECTED)
+        summary = good.splitlines()[-1]
+        check = self.judge(good.replace(summary, summary + "\n" + summary))
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("2 SUMMARY", check.evidence)
 
     def test_a_repeat_the_harness_would_never_write_is_refused_at_once(self) -> None:
         # Used to build a list as long as the number: 10**20 hung the gate.
@@ -389,12 +429,12 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
         sys.path.insert(0, str(SCRIPT.parent))
         import release_check
 
-        self.assertEqual(release_check.check_gui_journeys(pathlib.Path(self._tmp.name), self.EXPECTED).status, "FAIL")
+        self.assertEqual(release_check.check_gui_journeys(pathlib.Path(self._tmp.name), self.EXPECTED, self.entries).status, "FAIL")
 
     def test_the_encodings_a_windows_shell_writes_are_the_same_evidence(self) -> None:
         # Windows PowerShell 5.1's Tee-Object writes a UTF-8 BOM; some of its redirections UTF-16.
         text = self.three_passing_runs(self.EXPECTED).replace("\n", "\r\n")
-        for raw in (b"\xef\xbb\xbf" + text.encode("utf-8"), text.encode("utf-16"), text.replace("\r\n", "\r").encode("utf-8")):
+        for raw in (b"\xef\xbb\xbf" + text.encode("utf-8"), text.encode("utf-16")):
             with self.subTest(head=raw[:4]):
                 self.assertEqual(self.judge_bytes(raw).status, "PASS")
 
@@ -418,7 +458,7 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
 
         log = pathlib.Path(self._tmp.name) / "gui-journeys.log"
         log.write_bytes(self.three_passing_runs(self.EXPECTED).replace("\n", "\r\n").encode("utf-8"))
-        check = release_check.check_gui_journeys(log, self.EXPECTED)
+        check = release_check.check_gui_journeys(log, self.EXPECTED, self.entries)
         self.assertEqual(check.status, "PASS")
 
     def test_two_iterations_under_a_summary_of_three_is_a_failure(self) -> None:

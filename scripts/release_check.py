@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -376,9 +377,10 @@ GUI_ITERATION = re.compile(r"^--- iteration (\d+) of (\d+) ---$", re.M)
 # The harness prints its counters as plain decimal integers. `03`, `3.0` or `+3` are not something
 # it writes, so a SUMMARY carrying them has been written by something else.
 GUI_NUMBER = r"(0|[1-9]\d{0,5})(?![\w.])"
-# More iterations than anyone would ask the harness for; a repeat above it is not a run, and
-# comparing against it must not cost memory proportional to a number the log chose.
-GUI_MAX_REPEAT = 50
+# Tauri's NSIS installer rewrites this marker in the copy it installs, so the application knows
+# which kind of package it came from (docs/RELEASE.md): the installed executable is the built one
+# with these bytes changed and nothing else.
+TAURI_BUNDLE_MARKER = (b"__TAURI_BUNDLE_TYPE_VAR_UNK", b"__TAURI_BUNDLE_TYPE_VAR_NSS")
 # A verdict line the harness does not write: indented, or not in capitals. Its own are exactly
 # `PASS  `, `FAIL  ` and `SKIP  ` at the start of a line, and a FAIL or a SKIP in any other shape
 # is one that the tally above would not count.
@@ -434,11 +436,12 @@ def _gui_read(evidence: pathlib.Path) -> str:
         text = raw.decode("utf-16", errors="replace")
     else:
         text = raw.decode("utf-8-sig", errors="replace")
-    # The runner writes CRLF; a line is the same line either way.
-    return text.replace("\r\n", "\n").replace("\r", "\n")
+    # The runner writes CRLF; a line is the same line either way. A lone CR is left alone: no shell
+    # writes one as a line end, and one inside an observed string must not split a PASS line.
+    return text.replace("\r\n", "\n")
 
 
-def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | None, entries: list[dict] | None = None) -> Check:
+def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | None, entries: list[dict]) -> Check:
     """Have the chooser journeys that gate permissions been driven through the interface?
 
     B5. Four folder purposes and one file purpose decide what the application may read and write,
@@ -527,19 +530,27 @@ def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | Non
         if said_n is None or int(said_n.group(1)) != lines:
             return Check("gui.journeys", FAIL, f"{evidence.name}: the SUMMARY line says {name}={said_n.group(1) if said_n else '(nothing it writes)'} and the log has {lines} such lines; a log that disagrees with its own tally is evidence of neither", rerun)
     found = re.search(rf"(?<![\w.])repeat={GUI_NUMBER}", summary.group(0))
-    if found is None or int(found.group(1)) > GUI_MAX_REPEAT:
+    if found is None:
         return Check("gui.journeys", FAIL, f"{evidence.name}: the SUMMARY line's repeat is not a count the harness writes ({summary.group(0)[:120]})", rerun)
     repeat = int(found.group(1))
     # And the build it names is the build here. The stamp says which commit; the hash says which
     # bytes - a debug build, a patched one or another machine's build of the same commit has the
-    # same stamp and a different hash. The harness hashes the executable it drove.
-    if entries is not None:
-        binary = next((e for e in entries if e.get("name") == "encastra-desktop.exe"), None)
-        sha = GUI_SUBJECT_SHA.search(subject.group(0))
-        if binary is None:
-            return Check("gui.journeys", BLOCKED, f"{evidence.name} drove build {stamp[:12]}, and there is no built encastra-desktop.exe here to compare its hash with", "build the expected commit, then run this again")
-        if sha is None or sha.group(1) != binary.get("sha256"):
-            return Check("gui.journeys", FAIL, f"{evidence.name} drove an executable with sha256={sha.group(1) if sha else '(not stated)'}; the one built here is {binary.get('sha256')}", rerun)
+    # same stamp and a different hash. The harness hashes the executable it drove: under -Launch the
+    # installed copy, which is the built one with the NSIS bundle marker rewritten, and otherwise
+    # whatever -Exe named, which may be target/ itself. Those two hashes are the only ones accepted.
+    binary = next((e for e in entries if e.get("name") == "encastra-desktop.exe"), None)
+    if binary is None:
+        return Check("gui.journeys", BLOCKED, f"{evidence.name} drove build {stamp[:12]}, and there is no built encastra-desktop.exe here to compare its hash with", "build the expected commit, then run this again")
+    sha = GUI_SUBJECT_SHA.search(subject.group(0))
+    built = pathlib.Path(binary["path"]).read_bytes()
+    unk, nss = TAURI_BUNDLE_MARKER
+    installed = hashlib.sha256(built.replace(unk, nss)).hexdigest() if built.count(unk) == 1 else None
+    accepted = {binary.get("sha256"): "the executable built here"}
+    if installed:
+        accepted[installed] = "the executable built here as its installer leaves it (bundle marker rewritten)"
+    if sha is None or sha.group(1) not in accepted:
+        return Check("gui.journeys", FAIL, f"{evidence.name} drove an executable with sha256={sha.group(1) if sha else '(not stated)'}; built here: {binary.get('sha256')}, installed from it: {installed or '(no single bundle marker in it)'}", rerun)
+    driven = accepted[sha.group(1)]
     if skips:
         # A journey that did not run is not a journey that passed, and the two are the same colour
         # unless something says so.
@@ -552,7 +563,7 @@ def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | Non
     missing = _gui_missing_iterations(text, repeat)
     if missing:
         return Check("gui.journeys", FAIL, f"{evidence.name} claims repeat={repeat} but {missing[0]}", rerun)
-    return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name} over repeat={repeat} runs of the suite, against build {stamp[:12]}, the commit this release expects")
+    return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name} over repeat={repeat} runs of the suite, against build {stamp[:12]}, the commit this release expects, on {driven}")
 
 
 def check_toolchain() -> Check:
