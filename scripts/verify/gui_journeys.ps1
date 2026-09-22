@@ -198,10 +198,13 @@ public static class W32 {
   // calls them, only under CI, and only after checking - immediately before each call - that the
   // foreground window IS the chooser.
   [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
-  // 64-bit layout: 4 bytes of type, 4 of padding to align the union, 24 of KEYBDINPUT = 32, which
-  // is what SendInput is told and what it expects. SendInput validates that size, so a 32-bit
-  // PowerShell would fail this call loudly rather than corrupt anything; the harness runs 64-bit.
-  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public uint padding; public KEYBDINPUT ki; }
+  // 64-bit layout: 4 bytes of type, 4 of padding to align the union, then the union - whose size is
+  // set by its LARGEST member, MOUSEINPUT (32 bytes), not by the 24 of KEYBDINPUT. sizeof(INPUT) is
+  // therefore 40, and SendInput validates cbSize against it: a 32 makes it insert nothing and set
+  // ERROR_INVALID_PARAMETER (87). This struct declared 32 until run 35797932599, where every native
+  // dialog that had no Edit window under it - and so needed keystrokes - failed with exactly that,
+  // 0 of N events, error 87. The 8 bytes below are the rest of the union; nothing writes them.
+  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public uint padding; public KEYBDINPUT ki; public ulong unionTail; }
   [DllImport("user32.dll", SetLastError=true)] public static extern uint SendInput(uint n, INPUT[] inputs, int size);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   const uint INPUT_KEYBOARD = 1;
@@ -233,8 +236,15 @@ public static class W32 {
     seq[1].type = INPUT_KEYBOARD; seq[1].ki.wVk = vk;
     seq[2].type = INPUT_KEYBOARD; seq[2].ki.wVk = vk; seq[2].ki.dwFlags = KEYEVENTF_KEYUP;
     seq[3].type = INPUT_KEYBOARD; seq[3].ki.wVk = modifier; seq[3].ki.dwFlags = KEYEVENTF_KEYUP;
-    return (int)SendInput(4, seq, Marshal.SizeOf(typeof(INPUT)));
+    uint inserted = SendInput(4, seq, Marshal.SizeOf(typeof(INPUT)));
+    // Captured here for the same reason as in TypeText: the last error is the last error only for
+    // an instant, and a caller in PowerShell cannot read it before something else overwrites it.
+    LastTypeError = Marshal.GetLastWin32Error();
+    return (int)inserted;
   }
+  // What SendInput was told its elements measure. Read in the self-test, because the one thing that
+  // makes every keystroke silently vanish is this number disagreeing with the running architecture.
+  public static int InputSize() { return Marshal.SizeOf(typeof(INPUT)); }
   // A window's caption, read the way that works across a process boundary for a top-level window.
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, System.Text.StringBuilder s, int max);
   // Every top-level window this process owns, whatever its class and wherever UI Automation
@@ -2283,6 +2293,25 @@ function WindowFacts($h) {
     try { $pname = (Get-Process -Id ([int]$wpid) -ErrorAction Stop).ProcessName } catch { $pname = '?' }
     return ("#{0} class={1} title='{2}' pid={3} ({4})" -f $h, (HwndClass $h), $sb.ToString(), $wpid, $pname)
 }
+# Why SendInput inserted nothing, in the words of the thing that refused it. 87 is the one this
+# harness got wrong for a long time: it is not the desktop, it is cbSize.
+function InputRefusal($err) {
+    switch ($err) {
+        87 { return '0 with error 87 is ERROR_INVALID_PARAMETER: SendInput rejected the cbSize it was given, so no event was ever queued' }
+        5 { return '0 with error 5 is ERROR_ACCESS_DENIED: the injection was refused - a more privileged window is in front (UIPI), or this session has no attached input desktop' }
+        default { return "0 events were inserted (error $err)" }
+    }
+}
+# Can this desktop be typed at at all? Asked once, at the start, under CI only, with a key that
+# changes nothing on its own - because the alternative is finding out twenty minutes in, five
+# journeys deep, in a message about a file-name box. Run 35797932599 is why this exists.
+function AssertInputWorks {
+    if ($env:GITHUB_ACTIONS -ne 'true') { return }
+    $sent = [W32]::KeyUnder($VK_CONTROL, $VK_CONTROL)
+    $err = [W32]::LastTypeError
+    Report ($sent -gt 0) 'global input is accepted on this desktop' $(if ($sent -gt 0) { "SendInput inserted $sent of 4 events, cbSize=$([W32]::InputSize()) (VK_CONTROL, which does nothing by itself)" } else { "cbSize=$([W32]::InputSize()): $(InputRefusal $err) - every journey that has to type into a native dialog will fail, so this run is stopped here" })
+    if ($sent -le 0) { Finish $Repeat '(this desktop refuses global input; nothing was driven)' }
+}
 # The only door global input goes through. Returns what $send returned, or $null when it refused;
 # prints nothing (TypeIntoDialog returns a value, so it may not) - a refusal is left in
 # $script:typeFails, which ConfirmChooser reports as FAIL lines.
@@ -2459,7 +2488,7 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
             if ($null -eq $sent) {
                 $how = 'no Edit window was found under this dialog; Ctrl+A was sent, and then typing the path was refused (see the FAIL line)'
             } else {
-                $how = "no Edit window was found under this dialog, so the path was typed: SendInput inserted $sent of $(2 * $path.Length) events, last error $([W32]::LastTypeError)$(if ($sent -eq 0) { ' (0 means the injection was refused - this session has no attached input desktop)' })"
+                $how = "no Edit window was found under this dialog, so the path was typed: SendInput inserted $sent of $(2 * $path.Length) events, last error $([W32]::LastTypeError)$(if ($sent -eq 0) { " ($(InputRefusal ([W32]::LastTypeError)))" })"
                 Start-Sleep -Milliseconds 350
             }
         }
@@ -2814,6 +2843,12 @@ if (-not $cdpOk) {
 # whatever project is open.
 function RunSelfTest {
     '--- self test: the page, the canvas oracle, and nothing native ---'
+    # Nothing is sent here - a self test runs where somebody is working. But the size SendInput
+    # validates can be read without sending anything, and when it is wrong every keystroke this
+    # harness ever sends vanishes with error 87, which is how run 35797932599 lost five journeys.
+    $inputSize = [W32]::InputSize()
+    $wantSize = if ([Environment]::Is64BitProcess) { 40 } else { 28 }
+    Report ($inputSize -eq $wantSize) 'self test: SendInput is told the size its INPUT really is' "cbSize=$inputSize, and a $(if ([Environment]::Is64BitProcess) { '64' } else { '32' })-bit process must pass $wantSize (the union is as big as MOUSEINPUT, not KEYBDINPUT)"
     # The application opens on Home, which is not a fault - so this is one check about where we end
     # up, not a failure for not already being there followed by a pass for arriving.
     $already = (CdpOnView '^(Constructor|Builder)$') -eq $true
@@ -2965,6 +3000,10 @@ function ResetProject($what) {
 }
 
 function HarnessStart {
+    # Before anything is driven: a desktop that refuses injection cannot run the journeys that need
+    # it, and saying so now costs four keystrokes instead of twenty-five minutes.
+    AssertInputWorks
+
     # A chooser left open by an earlier attempt would block everything below - it is modal to the
     # application, so every button underneath it reads as disabled.
     EnsureNoDialogs 'harness start'
