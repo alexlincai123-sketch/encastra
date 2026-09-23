@@ -1078,12 +1078,19 @@ fn start_workflow(
 
     let seed = seed_for(&mut broker, &inputs, &chosen_files(&state)?)?;
 
-    let session = Session::start(
+    // What the person chose counts as supplied, exactly as `validate_graph` counts it for the
+    // editor's own check. Without this the session validated the graph as if nothing had been
+    // picked, so a one-step workflow whose file comes from the chooser - the shape the
+    // grant-to-component and run-input journeys drive, and the first one anybody builds - was
+    // refused by the only button that runs it while `run_graph` ran the same graph happily.
+    let supplied: BTreeSet<PortRef> = inputs.iter().map(InputSpec::port_ref).collect();
+    let session = Session::start_with_supplied(
         graph.clone(),
         &registry,
         components.clone(),
         &triggers,
         run_id.clone(),
+        &supplied,
     )
     .map_err(|validation| {
         // The editor already shows the issues; this is the one-line version for the status bar.

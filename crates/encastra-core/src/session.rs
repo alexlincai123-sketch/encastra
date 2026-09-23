@@ -188,7 +188,35 @@ impl Session {
         triggers: &TriggerSet,
         id: impl Into<String>,
     ) -> Result<Self, Validation> {
-        let supplied = trigger_ports(&graph, registry);
+        Self::start_with_supplied(
+            graph,
+            registry,
+            components,
+            triggers,
+            id,
+            &std::collections::BTreeSet::new(),
+        )
+    }
+
+    /// The same, for a session whose entry inputs the application fills in.
+    ///
+    /// A trigger's output is not the only thing that arrives from outside the graph: the file a
+    /// person picks in the chooser is too, and `validate_with_supplied` says so in as many words.
+    /// `start` only ever counted the triggers, so a graph whose one input comes from the chooser -
+    /// the first graph anybody builds, and the one the chooser journeys drive - was refused by the
+    /// only button that would have run it, with "this workflow cannot run yet" and a count of
+    /// problems the editor had no way to show. `run_graph` accepted the same graph, because it
+    /// seeds before it runs; the two disagreed about what a runnable graph is.
+    pub fn start_with_supplied(
+        graph: Graph,
+        registry: &dyn ComponentRegistry,
+        components: CoreComponentSet,
+        triggers: &TriggerSet,
+        id: impl Into<String>,
+        supplied_by_app: &std::collections::BTreeSet<PortRef>,
+    ) -> Result<Self, Validation> {
+        let mut supplied = trigger_ports(&graph, registry);
+        supplied.extend(supplied_by_app.iter().cloned());
         let validation = validate_with_supplied(&graph, registry, &supplied);
         if !validation.is_runnable() {
             return Err(validation);
@@ -489,6 +517,65 @@ mod tests {
             .to_string(),
         )
         .expect("fixture manifest must be valid")
+    }
+
+    #[test]
+    fn a_graph_whose_one_input_the_person_picked_is_runnable() {
+        // The workflow anybody builds first: one step, no trigger, and its input is the file
+        // chosen in the chooser. `start` validated as though nothing had been chosen, so Run
+        // refused it - "this workflow cannot run yet" with a count of problems and no way to see
+        // them - while the editor's own check, which counts what was supplied, said it was fine.
+        let mut inner = crate::registry::InMemoryRegistry::new();
+        inner
+            .insert(
+                ComponentManifest::parse(
+                    &serde_json::json!({
+                        "schema": 1, "id": "test.sink", "version": "1.0.0", "name": "sink",
+                        "runtime": ">=0.1.0", "kind": "core",
+                        "ports": { "inputs": { "file": { "type": "i64", "required": true } } }
+                    })
+                    .to_string(),
+                )
+                .expect("fixture manifest must be valid"),
+            )
+            .unwrap();
+        let graph = Graph::parse(
+            &serde_json::json!({
+                "nodes": { "save-1": { "component": "test.sink@1.0.0" } }, "edges": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let triggers = TriggerSet::new();
+
+        let refused = Session::start(
+            graph.clone(),
+            &inner,
+            CoreComponentSet::default(),
+            &triggers,
+            "run-1",
+        );
+        let validation = refused
+            .err()
+            .expect("unsupplied: still refused, and rightly");
+        assert_eq!(validation.errors().count(), 1, "the unconnected input");
+
+        let supplied = std::collections::BTreeSet::from([PortRef {
+            node: NodeId("save-1".into()),
+            port: "file".into(),
+        }]);
+        assert!(
+            Session::start_with_supplied(
+                graph,
+                &inner,
+                CoreComponentSet::default(),
+                &triggers,
+                "run-2",
+                &supplied,
+            )
+            .is_ok(),
+            "a file the person picked feeds that input as surely as a trigger's output does"
+        );
     }
 
     #[test]
