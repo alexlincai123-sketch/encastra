@@ -1845,7 +1845,23 @@ function SetValue($el, $text) {
 # What the application is saying right now, in one line: the status bar, the view it is on, and
 # every problem note the Inspector is showing. A FAIL that says only "it said nothing" cannot be
 # acted on; this is what turns that into the next question.
-$CDP_SAYS_JS = "(()=>{const s=document.querySelector('footer.statusbar > span');const v=document.querySelector('.sidebar__item[aria-current=page]');const n=[...document.querySelectorAll('.note--error,.note--warn')].map(e=>e.innerText.replace(/\s+/g,' ').slice(0,160));return 'view='+(v?v.innerText.trim():'?')+' status='+(s?s.innerText.trim():'(empty)')+' notes['+n.length+']='+n.join(' / ');})()"
+# The message is the LAST span of the footer - `span.statusbar__message--{tone}` (App.tsx:222) -
+# and the first one is the step counter. Reading the first said "1 paso" where the message was,
+# which is how run 35807906967 reported "the application said nothing" three times over a screen
+# that may well have been saying something.
+$CDP_SAYS_JS = "(()=>{const m=document.querySelector('[class*=statusbar__message]');const f=document.querySelector('footer.statusbar');const v=document.querySelector('.sidebar__item[aria-current=page]');const n=[...document.querySelectorAll('.note--error,.note--warn')].map(e=>e.innerText.replace(/\s+/g,' ').slice(0,160));return 'view='+(v?v.innerText.trim():'?')+' message='+(m?JSON.stringify(m.className)+' '+m.innerText.trim():'(none on screen)')+' footer='+(f?f.innerText.replace(/\s+/g,' ').slice(0,180):'?')+' notes['+n.length+']='+n.join(' / ');})()"
+# What the status bar's message says right now, or '' - the one place the application acknowledges
+# something it just did. Polled, because a message that has not arrived yet is not a message that
+# is not coming: UI Automation gets there when it gets there, and this does not wait on it.
+function MessageNow { return [string](Cdp-Eval "(()=>{const m=document.querySelector('[class*=statusbar__message]');return m?m.innerText.trim():'';})()") }
+function WaitForMessage($pattern, $seconds) {
+    for ($i = 0; $i -lt $seconds * 4; $i++) {
+        $now = MessageNow
+        if ($now -and $now -match $pattern) { return $now }
+        Start-Sleep -Milliseconds 250
+    }
+    return $null
+}
 function AppSays { return (OneLine (Cdp-Eval $CDP_SAYS_JS)) }
 function FindText($pattern, $seconds) {
     for ($i = 0; $i -lt $seconds * 4; $i++) {
@@ -3552,6 +3568,10 @@ function Journey3 {
                 } else {
                     $link = FindText '(es una ligaz|es un enlace|is a link)' 6
                     $notPub = FindText '(No hay publication\.json|There is no publication\.json|no es una carpeta|not a folder)' 6
+                    if (-not $link -and -not $notPub) {
+                        $said = WaitForMessage '(enlace|ligaz|link|publication\.json|carpeta|folder)' 6
+                        if ($said -match '(enlace|ligaz|link)') { $link = $said } elseif ($said) { $notPub = $said }
+                    }
                     if ($link) {
                         Report $true 'j3 a junction is resolved or refused, never followed blindly' "refused as a link: '$link'"
                     } elseif ($notPub) {
@@ -3584,7 +3604,11 @@ function Journey3 {
                 $confirm = Wait 'Button' '^(Importar|Import)$' 8
                 if ($confirm -and $confirm.Current.IsEnabled) {
                     ClickInView $confirm $CDP_SCROLL_IMPORT_CONFIRM 'j3 the Import panel Import button'
-                    $taken = FindText '(Recibido Journey evidence|Imported Journey evidence)' 25
+                    # Two ways of asking, because they fail differently: the accessibility tree, and
+                    # the status bar message the store sets when the copy is in the library
+                    # (store.ts confirmImport -> messages.imported).
+                    $taken = FindText '(Recibido Journey evidence|Imported Journey evidence)' 20
+                    if (-not $taken) { $taken = WaitForMessage '(Recibido|Imported)' 10 }
                     Report ($null -ne $taken) 'j3 importing put it in the library' "'$taken'$(if (-not $taken) { " - the application is on $(AppSays)" })"
                 } else {
                     Report $false 'j3 the Import button is armed for a folder that was read' "enabled=$($confirm.Current.IsEnabled)"
@@ -3843,6 +3867,15 @@ function Journey45 {
         # chosen for `grant-to-component` can never be offered to them from the GUI at all. The pair
         # is covered where it is expressible - here - and by `a folder chosen for {recorded} must not
         # answer {asked}` in apps/desktop/src-tauri/src/lib.rs, which walks every pair.
+        # Last, because it changes what the Inspector is showing and everything above needs the step
+        # it was showing: the Inspector prints the validator's issues only while no step is selected
+        # (Inspector.tsx:517-533), so a graph the application refused to run says why here and
+        # nowhere else. A note, not a check - this is the evidence for the FAIL lines above.
+        if ($refusedToRun) {
+            [void](Cdp-Eval "(()=>{const p=document.querySelector('.react-flow__pane');if(!p)return false;for(const t of ['mousedown','mouseup','click']){p.dispatchEvent(new MouseEvent(t,{bubbles:true,clientX:5,clientY:5}));}return true;})()")
+            Start-Sleep -Milliseconds 600
+            Note "j4/j5 what the application says is wrong with the graph it refused: $(OneLine (Cdp-Eval "(()=>{const n=[...document.querySelectorAll('.note--error,.note--warn')].map(e=>e.innerText.replace(/\s+/g,' '));const t=document.querySelector('.panel--inspector .panel__title');return (t?t.innerText+': ':'')+(n.length?n.join(' // '):'(the Inspector is not showing any problem note)');})()"))"
+        }
     } catch {
         JourneyEnded $_ 'j4/j5 grant-to-component and run-input journeys ran to the end'
     }
