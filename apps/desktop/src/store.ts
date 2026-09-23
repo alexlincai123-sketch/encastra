@@ -110,6 +110,13 @@ interface EditorState {
 
   /** Live state while something is running. Distinct from the journal, which is the record. */
   running: boolean;
+  /**
+   * How many status events the runtime has sent. Not shown anywhere: it is how an answer that
+   * has been overtaken is recognised. `startWorkflow` returns "running", and a workflow of one
+   * step can finish - and report that it finished - before that answer is applied, which left
+   * the interface saying "En ejecución" over a run that had ended, until something else was run.
+   */
+  statusSeq: number;
   watching: boolean;
   runs: number;
   pending: number;
@@ -298,6 +305,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   dirty: false,
   view: 'home',
   running: false,
+  statusSeq: 0,
   watching: false,
   runs: 0,
   pending: 0,
@@ -998,6 +1006,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       },
       status: (status: WorkflowStatus) => {
         set((s) => ({
+          statusSeq: s.statusSeq + 1,
           running: status.running,
           watching: status.watching,
           runs: status.runs,
@@ -1028,7 +1037,16 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ busy: true, message: null, journal: null, liveNodes: {} });
     try {
       const state = get();
+      const seq = state.statusSeq;
       const status = await ipc.startWorkflow(state.toGraph(), state.inputs, state.grants);
+      // Only if the run has not already reported for itself. A one-step workflow finishes in
+      // milliseconds and announces that it has, and applying "running" on top of that left the
+      // status bar saying so over a run that was over - measured on a runner: sixty seconds
+      // later it still said "En ejecución" while the file it had written sat on disk.
+      if (get().statusSeq !== seq) {
+        set({ view: 'builder' });
+        return;
+      }
       set({
         running: status.running,
         watching: status.watching,
