@@ -8,20 +8,20 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.5.0-rc.4** · built 2026-09-23 on Windows AMD64 · build commit `345f5b4f21c6aed66a035ef695e1a3cfc7d5e117`
+**Version 0.5.0-rc.5** · built 2026-09-23 on Windows X64 by GitHub Actions run [35886539393](https://github.com/alexlincai123-sketch/encastra/actions/runs/35886539393) · build commit `dc6d2d2f0a0050cff796d12b7d97eed69512c6a9`
 
-Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0. Two builds of the build commit with this toolchain produce these exact bytes; `scripts/pe_diff.py` says how they differ if they do not.
+Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0 · MSVC 14.44.35207 · Windows SDK 10.0.26100.0 (AdvAPI32.Lib `ecafe89a632a35b1…`) · runner image win25-vs2026 20260907.229.1. Built twice in that run, on two machines, byte-identical; the release workflow builds the build commit a third time at the tag and requires these bytes again. `scripts/pe_diff.py` names any byte that differs.
 
 | Artefact | Size | Signature | SHA-256 |
 |---|---|---|---|
-| `Encastra_0.5.0-rc.4_x64-setup.exe` | 3.5 MB | **not signed** | `28b7b1bba351249f6f33e58bb41f6e08cd383de9c7c3db78e3a944e577a179d9` |
-| `encastra-desktop.exe` | 9.4 MB | **not signed** | `0dcda5715ab40e2e4c2292dc914095be8a0c9d86e57958eedea75609493b2adc` |
+| `Encastra_0.5.0-rc.5_x64-setup.exe` | 3.5 MB | **not signed** | `7f77b5b127f77ba1686aca449bec44dc6efb63e28fcde082e65bb947ea210c5b` |
+| `encastra-desktop.exe` | 9.4 MB | **not signed** | `4ca9de2f37037251dbd95c48ef062ad044d3a27d14df5b81bd995af7c3c96a17` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.5.0-rc.4_x64-setup.exe -Algorithm SHA256
-Get-AuthenticodeSignature .\Encastra_0.5.0-rc.4_x64-setup.exe
+Get-FileHash .\Encastra_0.5.0-rc.5_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Encastra_0.5.0-rc.5_x64-setup.exe
 ```
 
 These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking — with the caveat that a hash published beside the download is only as trustworthy as the site serving both.
