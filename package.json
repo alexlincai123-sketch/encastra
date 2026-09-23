@@ -30,7 +30,7 @@
     "release:reproduce": "python scripts/verify/reproduce.py"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.13",
+    "@biomejs/biome": "^2.5.14",
     "@types/node": "^24.9.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
