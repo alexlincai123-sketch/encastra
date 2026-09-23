@@ -46,7 +46,8 @@ ignore = [
 # Allowlist, not a denylist: a dependency arriving under an unexpected licence should fail
 # loudly rather than slip through because nobody thought to ban it.
 #
-# Encastra ships as a proprietary binary (`license = "UNLICENSED"`, `publish = false`), so the
+# Encastra ships as a proprietary binary (`license = "LicenseRef-Encastra-Proprietary"`,
+# `publish = false`; the terms are in LICENSE at the root), so the
 # question each entry answers is: what does this licence oblige us to do when we ship a compiled
 # binary that links it?
 allow = [
@@ -94,9 +95,14 @@ allow = [
 ]
 confidence-threshold = 0.9
 
-# The crates in this workspace declare `license = "UNLICENSED"`, which is not an SPDX
-# expression — deliberately, because they are not published. Without this, cargo-deny reports
-# our own code as an unlicensed dependency and the check can never pass.
+# The crates in this workspace declare `license = "LicenseRef-Encastra-Proprietary"`: a valid
+# SPDX reference to a licence that is not in the SPDX list, because it is ours and lives in
+# LICENSE. Without this, cargo-deny scores our own code against the allowlist above and the
+# check can never pass.
+#
+# `private.ignore` keys off `publish = false` in Cargo.toml. Keep that line: remove it and
+# cargo-deny starts trying to identify a bespoke licence with askalono against the 0.9
+# confidence threshold above, which a hand-written licence will not meet.
 private = { ignore = true }
 
 [bans]

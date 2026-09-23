@@ -350,6 +350,9 @@ def check_vm(evidence: pathlib.Path | None) -> Check:
 def check_external(mode: str) -> list[Check]:
     legal = ROOT / "docs" / "legal"
     drafts = sorted(p.name for p in legal.glob("*.md")) if legal.exists() else []
+    # Read the tree rather than assert about it. This line used to say "the tree is UNLICENSED"
+    # whatever the tree said, which stopped being true the moment a LICENCE was written.
+    licence = "LICENSE present, proprietary, drafted in-house and unreviewed" if (ROOT / "LICENSE").exists() else "the tree has no LICENSE"
     # Both are outside the repository in every mode. A beta ships without them, on record; a
     # release does not — the verdict, not the status, is what differs between the two modes.
     need = "required before a release version" if mode == "release" else "not required for a beta; recorded"
@@ -363,7 +366,7 @@ def check_external(mode: str) -> list[Check]:
         Check(
             "legal",
             EXTERNAL,
-            f"drafts present: {', '.join(drafts) if drafts else 'none'}; the tree is UNLICENSED; the name is not cleared ({need})",
+            f"drafts present: {', '.join(drafts) if drafts else 'none'}; {licence}; the name is not cleared ({need})",
             "a lawyer signs off the licence, the terms, the privacy statement and the mark (docs/legal/)",
         ),
     ]
