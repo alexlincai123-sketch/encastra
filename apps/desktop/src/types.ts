@@ -65,7 +65,7 @@ export interface PortRef {
 
 export type IssueLocation =
   | { kind: 'graph' }
-  | { kind: 'node'; 0: string }
+  | { kind: 'node'; node: string }
   | { kind: 'port'; 0: PortRef }
   | { kind: 'edge'; from: PortRef; to: PortRef };
 

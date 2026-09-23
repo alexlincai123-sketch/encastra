@@ -35,7 +35,13 @@ pub enum Severity {
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Location {
     Graph,
-    Node(NodeId),
+    // A named field, not a newtype: with `tag = "kind"` serde cannot serialise a variant whose
+    // content is a bare string, and NodeId is one. Every issue about a node - an uninstalled
+    // component, a required input with nothing connected, a cycle - failed to cross the IPC with
+    // "cannot serialize tagged newtype variant Location::Node containing a string", so the
+    // editor's Check answered with that sentence instead of with the problems. `Port` is fine
+    // because PortRef is a struct, which a tagged variant can carry.
+    Node { node: NodeId },
     Port(PortRef),
     Edge { from: PortRef, to: PortRef },
 }
@@ -133,7 +139,7 @@ pub fn validate_with_supplied(
             }
             None => issues.push(
                 Issue::error(
-                    Location::Node(id.clone()),
+                    Location::Node { node: id.clone() },
                     format!("Component {} is not installed.", node.component),
                 )
                 .with_hint("Install it from the registry, or open the project read-only to see what it needs."),
@@ -374,7 +380,7 @@ fn check_config(
             let Some(field) = manifest.config.get(key) else {
                 issues.push(
                     Issue::warning(
-                        Location::Node(id.clone()),
+                        Location::Node { node: id.clone() },
                         format!(
                             "\"{key}\" is set on this node but {} does not use it.",
                             manifest.name
@@ -386,7 +392,7 @@ fn check_config(
             };
             if let Some(problem) = config_problem(field, value) {
                 issues.push(Issue::error(
-                    Location::Node(id.clone()),
+                    Location::Node { node: id.clone() },
                     format!("\"{key}\" {problem}"),
                 ));
             }
@@ -395,7 +401,7 @@ fn check_config(
         for (key, field) in &manifest.config {
             if field.required && !node.config.contains_key(key) && field.default.is_none() {
                 issues.push(Issue::error(
-                    Location::Node(id.clone()),
+                    Location::Node { node: id.clone() },
                     format!("{} needs \"{key}\" to be set.", manifest.name),
                 ));
             }
