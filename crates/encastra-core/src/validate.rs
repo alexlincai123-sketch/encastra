@@ -390,6 +390,21 @@ fn check_config(
                 );
                 continue;
             };
+            // A setting left empty is not a setting of the wrong type. The editor's form sends
+            // null for a box nobody typed in, and Save File's own manifest says of two of them
+            // "leave empty to keep the name the file already has" - so an empty optional one has
+            // to mean exactly that. It read as `"filename" should be string, but is empty` and
+            // stopped the workflow from running at all, with nothing the reader could do about it
+            // except type something into a field the component documents as optional.
+            if value.is_null() {
+                if field.required && field.default.is_none() {
+                    issues.push(Issue::error(
+                        Location::Node { node: id.clone() },
+                        format!("{} needs \"{key}\" to be set.", manifest.name),
+                    ));
+                }
+                continue;
+            }
             if let Some(problem) = config_problem(field, value) {
                 issues.push(Issue::error(
                     Location::Node { node: id.clone() },
