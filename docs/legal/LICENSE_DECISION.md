@@ -1,8 +1,14 @@
 # The licence decision
 
-**Status: not made.** The tree says `UNLICENSED`, which means "all rights reserved, nobody may
-do anything" — the safe default for source that is not yet released, and not a licence a
-product can ship under.
+**Status: made — proprietary, with the source readable.** `LICENSE` at the repository root is the
+operative document; `docs/LICENSING.md` records how the choice was reached and what it forecloses.
+The tree used to say `UNLICENSED`, which meant "all rights reserved, nobody may do anything" —
+correct, but legible only to a reader who already knew the convention. It now says
+`LicenseRef-Encastra-Proprietary` (Cargo) and `SEE LICENSE IN LICENSE` (npm), and the terms are
+written down rather than implied.
+
+The table below is kept as the record of what each option would have committed to. **No row other
+than the first is on offer, and nothing in this file grants anything.**
 
 ## The question
 
@@ -42,8 +48,18 @@ if any, do they receive the source?
   `bundle.licenseFile` option.
 * Settings → About names the licence.
 
-## Recommendation, for the owner to accept or reject
+## The recommendation, and what was accepted
 
-Proprietary EULA for the application with the format specification published openly. It
-matches what `docs/PRODUCT-ROADMAP.md` plans, foreclosing least; it can be relaxed later
-(open-sourcing is always available; the reverse is not). A lawyer writes it.
+The recommendation was: proprietary for the application, with the format specification published
+openly. It matches what `docs/PRODUCT-ROADMAP.md` plans, forecloses least, and can be relaxed
+later — open-sourcing is always available; the reverse is not.
+
+**Accepted, with one part deferred.** The proprietary licence is written and in force
+(`LICENSE`). The format specification has **not** been published under open terms: doing so is a
+separate act that needs its own licence text on `docs/PROJECT-FORMAT.md`, and until that exists
+the specification is covered by `LICENSE` like everything else. Nobody should infer the open
+publication from this paragraph.
+
+**Counsel has still not reviewed any of it.** `LICENSE`, the EULA and the marketplace terms are
+drafted in-house. That review is a condition of a production release; it is not a condition of a
+pre-release, and this file does not pretend the review has happened.
