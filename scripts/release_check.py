@@ -49,6 +49,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import release_identity  # noqa: E402
 import release_manifest  # noqa: E402
+import release_provenance  # noqa: E402
 
 ROOT = release_identity.ROOT
 PASS, FAIL, BLOCKED, NOT_VERIFIED, EXTERNAL = "PASS", "FAIL", "BLOCKED", "NOT_VERIFIED", "EXTERNAL_REQUIRED"
@@ -202,7 +203,7 @@ def publication_of(version: str) -> tuple[dict | None, bool]:
     ancestor = run(["git", "merge-base", "--is-ancestor", claim["commit"], "HEAD"])
     if ancestor.returncode != 0:
         return claim, False
-    changed = set((git("diff", "--name-only", claim["commit"], "HEAD") or "").split())
+    changed = set((git("diff", "--no-renames", "--name-only", claim["commit"], "HEAD") or "").split())
     return claim, all(release_manifest.is_publication_change(path) for path in changed)
 
 
@@ -247,6 +248,49 @@ def check_artefacts() -> tuple[Check, list[dict]]:
     return Check("artefacts.identity", PASS, f"{version} @ {commit[:12] if commit else '?'}: {described}"), entries
 
 
+def check_provenance(no_network: bool, entries: list[dict], commit: str | None) -> tuple[Check, dict | None]:
+    """The artefacts are a candidate build's (candidate.yml), and GitHub still says so.
+
+    Since 0.5.0-rc.5 the published bytes come from a hosted runner, built twice on two machines
+    and byte-identical, never from the machine running this — B7 proved a developer machine and a
+    runner cannot agree byte for byte on the same SDK version. The record in target/ is only a
+    claim: the run, its jobs and its artefact digests are asked of GitHub again here, by the same
+    code release_fetch.py used, so a file copied in by hand, a run of another commit or workflow,
+    a skipped job or an artefact replaced after download each fail.
+    """
+    if not entries:
+        return Check("artefacts.provenance", BLOCKED, "no artefacts to trace"), None
+    record = release_provenance.load()
+    act = "gh workflow run candidate.yml --ref <branch>; then python scripts/release_fetch.py --run <id>"
+    if record is None or not str(record.get("run_id", "")).isdigit():
+        return Check("artefacts.provenance", NOT_VERIFIED, "these artefacts were built on this machine; a release publishes a Candidate build's bytes", act), None
+    run_id = str(record["run_id"])
+    if no_network:
+        return Check("artefacts.provenance", NOT_VERIFIED, f"run {run_id} not re-read (--no-network)", "run without --no-network"), None
+    repo = release_provenance.repository()
+    if repo is None:
+        return Check("artefacts.provenance", BLOCKED, "origin is not a GitHub repository; the run cannot be read"), None
+    try:
+        verified, problems = release_provenance.verify_candidate(
+            repo, run_id, commit or "", release_provenance.STAGING / run_id, download=False
+        )
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        return Check("artefacts.provenance", NOT_VERIFIED, f"could not read run {run_id}: {str(error)[:200]}", "gh auth login"), None
+    if problems:
+        return Check("artefacts.provenance", FAIL, " | ".join(problems), act), None
+    # The bytes here against the bytes read out of the digest-checked zip — never against the record.
+    local = release_provenance.judge_local(verified, {e["name"]: e["sha256"] for e in entries}, commit)
+    if local:
+        return Check("artefacts.provenance", FAIL, " | ".join(local), act), None
+    run_ = verified["run"]
+    return Check(
+        "artefacts.provenance",
+        PASS,
+        f"copy A of {release_provenance.WORKFLOW_NAME} run {run_.get('id')} on {str(commit)[:12]}, read from zips matching "
+        f"GitHub's digests; every job green on the first attempt: {run_.get('html_url')}",
+    ), verified
+
+
 def check_manifest(mode: str) -> Check:
     if mode == "dev":
         return Check("manifest.verify", BLOCKED, "a dev build is not published, so there is no manifest to verify")
@@ -289,7 +333,18 @@ def check_signing(mode: str, entries: list[dict]) -> Check:
     return Check("signing", PASS, "signed")
 
 
-def check_reproducibility(compare: pathlib.Path | None, entries: list[dict]) -> Check:
+def check_reproducibility(compare: pathlib.Path | None, entries: list[dict], verified: dict | None = None) -> Check:
+    if verified is not None:
+        # Copy B, read out of its digest-checked zip: built on another machine in the same run.
+        b = verified.get("reproduction") or {}
+        mismatches = [f"{e['name']}: {e['sha256'][:12]} here, copy B {str(b.get(e['name']))[:12]}" for e in entries if b.get(e["name"]) != e["sha256"]]
+        if mismatches or not entries:
+            return Check("reproducibility", FAIL, " | ".join(mismatches) or "no artefacts", "python scripts/pe_diff.py A B names the differing bytes")
+        return Check("reproducibility", PASS, f"copy B of run {verified['run'].get('id')} (another hosted runner) is byte-identical: {', '.join(e['name'] for e in entries)}")
+    if compare is not None and compare.resolve() in (ROOT.resolve(), *ROOT.resolve().parents) or (
+        compare is not None and compare.resolve().is_relative_to((ROOT / "target" / "release").resolve())
+    ):
+        return Check("reproducibility", FAIL, f"--compare {compare} is this tree or inside its own output; a build compared with itself proves nothing")
     if compare is None:
         return Check("reproducibility", NOT_VERIFIED, "no second build given", "python scripts/verify/reproduce.py, or --compare DIR")
     if not entries:
@@ -319,7 +374,7 @@ def check_ci(no_network: bool) -> Check:
     head = git("rev-parse", "HEAD") or ""
     if no_network:
         return Check("ci.evidence", NOT_VERIFIED, f"remote {remote}; runs not queried (--no-network)", f"gh run list --commit {head[:12]}")
-    result = run(["gh", "run", "list", "--commit", head, "--json", "name,status,conclusion,url", "--limit", "20"], timeout=60)
+    result = run(["gh", "run", "list", "--commit", head, "--json", "name,status,conclusion,url,event", "--limit", "20"], timeout=60)
     if result.returncode != 0:
         return Check("ci.evidence", NOT_VERIFIED, f"remote {remote}; gh could not list runs: {tail(result.stderr, 1)}", "gh auth login, or check the runs in the browser")
     try:
@@ -342,6 +397,10 @@ def judge_runs(runs: list[dict], remote: str, head: str) -> Check:
         return Check("ci.evidence", NOT_VERIFIED, f"remote {remote}; no workflow run exists for {head[:12]}", "push this commit and let CI run")
     by_name: dict[str, dict] = {}
     for item in runs:
+        # A required workflow counts only when it ran on the commit itself: a pull_request run has
+        # the same head_sha and built the merge ref, not this commit.
+        if item["name"] in REQUIRED_WORKFLOWS and item.get("event", "push") not in ("push", "workflow_dispatch"):
+            continue
         by_name.setdefault(item["name"], item)
     missing = [w for w in REQUIRED_WORKFLOWS if w not in by_name]
     if missing:
@@ -447,7 +506,9 @@ def _gui_read(evidence: pathlib.Path) -> str:
     return text.replace("\r\n", "\n")
 
 
-def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | None, entries: list[dict]) -> Check:
+def check_gui_journeys(
+    evidence: pathlib.Path | None, expected_commit: str | None, entries: list[dict], require_installed: bool = False
+) -> Check:
     """Have the chooser journeys that gate permissions been driven through the interface?
 
     B5. Four folder purposes and one file purpose decide what the application may read and write,
@@ -551,7 +612,10 @@ def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | Non
     built = pathlib.Path(binary["path"]).read_bytes()
     unk, nss = TAURI_BUNDLE_MARKER
     installed = hashlib.sha256(built.replace(unk, nss)).hexdigest() if built.count(unk) == 1 else None
-    accepted = {binary.get("sha256"): "the executable built here"}
+    # For a candidate build the journeys must have driven the copy its *installer* left behind: that
+    # is what shows the published installer carries the published executable, and a log that drove
+    # target/ directly (-Exe) never exercised the installer at all.
+    accepted = {} if require_installed else {binary.get("sha256"): "the executable built here"}
     if installed:
         accepted[installed] = "the executable built here as its installer leaves it (bundle marker rewritten)"
     if sha is None or sha.group(1) not in accepted:
@@ -570,6 +634,21 @@ def check_gui_journeys(evidence: pathlib.Path | None, expected_commit: str | Non
     if missing:
         return Check("gui.journeys", FAIL, f"{evidence.name} claims repeat={repeat} but {missing[0]}", rerun)
     return Check("gui.journeys", PASS, f"{passes} checks passed in {evidence.name} over repeat={repeat} runs of the suite, against build {stamp[:12]}, the commit this release expects, on {driven}")
+
+
+def gui_check(given: pathlib.Path | None, verified: dict | None, expected_commit: str | None, entries: list[dict]) -> Check:
+    """For a candidate build, the journeys log is the one in the run's digest-checked artefact —
+    not whatever file is named on the command line — and it must have driven the installed copy."""
+    if verified is None:
+        return check_gui_journeys(given, expected_commit, entries)
+    log = verified.get("journeys_log")
+    if not log:
+        return Check("gui.journeys", FAIL, f"run {verified['run'].get('id')} has no journeys log in its artefact")
+    if given is not None and (not given.is_file() or given.read_bytes() != log):
+        return Check("gui.journeys", FAIL, f"{given} is not the journeys log of candidate run {verified['run'].get('id')}; the run's own log is the evidence")
+    path = release_provenance.STAGING / str(verified["run"].get("id")) / "gui-journeys.verified.log"
+    path.write_bytes(log)
+    return check_gui_journeys(path, expected_commit, entries, require_installed=True)
 
 
 def check_toolchain() -> Check:
@@ -679,13 +758,15 @@ def main() -> int:
     checks += check_dependencies(args.skip_deps)
     artefact_check, entries = check_artefacts()
     checks.append(artefact_check)
+    provenance_check, verified = check_provenance(args.no_network, entries, expected_build_commit(version))
+    checks.append(provenance_check)
     checks.append(check_manifest(mode))
     checks.append(check_signing(mode, entries))
-    checks.append(check_reproducibility(args.compare, entries))
+    checks.append(check_reproducibility(args.compare, entries, verified))
     checks.append(check_toolchain())
     checks.append(check_ci(args.no_network))
     checks.append(check_vm(args.evidence_vm))
-    checks.append(check_gui_journeys(args.evidence_gui, expected_build_commit(version), entries))
+    checks.append(gui_check(args.evidence_gui, verified, expected_build_commit(version), entries))
     checks += check_external(mode)
 
     result, reason = verdict(mode, checks)
@@ -693,6 +774,7 @@ def main() -> int:
         "generated": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "version": version,
         "commit": release_identity.head_commit(),
+        "root": str(ROOT),
         "mode": mode,
         "verdict": result,
         "reason": reason,

@@ -15,7 +15,9 @@ name: Chooser journeys
 #
 # It runs here rather than on a developer machine because driving a modal dialog needs a desktop
 # nobody else is using, and because keystrokes aimed at a dialog have landed somewhere else in
-# this project before. The runner has a desktop, and no one is looking at it.
+# this project before. The runner has a desktop, and no one is looking at it. It ran on the
+# project's self-hosted runner while hosted minutes were refused (September 2026); the repository
+# is public now and hosted runners take it again.
 #
 # The log is the evidence: scripts/release_check.py --evidence-gui reads it, and a SKIP in it is
 # NOT_VERIFIED rather than a pass.
@@ -40,24 +42,17 @@ env:
 jobs:
   journeys:
     name: Drive the choosers on a runner
-    runs-on: [self-hosted, Windows, X64, encastra-rc4]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-03
-        with:
-          toolchain: '1.98.1'
-
-      - uses: ./.github/actions/msvc-toolset
+      # The same recipe candidate.yml and release.yml build with. For release evidence use
+      # candidate.yml, whose journeys drive the very installer that is published; this workflow
+      # builds its own copy and is for working on the harness.
+      - uses: ./.github/actions/windows-release-toolchain
 
       - name: Build
         shell: bash

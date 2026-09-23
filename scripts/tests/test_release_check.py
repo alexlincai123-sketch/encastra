@@ -58,7 +58,7 @@ class Fixture(Tree):
         return {**os.environ, "ENCASTRA_RELEASE_ROOT": str(self.root)}
 
     def publish(self) -> None:
-        result = subprocess.run([sys.executable, str(MANIFEST), "--allow-unsigned"], cwd=self.root, capture_output=True, text=True, env=self.env())
+        result = subprocess.run([sys.executable, str(MANIFEST), "--allow-unsigned", "--local-build"], cwd=self.root, capture_output=True, text=True, env=self.env())
         assert result.returncode == 0, result.stderr
         subprocess.run([*GIT, "add", "-A"], cwd=self.root, check=True)
         subprocess.run([*GIT, "commit", "-q", "-m", "publication"], cwd=self.root, check=True)

@@ -4,10 +4,12 @@ name: Release
 # Everything below exists so that it cannot be cut from a tree that is failing its own checks,
 # and so that shipping unsigned is a decision somebody makes rather than what happens by default.
 #
-# This workflow does not create a GitHub release or push anything anywhere. It builds, verifies,
-# and uploads the artefact for a person to look at. Publishing stays manual on purpose: there is
-# no signing certificate yet, and an automated publish of an unsigned installer is the thing this
-# is supposed to prevent.
+# It builds, verifies, and uploads the artefact for a person to look at. It publishes a GitHub
+# release only when a person dispatches it on a tag with `publish` set, and only from the bytes
+# this same run built and proved equal to the published manifest — never from a file somebody
+# uploaded, and never over a release that already exists. A tag push alone publishes nothing:
+# there is no signing certificate yet, and an automatic publish of an unsigned installer is the
+# thing this is supposed to prevent.
 
 on:
   push:
@@ -19,6 +21,13 @@ on:
           Publish without a code-signing certificate. This is a real decision: an unsigned
           installer cannot be distinguished from a tampered one by anybody who receives it.
           The manifest records that it was taken.
+        type: boolean
+        default: false
+      publish:
+        description: >-
+          Create the GitHub release for this tag from the artefacts this run builds and verifies.
+          Refused unless the run is on a tag, the build reproduced the manifest's hashes and the
+          clean-machine install passed. Never replaces an existing release.
         type: boolean
         default: false
 
@@ -37,6 +46,10 @@ jobs:
   gates:
     name: Security gates
     runs-on: ubuntu-latest
+    # actions: read is for asking about the candidate run the manifest names; nothing is written.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -71,6 +84,16 @@ jobs:
       # hashes themselves are checked after the build below.
       - name: The published manifest is consistent with the history
         run: python3 scripts/release_manifest.py --verify
+
+      # The bytes the manifest publishes are copy A of the candidate run it names: candidate.yml,
+      # dispatched on the build commit, first attempt, every job green (copy B identical, journeys
+      # through copy A's installer), each zip equal to the digest GitHub holds. Without this, the
+      # rebuild below would prove only that *some* bytes reproduce — not that they are the ones
+      # that were tested.
+      - name: The published bytes are a qualifying candidate build's
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release_provenance.py --verify-manifest
 
       - name: The release scripts, against a synthetic executable
         run: python3 -m unittest discover -s scripts/tests -v
@@ -142,28 +165,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # The exact Node the published bytes were built with, not the latest of a line. The frontend
-      # bundle is embedded in the executable, so the tool that produces it is part of the recipe,
-      # and `24` would drift to whatever 24.x the image has that week. The version lives in
-      # .nvmrc, which is also what scripts/verify/toolchain.py reads when it tells a developer
-      # whether their machine would produce the published bytes.
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-03
-        with:
-          toolchain: '1.98.1'
-      # No build cache here on purpose. The Actions cache is shared with pull-request runs, and
-      # a compiled artefact planted by one of those would be linked into the release without
-      # anything in this file noticing. A release is built from nothing but the source and the
-      # pinned toolchain; it is slower, and that is the price of the hashes meaning anything.
-
-      # The C toolchain, which rustc does not pin and which decided B7. See the action for what
-      # went wrong and why this is enough to fix it.
-      - uses: ./.github/actions/msvc-toolset
+      # Node from .nvmrc, the lockfile, Rust 1.98.1 and the pinned MSVC toolset — the same action
+      # candidate.yml builds the published bytes with, so this job is a reproduction of that
+      # recipe rather than a copy of it that can drift. No build cache, on purpose: see the action.
+      - uses: ./.github/actions/windows-release-toolchain
 
       # Signing, when there is something to sign with.
       #
@@ -265,6 +270,14 @@ jobs:
       # scripts/pe_diff.py, and a failed step that uploaded nothing leaves only a hash to look at.
       # The first release run of a candidate found exactly that — the hosted runner's bytes
       # differed from the developer machine's, and nothing was there to diff.
+      # What went into this build — above all the SDK import library that decided B7 — so that a
+      # disagreement with the candidate's bytes can be read against the candidate's own record
+      # (build-environment.json in its artefact) instead of guessed at.
+      - name: What this runner built with
+        if: always()
+        shell: bash
+        run: python scripts/verify/build_environment.py --out build-environment.json
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -272,6 +285,7 @@ jobs:
           path: |
             target/release/bundle/nsis/*.exe
             target/release/encastra-desktop.exe
+            build-environment.json
           if-no-files-found: error
           retention-days: 30
 
@@ -323,6 +337,7 @@ jobs:
           name: encastra-installer
           path: |
             target/release/bundle/nsis/*.exe
+            target/release/encastra-desktop.exe
             docs/RELEASE.md
             release-readiness.json
           if-no-files-found: error
@@ -379,3 +394,61 @@ jobs:
           if ($entry) { throw "uninstall entry still present" }
           if (Test-Path (Join-Path $dir 'encastra-desktop.exe')) { throw "binary still present after uninstall" }
           "clean"
+
+  # The GitHub release, made from nothing but what this run built and verified.
+  #
+  # Only on a dispatch that asked for it, on a tag, after the build reproduced the manifest's
+  # hashes (the build job uploads `encastra-installer` only past that step) and a clean runner
+  # installed and uninstalled those bytes. The files are hashed again here against the manifest in
+  # the tag before anything is uploaded, and `gh release create` refuses a tag that already has a
+  # release: nothing here can replace published bytes with other bytes. Nothing is ever uploaded
+  # from a person's machine.
+  publish:
+    name: Publish the release from the verified bytes
+    needs: [build, install]
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'tag' &&
+      needs.build.result == 'success' && needs.install.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: encastra-installer
+          path: verified
+
+      - name: The files are the manifest's, byte for byte
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          python3 scripts/release_publish.py --from verified --to dist --tag "$GITHUB_REF_NAME" --notes notes.md
+          ls -l dist
+          cat notes.md
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          flags=(--verify-tag --title "Encastra ${GITHUB_REF_NAME#v}" --notes-file notes.md)
+          case "${GITHUB_REF_NAME}" in *-*) flags+=(--prerelease) ;; esac
+          # The tag still names the commit this run verified: a tag moved while the run was going
+          # would otherwise carry a release of bytes that were verified for another commit.
+          now=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${GITHUB_REF_NAME}^{}" | cut -f1)
+          [ -n "$now" ] || now=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${GITHUB_REF_NAME}" | cut -f1)
+          if [ "$now" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME now points at $now; this run verified $GITHUB_SHA."
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::error::$GITHUB_REF_NAME already has a release. Published bytes are not replaced; a new build is a new version."
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" "${flags[@]}" dist/*

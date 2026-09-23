@@ -1,0 +1,207 @@
+name: Candidate build
+
+# The bytes a release publishes are built here, not on a developer machine.
+#
+# Until 0.5.0-rc.4 the published hashes were whatever the developer's laptop produced, and the
+# release workflow rebuilt the same commit on a hosted runner and required the same bytes. rc.4
+# failed that comparison by seventy bytes, and B7 named every one of them: two import *hints* the
+# linker copies out of the Windows SDK's AdvAPI32.Lib (RevertToSelf and SystemFunction036), which
+# differs between the laptop and the runner *within* SDK 10.0.26100.0, and sixty-eight bytes of
+# /Brepro hashing the image into its timestamps and PDB GUID. Nothing in the repository selects a
+# servicing revision of the SDK, so a laptop and a runner cannot be made to agree byte for byte.
+#
+# Two runners of the same image can. So a candidate is built twice, on two fresh machines, from
+# the same commit with the same recipe (.github/actions/windows-release-toolchain), and the two
+# must be byte-identical before anything else happens. Copy A is the candidate; copy B is its
+# independent reproduction. The chooser journeys then install copy A's installer — the file that
+# would be published — and drive it, so the evidence is about the published bytes and not about a
+# different build of the same source.
+#
+# Then, on the developer machine:
+#
+#     python scripts/release_fetch.py --run <this run's id>     # verified download into target/
+#     python scripts/release_manifest.py --allow-unsigned       # the publication commit
+#
+# and at the tag, release.yml builds the same commit a third time on a third machine and requires
+# the published bytes again. See docs/RELEASE.md.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  build:
+    name: Build copy ${{ matrix.copy }}
+    runs-on: windows-latest
+    strategy:
+      # Both copies always finish: a copy that fails is evidence too, and the comparison below
+      # refuses anything short of two.
+      fail-fast: false
+      matrix:
+        copy: [a, b]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/windows-release-toolchain
+
+      - name: Build
+        shell: bash
+        run: npm run tauri:build
+
+      - name: The binary does not name the machine that built it
+        shell: bash
+        run: python scripts/verify/toolchain.py --check-binary target/release/encastra-desktop.exe
+
+      - name: The installer does not depend on when its inputs were written
+        shell: bash
+        run: python scripts/verify/installer_determinism.py
+
+      # Refuses a binary stamped -dirty or with another commit, and any installer that is not
+      # this version's: a candidate is a commit, and nothing else.
+      - name: Every artefact is this version's and this commit's
+        shell: bash
+        run: python scripts/release_identity.py --check
+
+      - name: What this copy was built with, and what it produced
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          cp target/release/encastra-desktop.exe candidate/
+          cp target/release/bundle/nsis/*-setup.exe candidate/
+          python scripts/verify/build_environment.py --out candidate/build-environment.json
+          (cd candidate && sha256sum encastra-desktop.exe *-setup.exe | tee SHA256SUMS)
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: encastra-candidate-${{ matrix.copy }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 90
+
+  reproduce:
+    name: Copy B reproduces copy A byte for byte
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: encastra-candidate-a
+          path: a
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: encastra-candidate-b
+          path: b
+      - name: Compare
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+          for file in encastra-desktop.exe $(cd a && ls *-setup.exe); do
+            ha=$(sha256sum "a/$file" | cut -d' ' -f1)
+            hb=$(sha256sum "b/$file" 2>/dev/null | cut -d' ' -f1)
+            if [ "$ha" = "$hb" ]; then
+              echo "IDENTICAL $file $ha"
+            else
+              echo "::error::$file differs: copy A $ha, copy B ${hb:-missing}"
+              python3 scripts/pe_diff.py "a/$file" "b/$file" || true
+              status=1
+            fi
+          done
+          # What went into the two builds, side by side: if the bytes differ, this is where the
+          # reason is (the SDK import library's digest and hints above all — see B7).
+          python3 - <<'PY'
+          import json
+          a = json.load(open("a/build-environment.json"))
+          b = json.load(open("b/build-environment.json"))
+          for key in ("toolchain", "windows_sdk"):
+              same = a[key] == b[key]
+              print(f"{key}: {'same' if same else 'DIFFERENT'}")
+              if not same:
+                  print(" A", json.dumps(a[key], sort_keys=True))
+                  print(" B", json.dumps(b[key], sort_keys=True))
+          print("image A", a["runner"]["image_version"], "B", b["runner"]["image_version"])
+          PY
+          exit $status
+
+  journeys:
+    name: Drive the choosers through copy A's installer
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      # cdp.mjs uses nothing but Node's own fetch and WebSocket: no npm ci.
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: encastra-candidate-a
+          path: artefact
+
+      # The installer that would be published, installed for real. See gui-journeys.yml for what
+      # each of the steps below checks and why they are ordered this way; they are the same.
+      - name: Install it
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $installer = Get-ChildItem artefact/*-setup.exe | Select-Object -First 1
+          if (-not $installer) { throw "no installer in the candidate artefact" }
+          "installer: $($installer.Name) $((Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLower())"
+          ./scripts/verify/install_check.ps1 -Installer $installer.FullName -ExpectedVersion $version |
+            Tee-Object -FilePath install.log
+          if (Select-String -Path install.log -Pattern '^FAIL' -Quiet) { throw "install_check reported a failure" }
+
+      - name: Describe the WebView2 the runner has
+        if: always()
+        shell: pwsh
+        run: ./scripts/verify/webview2_state.ps1 -Port 9222 | Tee-Object -FilePath webview2.log
+
+      - name: Drive the chooser journeys
+        shell: pwsh
+        run: |
+          ./scripts/verify/gui_journeys.ps1 -Launch -Repeat 3 | Tee-Object -FilePath gui-journeys.log
+          $code = $LASTEXITCODE
+          Write-Output "gui_journeys.ps1 exited $code"
+          exit $code
+
+      - name: Take the debugging-port policy back, whatever happened above
+        if: always()
+        shell: pwsh
+        run: |
+          ./scripts/verify/gui_journeys.ps1 -RemovePolicyOnly | Tee-Object -FilePath policy-cleanup.log
+          $code = $LASTEXITCODE
+          Write-Output "gui_journeys.ps1 -RemovePolicyOnly exited $code"
+          exit $code
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: chooser-journeys-${{ github.run_id }}
+          path: |
+            gui-journeys.log
+            install.log
+            webview2.log
+            policy-cleanup.log
+          if-no-files-found: warn
+          retention-days: 90
