@@ -10,7 +10,7 @@ done by the people named there.
 
 | Item | State | Where |
 |---|---|---|
-| Software licence | `UNLICENSED` in `Cargo.toml` and every `package.json`: nobody is granted any right to the code. That is a placeholder, not a decision | `LICENSE_DECISION.md` |
+| Software licence | **decided: proprietary.** `LICENSE` at the root holds the terms; `Cargo.toml` says `LicenseRef-Encastra-Proprietary` and `package.json` says `SEE LICENSE IN LICENSE`. The repository is public to be read, which grants no right to copy, modify or redistribute. Drafted in-house; counsel has not reviewed it | `LICENSE`, `LICENSE_DECISION.md`, `docs/LICENSING.md` |
 | Third-party licences | inventoried, generated from the lockfiles, checked in CI (`python scripts/third_party.py --check`) | `docs/THIRD-PARTY.md`, `NOTICE`, `deny.toml` (the allow-list, with a reason per entry; MPL-2.0 is a recorded decision), `docs/LICENSING.md` |
 | Privacy | the product makes no network connection, keeps no account, sends no telemetry; a statement saying so is drafted | `PRIVACY_POLICY_DRAFT.md` |
 | Terms of use / EULA | drafted for a proprietary desktop application distributed as an installer | `TERMS_DRAFT.md`, `EULA_DRAFT.md` |
@@ -40,6 +40,7 @@ done by the people named there.
 
 `release_check.py` lists the drafts present and reports `legal` as `EXTERNAL_REQUIRED` in every
 mode. For a beta that is recorded and does not block; for a release version it blocks the
-verdict until a person replaces the drafts with executed documents and the `UNLICENSED` marker
-with the chosen licence identifier — at which point `cargo deny` (`licenses`) and
-`scripts/version.py --check` keep them consistent.
+verdict until a person replaces the drafts with executed documents. The licence identifier part
+of that is done — `LicenseRef-Encastra-Proprietary` and `SEE LICENSE IN LICENSE` replaced the
+`UNLICENSED` markers — but a licence drafted in-house is not a licence counsel has signed off,
+and `legal` stays `EXTERNAL_REQUIRED` until it is.

@@ -39,3 +39,7 @@ __pycache__/
 
 # Written by scripts/release_check.py; the evidence is the run, not the file
 release-readiness.json
+
+# Agent instructions for this repository. Untracked deliberately: it named the owner's
+# local vault paths and an unrelated private project, and the repository is public.
+CLAUDE.md

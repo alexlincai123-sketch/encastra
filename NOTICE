@@ -1,11 +1,15 @@
 Encastra
 Copyright (c) 2026 the Encastra author.
 
-This software is proprietary and unlicensed for redistribution: `license = "UNLICENSED"` in
-Cargo.toml and package.json means no licence has been granted, not that one is missing by
-accident. The decision between proprietary, source-available and open-source terms is open and
-recorded in docs/LICENSING.md; the legal identity that will hold the copyright (a person or a
-company) is part of that decision and is deliberately not asserted here.
+This software is proprietary. The terms are in LICENSE at the root of this repository, and they
+grant no general right to copy, modify, redistribute or make works derived from it. The
+repository is public so the source can be read and its checks can run in the open; that is a
+decision about readability, not an offer of terms, and it is not open source. Cargo.toml carries
+`LicenseRef-Encastra-Proprietary` and package.json carries `SEE LICENSE IN LICENSE`; both point
+at that file. How the choice was reached is recorded in docs/LICENSING.md.
+
+The legal identity that holds this copyright — a person or a company — is still deliberately not
+asserted. That is a separate decision, and this file will name it once it is made.
 
 Third-party software compiled into the shipped application, with each package's licence and
 origin, is listed in docs/THIRD-PARTY.md, generated from the dependency tree by

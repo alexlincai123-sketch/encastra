@@ -1,0 +1,91 @@
+Encastra — Proprietary Licence
+Copyright (c) 2026 the Encastra author. All rights reserved.
+
+This repository is public so that the work can be read and so that its automated checks can
+run in the open. It is not open-source software, and making it readable is not an offer of
+terms. The legal identity that holds this copyright — a person or a company — has not yet been
+asserted; see NOTICE and docs/legal/LICENSE_DECISION.md. Nothing here waives that copyright.
+
+
+1. NO LICENCE IS GRANTED BY PUBLICATION
+
+Being able to read this source does not give you permission to use it. Except where this
+document says otherwise, or where a right cannot be excluded by law, no licence, right or
+interest in the software is granted to anyone, whether expressly, by implication, by estoppel
+or otherwise.
+
+
+2. WHAT IS NOT PERMITTED
+
+Without the copyright holder's prior express written permission, you may not:
+
+  a. copy the software, in source or compiled form, beyond what clause 4 allows;
+  b. modify it, adapt it, translate it, or create works derived from it;
+  c. redistribute, publish, sublicense, lease, rent, lend or otherwise make it available to
+     others;
+  d. sell it, resell it, or distribute copies of it, with or without charge;
+  e. incorporate it, in whole or in part, into another product, service or model, including
+     using it as training data;
+  f. remove, obscure or alter any copyright, licence or attribution notice it carries.
+
+These restrictions apply to the software as a whole and to any part of it.
+
+
+3. THE COMPILED APPLICATION
+
+Installers and executables published under a release tag are supplied for use under their own
+end-user terms. Where those terms and this document differ for a given copy, the end-user terms
+govern that copy. Nothing in this document by itself grants a right to use, distribute or
+resell a build.
+
+
+4. WHAT GITHUB'S TERMS ALLOW, AND ONLY THAT
+
+Publishing a repository publicly on GitHub grants other GitHub users the viewing and forking
+permissions described in GitHub's Terms of Service. Those permissions are acknowledged here
+because they are a condition of using the platform. They are the only permissions this
+publication conveys: a fork made under them is subject to clauses 1 and 2 in every other
+respect, and confers no right to use, modify, distribute or exploit the software.
+
+
+5. THIRD-PARTY COMPONENTS
+
+The software is built with third-party software that is not covered by this document. Each such
+component is licensed by its own authors under its own terms, which continue to apply and are
+unaffected by anything written here. What ships, and under which licence, is listed in
+docs/THIRD-PARTY.md; the allowlist every Rust dependency must satisfy is deny.toml. Attribution
+those licences require is given in NOTICE and in docs/THIRD-PARTY.md, and must be preserved.
+
+Where a third-party licence grants you rights this document does not, that licence governs
+that component.
+
+
+6. NAME AND MARKS
+
+"Encastra" is used as a product name. No trademark registration for it exists at the time of
+writing (see docs/BRANDING.md). This document grants no right to use the name, or any logo or
+other mark, to identify or promote anything.
+
+
+7. PERMISSIONS BEYOND THIS DOCUMENT
+
+Any permission wider than the above must be granted expressly and in writing by the copyright
+holder. Requests are made through the repository. Silence is not permission, and neither is a
+previous grant to someone else.
+
+
+8. RIGHTS THAT CANNOT BE EXCLUDED
+
+Nothing in this document purports to exclude or limit any right that applicable law does not
+allow to be excluded or limited — among them, depending on your jurisdiction, acts permitted to
+a lawful user of a computer program, decompilation for interoperability, and quotation or other
+statutory exceptions. Where a clause here conflicts with such a right, that clause applies only
+so far as the law allows, and the rest of this document continues to apply.
+
+
+9. NO WARRANTY
+
+The software is provided "as is", without warranty of any kind, express or implied, to the
+extent permitted by law. To the extent permitted by law, the copyright holder is not liable for
+any claim, damages or other liability arising from the software or from dealings in it. This
+clause does not exclude liability that cannot lawfully be excluded.

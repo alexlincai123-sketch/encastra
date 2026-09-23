@@ -7,8 +7,8 @@
  * finished policy; it exists so a reader can see what the project currently intends to promise,
  * and so a future review has a concrete draft to correct rather than a blank page.
  *
- * Facts asserted in these drafts (no accounts, no payments, no analytics, licence undetermined,
- * builds not signed) are drawn from `docs/SECURITY.md`, `docs/PROJECT-FORMAT.md`,
+ * Facts asserted in these drafts (no accounts, no payments, no analytics, the source proprietary
+ * under `LICENSE`, builds not signed) are drawn from `docs/SECURITY.md`, `docs/PROJECT-FORMAT.md`,
  * `docs/PRODUCT-ROADMAP.md`, `docs/BRANDING.md`, `docs/RELEASE.md` and `lib/security.ts`, and
  * should stay in step with them.
  */
@@ -69,7 +69,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'What this covers',
         body: [
-          'These draft terms cover your use of this website and of the Encastra desktop application beta. They do not cover source code licensing, which is a separate, currently unresolved question — see the note below.',
+          'These draft terms cover your use of this website and of the Encastra desktop application beta. They are not the source code licence: that is a separate document, `LICENSE` in the repository, and it is proprietary — see the note below.',
         ],
       },
       {
@@ -94,7 +94,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'Source code licence',
         body: [
-          'The repository is currently marked UNLICENSED, which grants no rights to anyone over the source. Choosing a licence is a decision the project has stated it will make before a non-beta release, not a scaffolding decision made in passing here.',
+          'Encastra is proprietary. The repository is public so the source can be read and its checks can run in the open, and the terms are in the LICENSE file at its root. That is not an open-source licence: no general right to copy, modify, redistribute or build works derived from it is granted, and anything wider has to be granted in writing. Third-party dependencies keep their own licences.',
         ],
       },
       {
@@ -265,7 +265,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'Source and content',
         body: [
-          'The source code licence is currently undetermined — see /legal/terms-of-service. This notice covers naming and branding only, not a grant of rights to any code.',
+          'The source code is proprietary and its terms are in the repository’s LICENSE file — see /legal/terms-of-service. This notice covers naming and branding only, and is not a grant of rights to any code.',
         ],
       },
     ],
@@ -285,7 +285,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'What the inventory is and is not',
         body: [
-          'It is an inventory. It lists each package’s licence identifier and where its source, and therefore its full licence text, lives. It does not reproduce every licence text inline, and it is not a legal opinion about what each licence obliges; a review of those obligations by counsel is among the steps before a non-beta release, alongside code signing and a chosen licence for Encastra itself.',
+          'It is an inventory. It lists each package’s licence identifier and where its source, and therefore its full licence text, lives. It does not reproduce every licence text inline, and it is not a legal opinion about what each licence obliges; a review of those obligations by counsel is among the steps before a non-beta release, alongside code signing. Encastra’s own licence is settled: it is proprietary, and its terms are in the repository’s LICENSE file.',
         ],
       },
       {

@@ -257,7 +257,8 @@ Not a checklist to tick through quietly — each of these is a decision somebody
 1. External security review, particularly of the capability broker and the handle model.
 2. Code signing, with the key management above actually in place.
 3. The updater, including a tested rollback.
-4. A licence. The repository is currently `UNLICENSED`, which grants nobody any rights.
+4. Counsel's review of the licence. `LICENSE` exists and the terms are proprietary, but it was
+   drafted in-house; a signed-off licence is what a production release needs.
 5. Trademark clearance for the name. See [BRANDING.md](BRANDING.md) — availability of a domain
    and a package name is not clearance.
 6. A crash path that does something useful, since there is no crash reporting and none is

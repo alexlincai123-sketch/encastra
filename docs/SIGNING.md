@@ -73,7 +73,8 @@ What that means for this project, as it is today:
   starts the count again.
 - The Store is not a route for this product as it is: it is a Win32 NSIS installer, not MSIX,
   and Store distribution would need an MSIX package and a listing the project has not designed.
-- SignPath's free programme requires an open-source licence, which `UNLICENSED` is not.
+- SignPath's free programme requires an open-source licence. Encastra's is proprietary
+  (`LICENSE`), so that route is closed — making the repository public does not change it.
 
 None of this can be done from the repository. It needs a legal identity (person or company),
 money, and an identity-validation process with a CA or Microsoft. That is the external blocker,

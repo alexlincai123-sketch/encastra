@@ -145,5 +145,9 @@ language, the rule belongs in the data file instead.
 
 ## Licence
 
-Not yet determined. The repository is currently `UNLICENSED` — no rights are granted. The
-licence is a launch decision, not a scaffolding decision.
+Proprietary. See [LICENSE](LICENSE). This repository is public so the source can be read and its
+checks can run in the open — **that is not an open-source licence and not an offer of terms**. No
+general right to copy, modify, redistribute or build derived works is granted; anything wider has
+to be granted in writing. Third-party dependencies keep their own licences, listed in
+[THIRD-PARTY](docs/THIRD-PARTY.md) with the attribution they require in [NOTICE](NOTICE). How the
+choice was reached is in [LICENSING](docs/LICENSING.md).
