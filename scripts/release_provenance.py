@@ -113,8 +113,9 @@ def judge_run(run: dict, jobs: list[dict], artefacts: list[dict], commit: str, r
         problems.append(f"run {rid} is {run.get('path')!r}, not {WORKFLOW_PATH}")
     if run.get("head_sha") != commit:
         problems.append(f"run {rid} built {run.get('head_sha')}, not {commit}")
-    if run.get("event") != "workflow_dispatch":
-        problems.append(f"run {rid} was triggered by {run.get('event')!r}; a candidate is dispatched")
+    # A dispatch or a push builds the commit itself; a pull_request run builds a merge ref.
+    if run.get("event") not in ("workflow_dispatch", "push"):
+        problems.append(f"run {rid} was triggered by {run.get('event')!r}; a candidate is dispatched or pushed")
     if run.get("run_attempt") != 1:
         problems.append(f"run {rid} is attempt {run.get('run_attempt')}; a candidate that needed a re-run is dispatched again")
     if repo is not None and (run.get("head_repository") or {}).get("full_name") != repo:

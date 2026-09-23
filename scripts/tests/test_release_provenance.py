@@ -102,7 +102,7 @@ class JudgeRunTests(unittest.TestCase):
         self.assertTrue(prov.judge_run(run, jobs, artefacts, COMMIT))
 
     def test_a_run_not_dispatched_on_this_repository_or_rerun_is_refused(self) -> None:
-        for field, value in (("event", "pull_request"), ("event", "push"), ("run_attempt", 2), ("head_repository", {"full_name": "fork/r"})):
+        for field, value in (("event", "pull_request"), ("event", "pull_request_target"), ("event", "schedule"), ("run_attempt", 2), ("head_repository", {"full_name": "fork/r"})):
             run, jobs, artefacts = good_run()
             run[field] = value
             self.assertTrue(prov.judge_run(run, jobs, artefacts, COMMIT, REPO), (field, value))

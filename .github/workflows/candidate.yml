@@ -27,6 +27,15 @@ name: Candidate build
 
 on:
   workflow_dispatch:
+  # A dispatch needs this file on the default branch, and a release is prepared on an rc/ branch
+  # before anything reaches main. A push to an rc/ branch builds exactly the pushed commit (never a
+  # merge ref, which is why pull_request is not a trigger and is refused by release_provenance).
+  # A publication commit changes only the manifest files below, and builds nothing.
+  push:
+    branches: ['rc/**']
+    paths-ignore:
+      - 'docs/**'
+      - 'apps/web/src/config/site.ts'
 
 permissions:
   contents: read
