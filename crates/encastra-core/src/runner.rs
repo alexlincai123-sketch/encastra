@@ -516,10 +516,22 @@ fn execute(
     // have to know which kind it is looking at.
     let mut seeded: BTreeMap<PortRef, Value> = BTreeMap::new();
     for (port, value) in seed {
+        // Which side of the node this names. A port name is not unique across the two: Save File
+        // takes a file on "file" and produces one on "file", and deciding by the outputs alone
+        // filed the file a person had picked as something the node had produced - so the node
+        // ran with nothing on its input and said "Nothing is connected to \"file\"", which is
+        // what the grant-to-component and run-input journeys had been failing on all along.
+        //
+        // An input wins a tie, because the two kinds of seed come from different places: a
+        // trigger's event is an output of a trigger component, and everything else is a value
+        // the application supplied for an input. A trigger keeps the outputs reading.
         let is_output = graph
             .node(&port.node)
             .and_then(|node| registry.get(&node.component))
-            .is_some_and(|manifest| manifest.ports.outputs.contains_key(&port.port));
+            .is_some_and(|manifest| {
+                manifest.ports.outputs.contains_key(&port.port)
+                    && (manifest.trigger || !manifest.ports.inputs.contains_key(&port.port))
+            });
         if is_output {
             if let Value::Handle(handle) = &value {
                 // Only what is wired to *this* port. A watcher emits the file alongside its
