@@ -1849,7 +1849,7 @@ function SetValue($el, $text) {
 # and the first one is the step counter. Reading the first said "1 paso" where the message was,
 # which is how run 35807906967 reported "the application said nothing" three times over a screen
 # that may well have been saying something.
-$CDP_SAYS_JS = "(()=>{const m=document.querySelector('[class*=statusbar__message]');const f=document.querySelector('footer.statusbar');const v=document.querySelector('.sidebar__item[aria-current=page]');const n=[...document.querySelectorAll('.note--error,.note--warn')].map(e=>e.innerText.replace(/\s+/g,' ').slice(0,160));return 'view='+(v?v.innerText.trim():'?')+' message='+(m?JSON.stringify(m.className)+' '+m.innerText.trim():'(none on screen)')+' footer='+(f?f.innerText.replace(/\s+/g,' ').slice(0,180):'?')+' notes['+n.length+']='+n.join(' / ');})()"
+$CDP_SAYS_JS = "(()=>{const m=document.querySelector('[class*=statusbar__message]');const f=document.querySelector('footer.statusbar');const v=document.querySelector('.sidebar__item[aria-current=page]');const n=[...document.querySelectorAll('.note--error,.note--warn,.publish__error')].map(e=>e.innerText.replace(/\s+/g,' ').slice(0,200));return 'view='+(v?v.innerText.trim():'?')+' message='+(m?JSON.stringify(m.className)+' '+m.innerText.trim():'(none on screen)')+' footer='+(f?f.innerText.replace(/\s+/g,' ').slice(0,180):'?')+' notes['+n.length+']='+n.join(' / ');})()"
 # What the status bar's message says right now, or '' - the one place the application acknowledges
 # something it just did. Polled, because a message that has not arrived yet is not a message that
 # is not coming: UI Automation gets there when it gets there, and this does not wait on it.
@@ -3567,7 +3567,12 @@ function Journey3 {
                     ForceCloseDialogs
                 } else {
                     $link = FindText '(es una ligaz|es un enlace|is a link)' 6
-                    $notPub = FindText '(No hay publication\.json|There is no publication\.json|no es una carpeta|not a folder)' 6
+                    # Anchored on the words the application actually uses (import.errors.* in the locale
+                    # files): the refusal for a folder with no publication reads "No hay NINGUN
+                    # publication.json en esa carpeta", and a pattern of "No hay publication.json"
+                    # matched none of it - which is how a correct refusal was reported three times
+                    # over as the application saying nothing at all.
+                    $notPub = FindText '(publication\.json|no es una carpeta|not a folder|not a publication)' 6
                     if (-not $link -and -not $notPub) {
                         $said = WaitForMessage '(enlace|ligaz|link|publication\.json|carpeta|folder)' 6
                         if ($said -match '(enlace|ligaz|link)') { $link = $said } elseif ($said) { $notPub = $said }

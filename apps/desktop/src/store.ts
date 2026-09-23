@@ -19,7 +19,7 @@ import {
 import { create } from 'zustand';
 import { chooseFile, chooseFolder, describeFailure } from './chooser';
 import type { Demo } from './demos';
-import { describeStatusMessage, importErrorIn } from './errors';
+import { describeStatusMessage, importErrorIn, isAppError } from './errors';
 import { subscribe, type WorkflowStatus } from './events';
 import {
   cut,
@@ -1040,6 +1040,12 @@ export const useEditor = create<EditorState>((set, get) => ({
       });
     } catch (error) {
       set({ message: { tone: 'error', text: describe(error) }, running: false });
+      // "Este flujo todavía no puede ejecutarse: hay 2 cosa(s) que corregir antes" - and nowhere
+      // to see the two. The runtime counts the problems and sends the count; the issues stay on
+      // its side (AppError::WorkflowInvalid). run() has the other shape and keeps its validation,
+      // so the Inspector lists them there; this path had a number and a silence, which is a
+      // message telling somebody to go and look at a panel that is empty. One more call fills it.
+      if (isAppError(error) && error.kind === 'workflow-invalid') await get().check();
     } finally {
       set({ busy: false });
     }
