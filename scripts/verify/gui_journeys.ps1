@@ -2321,15 +2321,42 @@ function SendGuardedInput($dh, $what, $label, [scriptblock]$send) {
         $script:typeFails += "$what : $label was NOT sent - it is global input (SendInput goes to whatever window is in front), and outside CI (GITHUB_ACTIONS is not 'true') this harness refuses to type at a desktop somebody may be using"
         return $null
     }
+    # A chooser that has just opened, or has just been typed into, is not always foreground the
+    # instant this is asked: the window manager gets there in its own time, and run 35799750173
+    # lost a Ctrl+A to exactly that - the application's own window was still in front, milliseconds
+    # after its modal dialog appeared. So it is asked for, and waited on, and only then is the
+    # guard applied: nothing is sent unless the chooser IS in front at the moment of sending.
+    $deadline = (Get-Date).AddSeconds(3)
     $fg = [W32]::GetForegroundWindow()
+    while ($fg -ne $dh -and (Get-Date) -lt $deadline) {
+        [void][W32]::SetForegroundWindow($dh)
+        Start-Sleep -Milliseconds 150
+        $fg = [W32]::GetForegroundWindow()
+    }
     if ($fg -ne $dh) {
-        $script:typeFails += "$what : $label was NOT sent - the chooser #$dh is not the foreground window at the moment of sending; in front is $(WindowFacts $fg)"
+        $script:typeFails += "$what : $label was NOT sent - the chooser #$dh did not become the foreground window within 3s; in front is $(WindowFacts $fg)"
         return $null
     }
     return (& $send)
 }
 function FocusedElement {
     try { return [System.Windows.Automation.AutomationElement]::FocusedElement } catch { return $null }
+}
+# What the dialog's name box holds, read from two places that are not the one the write talked to:
+# the window's own text, and what the accessibility layer says the focused element's value is.
+# Called repeatedly while keystrokes are still arriving, so it prints nothing and decides nothing.
+function ReadNameBox($edit, $focused) {
+    $byMessage = ''
+    if ($edit -ne $NULLPTR) { $byMessage = (HwndText $edit).Trim().Trim('"') }
+    $byValue = ''
+    $again = FocusedElement
+    foreach ($candidate in @($again, $focused)) {
+        if (-not $candidate) { continue }
+        if (-not (HasValuePattern $candidate)) { continue }
+        $byValue = ([string](ValueOfElement $candidate)).Trim().Trim('"')
+        if ($byValue) { break }
+    }
+    return @{ ByMessage = $byMessage; ByValue = $byValue; Read = $(if ($byMessage) { $byMessage } else { $byValue }) }
 }
 # What is in a control, asked of the control rather than of its window text.
 function ValueOfElement($el) {
@@ -2479,18 +2506,35 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
     } else {
         # Two SendInput calls, and the foreground is asked again before each: Ctrl+A could itself
         # be what moves something else to the front, and the path must not follow it there.
-        $selAll = SendGuardedInput $dh $what 'Ctrl+A' { [W32]::KeyUnder($VK_CONTROL, $VK_A) }
-        if ($null -eq $selAll) {
-            $how = 'no Edit window was found under this dialog and typing was refused (see the FAIL line), so nothing was written'
-        } else {
+        #
+        # Keystrokes are queued, not delivered: SendInput returning N says N events were accepted,
+        # not that the dialog in another process has read them. Run 35799750173 read the box 350ms
+        # after sending a 60-character path and found it holding the first 50 - so the box is read
+        # until it holds the path or five seconds pass, and a path that arrived incomplete is typed
+        # once more before anything is decided about it. What is asserted is unchanged: the box has
+        # to hold the whole path, read back from the dialog, before Save is pressed.
+        $attempt = 0
+        $arrived = $false
+        while (-not $arrived -and $attempt -lt 2) {
+            $attempt++
+            $selAll = SendGuardedInput $dh $what 'Ctrl+A' { [W32]::KeyUnder($VK_CONTROL, $VK_A) }
+            if ($null -eq $selAll) {
+                $how = 'no Edit window was found under this dialog and typing was refused (see the FAIL line), so nothing was written'
+                break
+            }
             Start-Sleep -Milliseconds 120
             $sent = SendGuardedInput $dh $what 'the typed path' { [W32]::TypeText($path) }
             if ($null -eq $sent) {
                 $how = 'no Edit window was found under this dialog; Ctrl+A was sent, and then typing the path was refused (see the FAIL line)'
-            } else {
-                $how = "no Edit window was found under this dialog, so the path was typed: SendInput inserted $sent of $(2 * $path.Length) events, last error $([W32]::LastTypeError)$(if ($sent -eq 0) { " ($(InputRefusal ([W32]::LastTypeError)))" })"
-                Start-Sleep -Milliseconds 350
+                break
             }
+            $waited = 0
+            do {
+                Start-Sleep -Milliseconds 150
+                $waited += 150
+                $arrived = (ReadNameBox $edit $focused).Read -eq $path
+            } until ($arrived -or $waited -ge 5000)
+            $how = "no Edit window was found under this dialog, so the path was typed$(if ($attempt -gt 1) { " (attempt $attempt, the first one arrived incomplete)" }): SendInput inserted $sent of $(2 * $path.Length) events, last error $([W32]::LastTypeError)$(if ($sent -eq 0) { " ($(InputRefusal ([W32]::LastTypeError)))" }); the box held the whole path after $waited ms$(if (-not $arrived) { ' - it never did' })"
         }
     }
 
@@ -2498,17 +2542,10 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
     # window's own text says what the control holds; the focused element's Value pattern says what
     # the accessibility layer believes. Where both answer they must agree, which is what would have
     # caught the label this harness spent a run writing into.
-    $byMessage = ''
-    if ($edit -ne $NULLPTR) { $byMessage = (HwndText $edit).Trim().Trim('"') }
-    $byValue = ''
-    $again = FocusedElement
-    foreach ($candidate in @($again, $focused)) {
-        if (-not $candidate) { continue }
-        if (-not (HasValuePattern $candidate)) { continue }
-        $byValue = ([string](ValueOfElement $candidate)).Trim().Trim('"')
-        if ($byValue) { break }
-    }
-    $read = if ($byMessage) { $byMessage } else { $byValue }
+    $reading = ReadNameBox $edit $focused
+    $byMessage = $reading.ByMessage
+    $byValue = $reading.ByValue
+    $read = $reading.Read
     if ($byMessage -and $byValue -and $byMessage -ne $byValue) {
         $script:typeNotes += "$what : the window text and the accessibility layer disagree about the name box - WM_GETTEXT says '$byMessage', the Value pattern says '$byValue'; the run goes by the window text and this line is the record that they differed"
     }
