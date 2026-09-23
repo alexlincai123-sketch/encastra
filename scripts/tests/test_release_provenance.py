@@ -346,6 +346,18 @@ class CandidateZipTests(unittest.TestCase):
         self.write_zips()
         self.assertTrue(self.verify()[1])
 
+    def test_sums_in_binary_mode_with_crlf_are_read(self) -> None:
+        # What sha256sum writes on the Windows runner: "<hash> *<name>", CRLF line ends.
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("encastra-desktop.exe", self.EXE)
+            archive.writestr(self.SETUP_NAME, self.SETUP)
+            lines = [f"{hashlib.sha256(d).hexdigest()} *{n}" for n, d in (("encastra-desktop.exe", self.EXE), (self.SETUP_NAME, self.SETUP))]
+            archive.writestr("SHA256SUMS", "\r\n".join(lines) + "\r\n")
+        files, problems = prov.zip_contents(buffer.getvalue(), "copy A")
+        self.assertEqual(problems, [])
+        self.assertEqual(files["encastra-desktop.exe"], hashlib.sha256(self.EXE).hexdigest())
+
     def test_sums_that_disagree_with_the_files_are_refused(self) -> None:
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:

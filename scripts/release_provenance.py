@@ -56,6 +56,8 @@ REQUIRED_JOBS = (
 CANDIDATE_ARTEFACT = "encastra-candidate-a"
 REPRODUCTION_ARTEFACT = "encastra-candidate-b"
 BINARY = "encastra-desktop.exe"
+# One line of a coreutils SHA256SUMS: "<hash>  <name>" (text mode) or "<hash> *<name>" (binary).
+SUMS_LINE = re.compile(r"([0-9a-f]{64}) [ *]([^/\\]+)")
 # How the manifest names the run, written by release_manifest.built_by and read back here.
 RUN_IN_MANIFEST = re.compile(r"by GitHub Actions run \[(\d+)\]\(")
 
@@ -168,10 +170,16 @@ def zip_contents(data: bytes, label: str) -> tuple[dict[str, str], list[str]]:
                 if name.lower().endswith(".exe"):
                     found[name] = sha256_bytes(archive.read(member))
                 elif name == "SHA256SUMS":
+                    # coreutils format: "<hash>  <name>" (text) or "<hash> *<name>" (binary, which
+                    # is what sha256sum writes on Windows). Anything else is a line nobody can check.
                     for line in archive.read(member).decode("utf-8").splitlines():
-                        if line.strip():
-                            digest, _, listed_name = line.partition("  ")
-                            listed[listed_name.strip().lstrip("*")] = digest.strip()
+                        if not line.strip():
+                            continue
+                        entry = SUMS_LINE.fullmatch(line.strip())
+                        if entry is None:
+                            problems.append(f"{label}: SHA256SUMS line not in coreutils form: {line[:100]!r}")
+                            continue
+                        listed[entry.group(2)] = entry.group(1)
     except zipfile.BadZipFile:
         return {}, [f"{label}: not a zip"]
     if found != listed:
