@@ -70,7 +70,7 @@ const es: Messages = {
         'Encastra es un nombre provisional. No se han revisado los registros de marcas, así que nada aquí afirma que el nombre esté legalmente libre —',
       nameLinkText: 'por qué queda escrito aquí',
       licencePrefix:
-        'No se ha elegido ninguna licencia para el código fuente. Los documentos legales de este sitio son',
+        'El código fuente es propietario: el repositorio es público para leerlo, no para copiarlo. Los documentos legales de este sitio son',
       licenceLinkText: 'borradores sin revisar',
     },
   },
@@ -1149,7 +1149,8 @@ const es: Messages = {
         sandbox:
           'El sandbox para código de terceros, con sus límites de tiempo, memoria y combustible realmente aplicados.',
         signing: 'Firma, tanto de la aplicación como de lo que se publique.',
-        licence: 'Una decisión de licencia para el código fuente, que hoy no tiene ninguna.',
+        licence:
+          'Que un abogado firme la licencia. El código fuente es propietario y sus términos están escritos; ningún abogado los ha leído.',
         registry: 'El registro, con versiones inmutables y permisos declarados antes de instalar.',
         legal: 'Una revisión legal de los términos que aceptarían un marketplace y sus creadores.',
         money: 'El dinero, al final.',
