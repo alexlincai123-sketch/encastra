@@ -268,9 +268,15 @@ def check_signing(mode: str, entries: list[dict]) -> Check:
     states = {e["name"]: e.get("signature", {}) for e in entries}
     unsigned = [n for n, s in states.items() if s.get("status") != "signed"]
     broken = [n for n, s in states.items() if s.get("status") == "broken"]
+    unchecked = [n for n, s in states.items() if s.get("status") == "unchecked"]
     unstamped = [n for n, s in states.items() if s.get("status") == "signed" and not s.get("timestamped")]
     if broken:
         return Check("signing", FAIL, f"signature present but not valid on: {', '.join(broken)}", "do not distribute; re-sign")
+    # An artefact nobody could ask about is not an artefact known to be unsigned. Folded together,
+    # a beta said "unsigned; accepted for a beta build and stated in the manifest" about a file
+    # whose Authenticode state had never been read — off Windows, or any time the probe fell over.
+    if unchecked:
+        return Check("signing", NOT_VERIFIED, f"the Authenticode state could not be read on: {', '.join(unchecked)}", "run the gate on Windows, where the probe can answer")
     if mode == "release":
         if unsigned:
             return Check("signing", FAIL, f"unsigned: {', '.join(unsigned)}; a release version is signed or it does not happen", "provide the certificate to the release workflow (docs/SIGNING.md)")

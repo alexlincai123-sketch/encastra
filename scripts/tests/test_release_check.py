@@ -219,6 +219,44 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertTrue(set(report["statuses"]) <= {"PASS", "FAIL", "BLOCKED", "NOT_VERIFIED", "EXTERNAL_REQUIRED"}, report["statuses"])
 
 
+class SigningTests(unittest.TestCase):
+    """What an artefact's Authenticode state is taken to mean.
+
+    The probe can fail to answer — off Windows, or when the cmdlet cannot be loaded. `unchecked`
+    is that: a question nobody got an answer to. It is neither `broken`, which would tell somebody
+    to re-sign a file nothing inspected, nor `unsigned`, which would have a beta state in writing
+    that the artefact carries no signature when that was never read.
+    """
+
+    @staticmethod
+    def module():
+        sys.path.insert(0, str(SCRIPT.parent))
+        import release_check
+
+        return release_check
+
+    @classmethod
+    def judge(cls, mode: str, *statuses: str):
+        entries = [{"name": f"a{i}.exe", "signature": {"status": s, "timestamped": s == "signed"}} for i, s in enumerate(statuses)]
+        return cls.module().check_signing(mode, entries)
+
+    def test_an_unreadable_state_is_not_verified_rather_than_an_unsigned_pass(self) -> None:
+        verdict = self.judge("beta", "unchecked")
+        self.assertEqual(verdict.status, self.module().NOT_VERIFIED)
+        self.assertIn("could not be read", verdict.evidence)
+
+    def test_a_genuinely_unsigned_beta_still_passes(self) -> None:
+        self.assertEqual(self.judge("beta", "unsigned").status, self.module().PASS)
+
+    def test_a_broken_signature_still_fails_and_outranks_an_unreadable_one(self) -> None:
+        verdict = self.judge("beta", "broken", "unchecked")
+        self.assertEqual(verdict.status, self.module().FAIL)
+        self.assertIn("not valid", verdict.evidence)
+
+    def test_a_release_never_ships_on_a_state_nobody_read(self) -> None:
+        self.assertNotEqual(self.judge("release", "unchecked").status, self.module().PASS)
+
+
 class CiEvidenceTests(unittest.TestCase):
     """What the CI runs for a commit are taken to mean.
 
