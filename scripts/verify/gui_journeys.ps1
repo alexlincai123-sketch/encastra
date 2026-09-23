@@ -1352,6 +1352,11 @@ function CdpInspectorText { return (Cdp-Eval "(document.querySelector('.panel--i
 # placed `selected: true` and every other `selected: false` (store.ts), and React Flow puts the
 # class `selected` on that node's wrapper. Fit View first, because a selected step outside the
 # viewport is unmounted like any other and would read as "nothing is selected".
+# Clearing the selection, and putting it back: the Inspector shows the validator's issues only
+# when nothing is selected, and a journey that asked what is wrong still needs its step afterwards.
+$CDP_DESELECT = "(()=>{const p=document.querySelector('.react-flow__pane');if(!p)return false;for(const t of ['mousedown','mouseup','click']){p.dispatchEvent(new MouseEvent(t,{bubbles:true,clientX:5,clientY:5}));}return true;})()"
+$CDP_SELECT_STEP = "(()=>{const n=[...document.querySelectorAll('.react-flow__node[data-id]')].find(e=>e.getAttribute('data-id')==='@ID@');if(!n)return false;for(const t of ['mousedown','mouseup','click']){n.dispatchEvent(new MouseEvent(t,{bubbles:true}));}return true;})()"
+$CDP_PROBLEM_NOTES = "(()=>{const n=[...document.querySelectorAll('.note--error,.note--warn')].map(e=>e.innerText.replace(/\s+/g,' '));const t=document.querySelector('.panel--inspector .panel__title');return (t?t.innerText+': ':'')+(n.length?n.join(' // '):'(no problem note on screen)');})()"
 $CDP_SELECTED_IDS = "[...document.querySelectorAll('.react-flow__node.selected')].map(e=>e.dataset.id)"
 # The Inspector showing the right component reference is what a person sees, and it cannot tell two
 # steps of the same component apart: a second Save File selected instead of the one just placed
@@ -3824,7 +3829,16 @@ function Journey45 {
         $panelNow = ''
         if (-not $ranSays) { $panelNow = OneLine (Cdp-Eval "(document.querySelector('.run-panel')||{innerText:[]}).innerText") }
         if ($refusedToRun) {
-            Report $false 'j4/j5 pressing Run actually started a run' "the application refused to run this graph: '$(OneLine $refusedToRun)' - it is on $(AppSays)"
+            # What it refused, in its own words. The Inspector prints the validator's issues only
+            # while no step is selected (Inspector.tsx:517-533), and anything that edits the graph
+            # clears the validation - so this is read here, at the refusal, and the step is put
+            # back afterwards for the lines below, which need it selected.
+            [void](Cdp-Eval $CDP_DESELECT)
+            Start-Sleep -Milliseconds 500
+            $problems = OneLine (Cdp-Eval $CDP_PROBLEM_NOTES)
+            [void](Cdp-Eval ($CDP_SELECT_STEP -replace '@ID@', $nodeId))
+            Start-Sleep -Milliseconds 400
+            Report $false 'j4/j5 pressing Run actually started a run' "the application refused to run this graph: '$(OneLine $refusedToRun)', and what it says is wrong with it: $problems"
         } else {
             Report ([bool]$ranSays) 'j4/j5 pressing Run actually started a run' "the status bar and run panel went from '$(OneLine $stateBefore)' to '$(OneLine $ranSays)'$(if (-not $ranSays) { "; they never changed, and the run panel still reads '$panelNow' - either nothing was invoked (the note above says which element was) or the run never began" })"
         }
@@ -3872,15 +3886,6 @@ function Journey45 {
         # chosen for `grant-to-component` can never be offered to them from the GUI at all. The pair
         # is covered where it is expressible - here - and by `a folder chosen for {recorded} must not
         # answer {asked}` in apps/desktop/src-tauri/src/lib.rs, which walks every pair.
-        # Last, because it changes what the Inspector is showing and everything above needs the step
-        # it was showing: the Inspector prints the validator's issues only while no step is selected
-        # (Inspector.tsx:517-533), so a graph the application refused to run says why here and
-        # nowhere else. A note, not a check - this is the evidence for the FAIL lines above.
-        if ($refusedToRun) {
-            [void](Cdp-Eval "(()=>{const p=document.querySelector('.react-flow__pane');if(!p)return false;for(const t of ['mousedown','mouseup','click']){p.dispatchEvent(new MouseEvent(t,{bubbles:true,clientX:5,clientY:5}));}return true;})()")
-            Start-Sleep -Milliseconds 600
-            Note "j4/j5 what the application says is wrong with the graph it refused: $(OneLine (Cdp-Eval "(()=>{const n=[...document.querySelectorAll('.note--error,.note--warn')].map(e=>e.innerText.replace(/\s+/g,' '));const t=document.querySelector('.panel--inspector .panel__title');return (t?t.innerText+': ':'')+(n.length?n.join(' // '):'(the Inspector is not showing any problem note)');})()"))"
-        }
     } catch {
         JourneyEnded $_ 'j4/j5 grant-to-component and run-input journeys ran to the end'
     }
