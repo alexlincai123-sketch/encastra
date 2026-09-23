@@ -3853,7 +3853,18 @@ function Journey45 {
         if (-not $inputSeeded) { $because = " - and the run had no starting material to begin with: the line above says the chooser never seeded one, so this is that failure and not a second one" }
         elseif ($refusedToRun) { $because = " - and no run was ever allowed to start: the application refused this graph ('$(OneLine $refusedToRun)'), which the line above reports, so this is that failure and not a second one" }
         elseif (-not $ranSays) { $because = " - and no run started at all: the line above says the application never reported an outcome, so this is that failure and not a second one" }
-        Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'$because"
+        # A run that failed says why, per step, in the run panel - and "file='' status='Fallido'"
+        # on its own sends the next person back to the runner to find out what it was.
+        $panelSays = if ($null -eq $saved) { "; the run panel says: $(OneLine (Cdp-Eval "(document.querySelector('.run-panel')||{innerText:''}).innerText"))" } else { '' }
+        Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'$because$panelSays"
+
+        # The negative probe below presses Run again, and Run is not on screen while a run is still
+        # going: the button reads Stop. Waiting for the run to end is not the same as asserting
+        # anything about it - what it did is the line above.
+        for ($i = 0; $i -lt 40; $i++) {
+            if ((Wait 'Button' '^(Ejecutar|Run)$' 1)) { break }
+            Start-Sleep -Milliseconds 500
+        }
 
         # =========================================================================================
         # NEGATIVE - a folder chosen for one purpose does not answer another.
