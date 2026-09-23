@@ -8,6 +8,7 @@
  */
 
 import { Fragment } from 'react';
+import { describeNodeError, isKnownNodeError } from '../errors';
 import { splitOnPlaceholder, useTranslation } from '../i18n';
 import { ipc } from '../ipc';
 import { forDisplay } from '../safe-text';
@@ -28,6 +29,7 @@ function ConfigControl({
   value: unknown;
 }) {
   const setConfig = useEditor((s) => s.setConfig);
+  const chooseConfigFolder = useEditor((s) => s.chooseConfigFolder);
   const { t } = useTranslation();
   const label = field.label ?? name;
   const id = `${nodeId}-${name}`;
@@ -93,13 +95,12 @@ function ConfigControl({
           <button
             type="button"
             className="btn"
-            onClick={async () => {
-              // This path becomes a step's folder, and the folder in a grant on the next run.
-              // It is chosen to be given to a component and recorded as nothing else, so it
-              // does not also become somewhere a publication may be written.
-              const chosen = await ipc.pickFolder('grant-to-component');
-              if (chosen) setConfig(nodeId, name, chosen);
-            }}
+            // Through the store, the way this panel already reports a failed restore: the
+            // chooser can refuse — a sensitive root, a startup folder, a path that will not
+            // canonicalise — and that refusal used to reject a promise nobody was holding, so
+            // pressing Choose appeared to do nothing at all. The sentence lands in the status
+            // bar. Backing out of the chooser still says nothing, because nothing was refused.
+            onClick={() => void chooseConfigFolder(nodeId, name)}
           >
             {t('common.choose')}
           </button>
@@ -124,7 +125,7 @@ function ConfigControl({
 function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: ComponentManifest }) {
   const edges = useEditor((s) => s.edges);
   const inputs = useEditor((s) => s.inputs);
-  const setInput = useEditor((s) => s.setInput);
+  const chooseEntryInput = useEditor((s) => s.chooseEntryInput);
   const { t } = useTranslation();
 
   const unconnected = Object.entries(manifest.ports.inputs).filter(
@@ -158,10 +159,10 @@ function EntryInputs({ nodeId, manifest }: { nodeId: string; manifest: Component
                 type="button"
                 className="btn"
                 disabled={!ipc.live}
-                onClick={async () => {
-                  const chosen = await ipc.pickFile();
-                  if (chosen) setInput(nodeId, port, chosen);
-                }}
+                // Same as the folder above: `choose_file` can refuse the file it was handed
+                // (`resolve_input_file`), and a rejection with nobody holding it is a button
+                // that silently does nothing.
+                onClick={() => void chooseEntryInput(nodeId, port)}
               >
                 {t('common.choose')}
               </button>
@@ -417,9 +418,17 @@ function RunRecord({ record }: { record: NodeRecord }) {
       <h3 className="panel__group-label">{t('inspector.runRecord.title')}</h3>
 
       {record.error ? (
+        // The sentence comes from the journal's `code`, in the reader's language. The runtime's
+        // English `hint` is shown only for a code this build has no sentence for — a component
+        // with a vocabulary of its own — because then its own words are the only ones anybody
+        // has. For a code that is known, the advice the hint carried is inside the translated
+        // sentence instead. The `code` itself stays on show underneath either way: it is what a
+        // bug report is filed with, and it is the same word in every language.
         <div className="note note--error">
-          <strong>{record.error.message}</strong>
-          {record.error.hint ? <span className="note__hint">{record.error.hint}</span> : null}
+          <strong>{describeNodeError(record.error, t)}</strong>
+          {!isKnownNodeError(record.error) && record.error.hint ? (
+            <span className="note__hint">{record.error.hint}</span>
+          ) : null}
           <span className="note__hint">
             {t('inspector.runRecord.code', { code: record.error.code })}
           </span>

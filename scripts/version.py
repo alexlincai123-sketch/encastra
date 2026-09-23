@@ -10,11 +10,20 @@ The other files are ecosystems that insist on their own copy: npm needs it in ea
 `package.json`, Tauri needs it in `tauri.conf.json` to name the installer. They cannot be
 generated away, so they are synchronised here and a test fails if they ever drift.
 
+The two lockfiles are declarations too, not derived files: `Cargo.lock` and `package-lock.json`
+each record the workspace members' own versions, and each package manager rewrites them from the
+manifests the moment it runs. A lockfile left behind is a file that disagrees with the release
+and a build that comes out of a dirty tree, so both are synchronised and checked here.
+
 Usage:
     python scripts/version.py            # show what each file says
     python scripts/version.py --check    # exit 1 if anything disagrees
     python scripts/version.py --set X    # set the source, then sync
     python scripts/version.py --sync     # copy the source into the rest
+
+A package-lock.json declaration that is missing altogether (the top-level `version`,
+`packages[""]`, or a workspace's entry) is a disagreement under --check, and --sync reports it
+and exits non-zero rather than creating it: npm writes those entries, so `npm install` is the fix.
 """
 
 from __future__ import annotations
@@ -146,10 +155,86 @@ def write_lock(text: str, version: str) -> str:
     return "[[package]]".join(parts)
 
 
+NPM_LOCK = ROOT / "package-lock.json"
+
+
+def workspace_paths(root: pathlib.Path = ROOT) -> list[str]:
+    """The workspace directories, resolved the way npm resolves them: the globs in the root
+    `package.json`, kept only where a directory with a `package.json` actually exists."""
+    manifest = root / "package.json"
+    if not manifest.exists():
+        return []
+    declared = json.loads(manifest.read_text("utf-8")).get("workspaces") or []
+    if isinstance(declared, dict):  # the { "packages": [...] } spelling
+        declared = declared.get("packages") or []
+    found = []
+    for pattern in declared:
+        for path in sorted(root.glob(pattern)):
+            if (path / "package.json").exists():
+                relative = path.relative_to(root).as_posix()
+                if relative not in found:
+                    found.append(relative)
+    return found
+
+
+def npm_lock_versions(text: str, paths: list[str]) -> list[tuple[str, str | None]]:
+    """The versions package-lock.json declares for this repo's own packages: its top-level
+    `version`, the root entry of the `packages` map, and one entry per workspace directory.
+
+    Every one of those declarations is expected, so every one is returned — with `None` where
+    the lockfile does not carry it as a string. Returning only the entries that happened to be
+    present made a lockfile with no `packages["apps/desktop"]`, or no `packages` map at all,
+    look like one with fewer declarations, all of which agreed; `--check` passed on it.
+
+    Deliberately not the `node_modules/...` entries — npm writes those as links with no version
+    of their own — and never a third-party package, whose version is not ours to set.
+    """
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        data = {}
+    top = data.get("version")
+    found: list[tuple[str, str | None]] = [("version", top if isinstance(top, str) else None)]
+    packages = data.get("packages")
+    for key in ["", *paths]:
+        entry = packages.get(key) if isinstance(packages, dict) else None
+        declared = entry.get("version") if isinstance(entry, dict) else None
+        found.append((f'packages["{key}"]', declared if isinstance(declared, str) else None))
+    return found
+
+
+def write_npm_lock(text: str, version: str, paths: list[str]) -> str:
+    """Rewrites those same version fields in place, touching nothing else.
+
+    Textual rather than a re-serialisation: npm's own formatting (two-space JSON, one trailing
+    newline) is the formatting a later `npm install` will produce, and reprinting a 137 kB file
+    to change five strings is how a lockfile acquires an unrelated diff. An entry's fields are
+    the six-space lines under its four-space key, so a replacement cannot leak into the next
+    entry, and a value that already matches leaves the text byte-for-byte unchanged.
+    """
+
+    def replace(pattern: re.Pattern[str], subject: str) -> str:
+        return pattern.sub(lambda m: f"{m.group(1)}{version}{m.group(3)}", subject, count=1)
+
+    updated = replace(re.compile(r'(\n  "version": ")([^"]*)(")'), text)
+    for key in ["", *paths]:
+        entry = re.compile(
+            r'(\n    "' + re.escape(key) + r'": \{\n(?:      [^\n]*\n)*?      "version": ")([^"]*)(")'
+        )
+        updated = replace(entry, updated)
+    return updated
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if anything disagrees")
-    parser.add_argument("--sync", action="store_true", help="copy the source into the rest")
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help=(
+            "copy the source into the rest; never creates a package-lock.json entry npm did not "
+            "write - a missing one is reported and the sync exits non-zero (run `npm install`)"
+        ),
+    )
     parser.add_argument("--set", metavar="VERSION", help="set the source version, then sync")
     args = parser.parse_args()
 
@@ -210,10 +295,60 @@ def main() -> int:
         else:
             print(f"  Cargo.lock: {len(lock_members(lock_text))} workspace crates at {version}")
 
+    # package-lock.json is the same story on the npm side: it carries a version for the root
+    # package and for every workspace package, and `npm install` rewrites them from the
+    # package.json files. Left out of the sync, they stayed at 0.5.0-beta.1 through a whole
+    # release candidate while --check reported that everything agreed.
+    #
+    # A declaration the lockfile does not carry at all is a disagreement too, and one the sync
+    # will not repair: npm writes those entries, and a lockfile missing one is a lockfile npm did
+    # not finish writing. Inventing the entry would hide that, so the sync names it and fails,
+    # and `npm install` is what regenerates it.
+    missing = 0
+    if NPM_LOCK.exists():
+        npm_text = NPM_LOCK.read_text("utf-8")
+        paths = workspace_paths()
+        declared = npm_lock_versions(npm_text, paths)
+        absent = [where for where, found in declared if found is None]
+        stale = [(where, found) for where, found in declared if found is not None and found != version]
+        if absent:
+            for where in absent:
+                print(f"  package-lock.json ({where}): missing   DISAGREES", file=sys.stderr)
+            missing = len(absent)
+            disagreements += len(absent) + len(stale)
+            for where, found in stale:
+                print(f"  package-lock.json ({where}): {found}   DISAGREES", file=sys.stderr)
+            print(
+                "  package-lock.json lacks declarations npm writes; not rewritten. "
+                "Run `npm install` to regenerate it.",
+                file=sys.stderr,
+            )
+        elif stale and args.sync:
+            rewritten = write_npm_lock(npm_text, version, paths)
+            if rewritten != npm_text:
+                NPM_LOCK.write_text(rewritten, encoding="utf-8", newline="\n")
+            for where, found in stale:
+                print(f"  package-lock.json ({where}): {found} -> {version}")
+        elif stale:
+            for where, found in stale:
+                print(f"  package-lock.json ({where}): {found}   DISAGREES", file=sys.stderr)
+            disagreements += len(stale)
+        else:
+            count = len(npm_lock_versions(npm_text, paths))
+            print(f"  package-lock.json: {count} workspace declarations at {version}")
+
     if args.check and disagreements:
         print(
-            f"\n{disagreements} file(s) disagree with Cargo.toml. "
-            "Run `python scripts/version.py --sync`.",
+            f"\n{disagreements} declaration(s) disagree with Cargo.toml or are missing. "
+            "Run `python scripts/version.py --sync`, and `npm install` for a missing "
+            "package-lock.json entry.",
+            file=sys.stderr,
+        )
+        return 1
+    if args.sync and missing:
+        print(
+            f"\n{missing} package-lock.json declaration(s) are missing and were not created. "
+            "Run `npm install`, then this again.",
             file=sys.stderr,
         )
         return 1

@@ -10,7 +10,7 @@
 
 use std::sync::{Arc, LazyLock};
 
-use encastra_core::journal::{LogLevel, NodeError};
+use encastra_core::journal::{LogLevel, NodeError, NodeErrorCode};
 use encastra_core::media::{self, FitMode, OutputFormat};
 use encastra_core::runner::{CoreComponent, NodeContext};
 use encastra_core::value::{Handle, HandleKind, Value};
@@ -29,7 +29,7 @@ fn decoded(
         .unwrap_or_else(|| "image".to_owned());
     let bytes = ctx.read(handle)?;
     let image = media::decode(&bytes).map_err(|e| {
-        NodeError::new("not-an-image", e.to_string())
+        NodeError::new(NodeErrorCode::NotAnImage, e.to_string())
             .with_hint("This component needs an image. Check what is connected to it.")
     })?;
     Ok((handle, name, image))
@@ -65,7 +65,7 @@ fn emit(
     source_name: &str,
 ) -> Result<Handle, NodeError> {
     let bytes = media::encode(image, format, quality)
-        .map_err(|e| NodeError::new("encode-failed", e.to_string()))?;
+        .map_err(|e| NodeError::new(NodeErrorCode::EncodeFailed, e.to_string()))?;
     let (stem, _) = split_name(source_name);
     let name = format!("{stem}.{}", format.extension());
     let out = ctx.create_output(HandleKind::Image, &name)?;
@@ -135,7 +135,7 @@ impl CoreComponent for Resize {
         let height = ctx.config_i64("height").unwrap_or(0).clamp(0, 20_000) as u32;
         if width == 0 && height == 0 {
             return Err(NodeError::new(
-                "missing-config",
+                NodeErrorCode::MissingConfig,
                 "Set a width, a height, or both. Leaving one at 0 keeps the proportions.",
             ));
         }
@@ -163,7 +163,7 @@ impl CoreComponent for Resize {
         };
 
         let resized = media::resize(&image, width, height, mode)
-            .map_err(|e| NodeError::new("resize-failed", e.to_string()))?;
+            .map_err(|e| NodeError::new(NodeErrorCode::ResizeFailed, e.to_string()))?;
         let after = (resized.width(), resized.height());
 
         let format = output_format(ctx, &name);
@@ -234,7 +234,7 @@ impl CoreComponent for Convert {
         let requested = ctx.config_str("format").unwrap_or("png");
         let format = OutputFormat::parse(requested).ok_or_else(|| {
             NodeError::new(
-                "unsupported-format",
+                NodeErrorCode::UnsupportedFormat,
                 format!("This build cannot write {requested}."),
             )
             .with_hint("Choose PNG, JPEG or WebP.")
@@ -299,7 +299,7 @@ impl CoreComponent for Thumbnail {
         // Cover, not contain: a thumbnail grid with different-shaped gaps looks broken, and
         // cropping is what people expect from the word.
         let small = media::resize(&image, size, size, FitMode::Cover)
-            .map_err(|e| NodeError::new("resize-failed", e.to_string()))?;
+            .map_err(|e| NodeError::new(NodeErrorCode::ResizeFailed, e.to_string()))?;
 
         let format = output_format(ctx, &name);
         let quality = quality_of(ctx);
@@ -363,7 +363,7 @@ impl CoreComponent for Info {
         // The header is enough, and reading only the header means an enormous image can be
         // described without being decoded.
         let info = media::probe(&bytes).map_err(|e| {
-            NodeError::new("not-an-image", e.to_string())
+            NodeError::new(NodeErrorCode::NotAnImage, e.to_string())
                 .with_hint("This component needs an image. Check what is connected to it.")
         })?;
 

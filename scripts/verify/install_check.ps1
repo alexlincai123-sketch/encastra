@@ -40,8 +40,27 @@ Report (Test-Path $shortcut) "Start Menu shortcut" $shortcut
 $acl = (icacls $installDir | Select-Object -First 3) -join ' | '
 "install dir ACL: $acl"
 
-# First run of the installed copy.
+# First run of the installed copy, left running for whatever drives it next.
+#
+# Start-Process hands the child this process's environment, so when the caller has set
+# WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 the application comes up with
+# the DevTools protocol open and scripts/verify/gui_journeys.ps1 can observe the canvas through the
+# page itself. Nothing here sets that variable: it is test-only, the workflow step that calls this
+# script sets it, and what an open debugging port exposes is in docs/security/AI-AGENT-SURFACE.md.
 $run = Start-Process -FilePath $exe -PassThru
 Start-Sleep 6
 $run.Refresh()
 Report (-not $run.HasExited) "installed application launches and stays up" "pid $($run.Id) title='$($run.MainWindowTitle)'"
+
+# When the caller asked for the debugging port, say whether the browser process actually got it.
+# Notes, not a check: whether a test-only flag arrived is not a property of the installation, which
+# is what this script is about. But it is the one thing a later `FAIL CDP reachable -> fetch
+# failed` needs in order to mean anything, and by then this process is gone - so it is recorded
+# here, beside the launch it belongs to.
+if ($env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) {
+    "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS is set to: $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
+    $port = 9222
+    if ($env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS -match '--remote-debugging-port=(\d+)') { $port = [int]$Matches[1] }
+    $probe = Join-Path $PSScriptRoot 'webview2_state.ps1'
+    if (Test-Path $probe) { & $probe -Port $port } else { "webview2: $probe is missing, so nothing can be said about the WebView2" }
+}

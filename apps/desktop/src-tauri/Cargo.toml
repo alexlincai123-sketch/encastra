@@ -28,3 +28,17 @@ serde_json = { workspace = true }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 thiserror = { workspace = true }
+
+[dev-dependencies]
+# `tauri::test` — `mock_builder`/`mock_app` — is what lets a test hold a real `tauri::State`
+# and so call the commands themselves rather than the helpers underneath them. `State` has no
+# public constructor; the only way to one is a built `App` that manages the value. Without it
+# the purpose constant each command pins (`FolderPurpose::PublishInto` in `prepare_publication`,
+# `ImportFrom` in `chosen_publication_folder`) is asserted nowhere, and inverting one breaks no
+# test.
+#
+# A dev-dependency, so the shipped binary does not gain the feature: the workspace is on
+# resolver 3, under which a dev-dependency's features are unified only when building a target
+# that needs them (tests, examples, benches). `cargo build -p encastra-desktop --lib -v`
+# compiles `tauri` without `--cfg feature="test"`; `cargo test` compiles a second copy with it.
+tauri = { version = "2", features = ["test"] }

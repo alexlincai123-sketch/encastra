@@ -35,13 +35,13 @@ not from the many things that went well.
 
 | | |
 |---|---|
-| Branch | `release/final-readiness-remediation`, worktree `C:\Users\alexl\encastra-final` |
+| Branch | `release/final-readiness-remediation`, worktree `C:\Users\<developer>\encastra-final` |
 | Base | `feat/readiness@9d1ec13` — the candidate after the parallel session's final-audit fixes (ENC-NEW-19 among them); includes the closure report `6af48a8` |
 | Final **code** commit | **`c975bd4`** (`c975bd4fd39f47b323855abfd1f0923bd9bbca2e`) — the commit both reproducibility builds, the GUI run and the installation below are of |
 | This report | one docs-only commit after `c975bd4`; the shipping build commit will be the merge of this branch into `feat/readiness`, and **the two-build comparison must be repeated on it** (the stamp changes with the commit, so its bytes are not `c975bd4`'s) |
 | `main` | `4f2932e`, not written to at any point |
 | Working tree at the end | clean (`git status --porcelain` empty) |
-| Build worktrees | `C:\Users\alexl\eB` and `C:\Users\alexl\eC`, detached, two directories on purpose |
+| Build worktrees | `C:\Users\<developer>\eB` and `C:\Users\<developer>\eC`, detached, two directories on purpose |
 
 Commits on the branch over `9d1ec13`, in order: `d1b7b0d` build stamp + `/Brepro`; `7294904`
 manifest reads the stamp, `pe_diff.py`, 20 tests; `e94837c` bytecode ignored; `a88d2b1`
@@ -114,7 +114,7 @@ variant, and that is true of this tree.
 ### ENC-NEW-20 — the chosen folder came back as `\\?\C:\...` (LOW, functional; NEW; FIXED)
 
 Found by executing the GUI procedure rather than reading it. Settings → Projects → Browse put
-`\\?\C:\Users\alexl\AppData\Local\Temp\Encastra GUI ñ 日本語 test` into the folder field:
+`\\?\C:\Users\<developer>\AppData\Local\Temp\Encastra GUI ñ 日本語 test` into the folder field:
 `choose_folder` returned the canonical path exactly as recorded, and on Windows
 `std::fs::canonicalize` returns the verbatim form. That string then travels into the consent
 prompt and into saved preferences. Not a permission defect — the path is canonicalised again on
@@ -172,8 +172,8 @@ difference is shown as found):
 
 ```
 Artifact: encastra-desktop.exe (9 620 480 B)
-Build A (C:\Users\alexl\eB)  SHA-256: 7f93c457b835a76d9e16b3d12a5f68ec0e5e6c87af43bcfe47b1e23aaba268de
-Build B (C:\Users\alexl\eC)  SHA-256: 7f93c457b835a76d9e16b3d12a5f68ec0e5e6c87af43bcfe47b1e23aaba268de
+Build A (C:\Users\<developer>\eB)  SHA-256: 7f93c457b835a76d9e16b3d12a5f68ec0e5e6c87af43bcfe47b1e23aaba268de
+Build B (C:\Users\<developer>\eC)  SHA-256: 7f93c457b835a76d9e16b3d12a5f68ec0e5e6c87af43bcfe47b1e23aaba268de
 Equal: YES
 
 Artifact: Encastra_0.5.0-beta.1_x64-setup.exe, as built
@@ -193,8 +193,8 @@ in each, nothing touched in either tree while building:
 
 ```
 Artifact: encastra-desktop.exe (9 620 480 B)
-Build A (C:\Users\alexl\eB, 213 s)  SHA-256: 9b799ea8bb2eb0ec3b0e78c802987b4f01dcbebd8ddd19a4f90dbf61b6cdecf8
-Build B (C:\Users\alexl\eC, 205 s)  SHA-256: 9b799ea8bb2eb0ec3b0e78c802987b4f01dcbebd8ddd19a4f90dbf61b6cdecf8
+Build A (C:\Users\<developer>\eB, 213 s)  SHA-256: 9b799ea8bb2eb0ec3b0e78c802987b4f01dcbebd8ddd19a4f90dbf61b6cdecf8
+Build B (C:\Users\<developer>\eC, 205 s)  SHA-256: 9b799ea8bb2eb0ec3b0e78c802987b4f01dcbebd8ddd19a4f90dbf61b6cdecf8
 Equal: YES  (cmp: identical; pe_diff.py: "Identical.", exit 0)
 
 Artifact: Encastra_0.5.0-beta.1_x64-setup.exe (3 529 699 B)
@@ -207,7 +207,7 @@ Code differences: NO   Data differences: NO   Metadata differences: NO   Debug d
 COFF TimeDateStamp: 1413834775 on both — a content hash, not the clock (the builds ran at ~1789450000)
 RSDS GUID: 24160569edbae889ec3e05b9c71cac99 on both
 Build stamp in the binary: c975bd4fd39f47b323855abfd1f0923bd9bbca2e
-Occurrences of "Users\alexl", "eB\", "eC\" in the binary: 0 — no build path is embedded
+Occurrences of "Users\<developer>", "eB\", "eC\" in the binary: 0 — no build path is embedded
 ```
 
 **What is and is not claimed.** Same commit, `1.98.1`/msvc, `link.exe` 14.44.35207, the same
@@ -216,7 +216,7 @@ on two commits, in two directories each. Not claimed: across `link.exe` versions
 versions, across machines; the release workflow's rebuild-and-compare gate is where that would be
 earned and it has never run (no remote). The MSVC linker version is not pinned by the repository;
 it is recorded here. **A third build**, by the parallel session in a third directory
-(`C:\Users\alexl\encastra-wt-build`, detached checkout, clean `npm ci`), produced the same two
+(`C:\Users\<developer>\encastra-wt-build`, detached checkout, clean `npm ci`), produced the same two
 hashes — `9b799ea8…` and `2b6c86e5…` — so the claim rests on three builds in three directories
 by two independent operators, on one machine.
 
@@ -227,7 +227,7 @@ by two independent operators, on one machine.
 WebView2 content exposes its buttons by name) and the native chooser through its window handles
 (`BM_CLICK`, `WM_SETTEXT`), and prints one PASS/FAIL per check with the observed value.
 
-Run 1: the raw build of `c975bd4` (`C:\Users\alexl\eB\target\release\encastra-desktop.exe`).
+Run 1: the raw build of `c975bd4` (`C:\Users\<developer>\eB\target\release\encastra-desktop.exe`).
 Run 2: the **installed** copy (`%LOCALAPPDATA%\Encastra\encastra-desktop.exe`, after the
 installation below). Both runs, every check **PASS**:
 
@@ -238,7 +238,7 @@ installation below). Both runs, every check **PASS**:
 4. Cancel closes it; the application is still running; the folder field is unchanged.
 5. Browse again; the folder-name field (id 1152) and the confirm button
    (`Seleccionar carpeta`) are found; the path
-   `C:\Users\alexl\AppData\Local\Temp\Encastra GUI ñ 日本語 test` (spaces, `ñ`, CJK) is entered
+   `C:\Users\<developer>\AppData\Local\Temp\Encastra GUI ñ 日本語 test` (spaces, `ñ`, CJK) is entered
    and confirmed; the chooser closes; the application is still running.
 6. The folder field shows **exactly** that path — after the ENC-NEW-20 fix. Before it, the same
    run showed `\\?\C:\...`, which is how the defect was found.

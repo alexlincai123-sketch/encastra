@@ -16,7 +16,9 @@ use encastra_protocol::manifest::ComponentManifest;
 use crate::broker::Broker;
 use crate::convert::apply_ops;
 use crate::graph::{Edge, Graph, NodeId, PortRef};
-use crate::journal::{LogLevel, LogLine, NodeError, NodeRecord, NodeStatus, RunJournal, now_ms};
+use crate::journal::{
+    LogLevel, LogLine, NodeError, NodeErrorCode, NodeRecord, NodeStatus, RunJournal, now_ms,
+};
 use crate::registry::ComponentRegistry;
 use crate::validate::Validation;
 use crate::value::{Handle, HandleKind, Value};
@@ -146,7 +148,7 @@ impl<'a> NodeContext<'a> {
     pub fn read_text(&mut self, handle: Handle) -> Result<String, NodeError> {
         let bytes = self.read(handle)?;
         String::from_utf8(bytes).map_err(|_| {
-            NodeError::new("not-text", "This file is not valid UTF-8 text.")
+            NodeError::new(NodeErrorCode::NotText, "This file is not valid UTF-8 text.")
                 .with_hint("Connect it to a component that works with bytes instead.")
         })
     }
@@ -514,10 +516,22 @@ fn execute(
     // have to know which kind it is looking at.
     let mut seeded: BTreeMap<PortRef, Value> = BTreeMap::new();
     for (port, value) in seed {
+        // Which side of the node this names. A port name is not unique across the two: Save File
+        // takes a file on "file" and produces one on "file", and deciding by the outputs alone
+        // filed the file a person had picked as something the node had produced - so the node
+        // ran with nothing on its input and said "Nothing is connected to \"file\"", which is
+        // what the grant-to-component and run-input journeys had been failing on all along.
+        //
+        // An input wins a tie, because the two kinds of seed come from different places: a
+        // trigger's event is an output of a trigger component, and everything else is a value
+        // the application supplied for an input. A trigger keeps the outputs reading.
         let is_output = graph
             .node(&port.node)
             .and_then(|node| registry.get(&node.component))
-            .is_some_and(|manifest| manifest.ports.outputs.contains_key(&port.port));
+            .is_some_and(|manifest| {
+                manifest.ports.outputs.contains_key(&port.port)
+                    && (manifest.trigger || !manifest.ports.inputs.contains_key(&port.port))
+            });
         if is_output {
             if let Value::Handle(handle) = &value {
                 // Only what is wired to *this* port. A watcher emits the file alongside its
@@ -615,7 +629,7 @@ fn execute(
                     // Cancelled by the clock rather than by a person, which is a different thing
                     // to read in a journal six hours later.
                     record.error = Some(NodeError::new(
-                        "run-too-long",
+                        NodeErrorCode::RunTooLong,
                         format!(
                             "This run passed the {} minute limit and was stopped.",
                             MAX_RUN_DURATION.as_secs() / 60
@@ -642,7 +656,7 @@ fn execute(
             let Some(manifest) = registry.get(&node.component) else {
                 record.status = NodeStatus::Failed;
                 record.error = Some(NodeError::new(
-                    "component-missing",
+                    NodeErrorCode::ComponentMissing,
                     format!("{} is not installed.", node.component),
                 ));
                 break 'step record;
@@ -687,7 +701,7 @@ fn execute(
                 record.status = NodeStatus::Failed;
                 record.error = Some(
                     NodeError::new(
-                        "no-implementation",
+                        NodeErrorCode::NoImplementation,
                         format!(
                             "{} has a manifest but no code in this build.",
                             node.component
@@ -739,8 +753,7 @@ fn execute(
                         // process that vanished.
                         record.status = NodeStatus::Failed;
                         record.error = Some(
-                            NodeError::new(
-                                "run-memory-budget",
+                            NodeError::new(NodeErrorCode::RunMemoryBudget,
                                 format!(
                                     "This step would take the run past its limit of {budget} bytes of values held at once; it is already holding {live_bytes} and this step adds {produces}."
                                 ),
@@ -904,7 +917,7 @@ fn check_outputs(
     for (port, value) in &produced {
         let Some(declared) = manifest.ports.outputs.get(port) else {
             return Err(NodeError::new(
-                "contract-broken",
+                NodeErrorCode::ContractBroken,
                 format!(
                     "{} produced an output called \"{port}\", which it does not declare.",
                     manifest.name
@@ -926,7 +939,7 @@ fn check_outputs(
         );
         if !compatible {
             return Err(NodeError::new(
-                "contract-broken",
+                NodeErrorCode::ContractBroken,
                 format!(
                     "{} declares \"{port}\" as {}, but produced {actual}.",
                     manifest.name, declared.type_

@@ -318,17 +318,64 @@ def describe_signing(states: dict[pathlib.Path, tuple[str, str]], allow_unsigned
     return warning
 
 
+def candidate() -> dict | None:
+    """The candidate build these artefacts were fetched from (release_fetch.py), if they were."""
+    import release_provenance
+
+    return release_provenance.load()
+
+
+def candidate_problems(record: dict, files: list[pathlib.Path], commit: str) -> list[str]:
+    """Why the provenance record beside the artefacts does not describe them, if it does not.
+
+    A record left over from another fetch, next to a local rebuild or another commit's files,
+    would put a CI run's name on bytes that run never produced.
+    """
+    import release_provenance
+
+    return release_provenance.judge_local(record, {path.name: sha256(path) for path in files}, commit)
+
+
+def built_by(record: dict | None) -> tuple[str, str, str]:
+    """(when, where, toolchain) for the manifest header, from the candidate run or from here."""
+    if record is None:
+        return (
+            datetime.date.today().isoformat(),
+            f"{platform.system()} {platform.machine()}",
+            f"Toolchain: {toolchain()}. Two builds of the build commit with this toolchain produce "
+            "these exact bytes; `scripts/pe_diff.py` says how they differ if they do not.",
+        )
+    env = record.get("environment") or {}
+    runner, tools, sdk = env.get("runner") or {}, env.get("toolchain") or {}, env.get("windows_sdk") or {}
+    library = sdk.get("advapi32_lib") or {}
+    where = (
+        f"{runner.get('os', 'Windows')} {runner.get('arch', '')} by GitHub Actions run "
+        f"[{record.get('run_id')}]({record.get('run_url')})"
+    ).replace("  ", " ")
+    toolchain_line = (
+        f"Toolchain: {tools.get('rustc')} · node {tools.get('node')} · MSVC {tools.get('msvc')} · "
+        f"Windows SDK {sdk.get('WindowsSDKVersion')} (AdvAPI32.Lib `{str(library.get('sha256'))[:16]}…`) · "
+        f"runner image {runner.get('image')} {runner.get('image_version')}. Built twice in that run, on two "
+        "machines, byte-identical; the release workflow builds the build commit a third time at the tag "
+        "and requires these bytes again. `scripts/pe_diff.py` names any byte that differs."
+    )
+    return str(record.get("created_at") or "")[:10], where, toolchain_line
+
+
 def render_block(
-    files: list[pathlib.Path], states: dict[pathlib.Path, tuple[str, str]], commit: str, allow_unsigned: bool
+    files: list[pathlib.Path],
+    states: dict[pathlib.Path, tuple[str, str]],
+    commit: str,
+    allow_unsigned: bool,
+    record: dict | None = None,
 ) -> str:
+    when, where, toolchain_line = built_by(record)
     lines = [
         MARKER_START,
         "",
-        f"**Version {version()}** · built {datetime.date.today().isoformat()} on "
-        f"{platform.system()} {platform.machine()} · build commit `{commit}`",
+        f"**Version {version()}** · built {when} on {where} · build commit `{commit}`",
         "",
-        f"Toolchain: {toolchain()}. Two builds of the build commit with this toolchain produce "
-        "these exact bytes; `scripts/pe_diff.py` says how they differ if they do not.",
+        toolchain_line,
         "",
         "| Artefact | Size | Signature | SHA-256 |",
         "|---|---|---|---|",
@@ -392,12 +439,13 @@ def site_field(name: str) -> re.Pattern[str]:
     return re.compile(rf"(^\s*{name}:\s*)('[^']*'|true|false)(,)", re.M)
 
 
-def site_values(files: list[pathlib.Path], states: dict, commit: str) -> dict[str, str]:
+def site_values(files: list[pathlib.Path], states: dict, commit: str, record: dict | None = None) -> dict[str, str]:
     installers = [path for path in files if path != BINARY]
     installer = installers[0] if installers else None
+    when = built_by(record)[0]
     values = {
-        "builtOn": repr(datetime.date.today().isoformat()),
-        "builtFor": repr(f"{platform.system()} {platform.machine()}"),
+        "builtOn": repr(when),
+        "builtFor": repr(f"{platform.system()} {platform.machine()}" if record is None else "Windows X64"),
         "commit": repr(commit),
         "signed": "true" if all(state == SIGNED for state, _ in states.values()) else "false",
     }
@@ -457,11 +505,10 @@ def read_block() -> dict | None:
     head = re.search(r"\*\*Version ([^*]+)\*\*.*?build commit `([0-9a-f]{40})`", block, re.S)
     if not head:
         return None
-    hashes = {
-        name: digest
-        for name, digest in re.findall(r"^\| `([^`]+)` \| [^|]+ \| [^|]+ \| `([0-9a-f]{64})` \|$", block, re.M)
-    }
-    return {"version": head.group(1).strip(), "commit": head.group(2), "hashes": hashes}
+    rows = re.findall(r"^\| `([^`]+)` \| [^|]+ \| ([^|]+) \| `([0-9a-f]{64})` \|$", block, re.M)
+    hashes = {name: digest for name, _, digest in rows}
+    signatures = {name: signature.strip() for name, signature, _ in rows}
+    return {"version": head.group(1).strip(), "commit": head.group(2), "hashes": hashes, "signatures": signatures}
 
 
 def verify() -> list[str]:
@@ -491,7 +538,7 @@ def verify() -> list[str]:
             "a new build needs a new manifest."
         )
     elif head and head != commit:
-        changed = set((git("diff", "--name-only", commit, "HEAD") or "").split())
+        changed = set((git("diff", "--no-renames", "--name-only", commit, "HEAD") or "").split())
         extra = sorted(path for path in changed if not is_publication_change(path))
         if extra:
             problems.append(
@@ -511,6 +558,19 @@ def verify() -> list[str]:
             problems.append(
                 f"{path.name} hashes to {actual}, the manifest says {claim['hashes'][path.name]}."
             )
+    # What the manifest says about signing is a claim about the bytes, and is checked against them:
+    # a hand-edited "signed — Somebody" over unsigned artefacts would otherwise reach the release
+    # page and the website unchallenged, because nothing else here reads that column.
+    for path in artefacts():
+        claimed = (claim.get("signatures") or {}).get(path.name)
+        if claimed is None:
+            continue
+        says_signed = claimed.startswith("signed")
+        state, _ = signature(path)
+        if says_signed and state != SIGNED:
+            problems.append(f"the manifest says {path.name} is {claimed!r}; Authenticode says {state}.")
+        elif not says_signed and state == SIGNED:
+            problems.append(f"the manifest says {path.name} is not signed; Authenticode says it is.")
     if BINARY.exists():
         stamp = stamp_in(BINARY)
         if stamp != commit:
@@ -522,6 +582,9 @@ def verify() -> list[str]:
     if site is not None:
         if site["commit"] != commit:
             problems.append(f"site.ts names commit {site['commit']!r}; the manifest names {commit}.")
+        all_signed = bool(claim.get("signatures")) and all(v.startswith("signed") for v in claim["signatures"].values())
+        if (site["signed"] == "true") != all_signed:
+            problems.append(f"site.ts says signed: {site['signed']}; the manifest's table says {'all' if all_signed else 'not all'} artefacts are signed.")
         if site["installerVersion"] != claim["version"]:
             problems.append(
                 f"site.ts says version {site['installerVersion']!r}; the manifest says {claim['version']!r}."
@@ -550,6 +613,11 @@ def main() -> int:
         "--build-commit",
         action="store_true",
         help="print the build commit the manifest on disk names, and nothing else",
+    )
+    parser.add_argument(
+        "--local-build",
+        action="store_true",
+        help="describe artefacts built on this machine rather than a fetched candidate build (not publishable since 0.5.0-rc.5)",
     )
     parser.add_argument(
         "--verify",
@@ -607,8 +675,29 @@ def main() -> int:
         return EXIT_PROVENANCE
     commit = stamp_in(BINARY) or ""
 
+    record = candidate()
+    if record is None and not args.local_build:
+        print(
+            "Refusing: these artefacts were not fetched from a candidate build. Since 0.5.0-rc.5 the "
+            "published bytes are candidate.yml's (python scripts/release_fetch.py --run <id>); "
+            "--local-build describes a local build on purpose, and release_check will not pass it.",
+            file=sys.stderr,
+        )
+        return EXIT_PROVENANCE
+    if record is not None:
+        stale = candidate_problems(record, files, commit)
+        if stale:
+            for problem in stale:
+                print(f"Refusing: candidate-provenance.json does not describe target/: {problem}", file=sys.stderr)
+            print(
+                "Re-fetch the candidate (python scripts/release_fetch.py --run <id>), or delete "
+                "target/release/candidate-provenance.json if these bytes were built here.",
+                file=sys.stderr,
+            )
+            return EXIT_PROVENANCE
+
     states = {path: signature(path) for path in files}
-    block = render_block(files, states, commit, args.allow_unsigned)
+    block = render_block(files, states, commit, args.allow_unsigned, record)
 
     # The refusal happens before the document is written. A manifest describing a release that
     # is not allowed to happen is a file somebody later mistakes for a release that did.
@@ -640,7 +729,7 @@ def main() -> int:
 
     if write_block(block):
         print(f"Updated {RELEASE_DOC.relative_to(ROOT)} for build commit {commit}")
-        if write_site(site_values(files, states, commit)):
+        if write_site(site_values(files, states, commit, record)):
             print(f"Updated {SITE_CONFIG.relative_to(ROOT)}")
         else:
             print(

@@ -10,7 +10,7 @@
 
 use crate::broker::Broker;
 use crate::graph::NodeId;
-use crate::journal::NodeError;
+use crate::journal::{NodeError, NodeErrorCode};
 use crate::value::{Handle, HandleKind, Value};
 
 /// Operations the table declares that this build cannot yet perform.
@@ -33,7 +33,7 @@ pub fn apply_ops(
             let rest = &ops[index + 1..];
             let Value::List(items) = current else {
                 return Err(NodeError::new(
-                    "conversion-failed",
+                    NodeErrorCode::ConversionFailed,
                     "Expected a list to convert, but the value was not one.",
                 ));
             };
@@ -64,8 +64,7 @@ fn apply_one(
     Ok(match op {
         "unwrap-option" => match value {
             Value::Absent => {
-                return Err(NodeError::new(
-                    "conversion-failed",
+                return Err(NodeError::new(NodeErrorCode::ConversionFailed,
                     "This input had no value, and the connection requires one.",
                 )
                 .with_hint(
@@ -89,7 +88,7 @@ fn apply_one(
                 // rounding a number the user will later see as wrong.
                 if i.unsigned_abs() > (1u64 << 53) {
                     return Err(NodeError::new(
-                        "conversion-failed",
+                        NodeErrorCode::ConversionFailed,
                         format!(
                             "{i} is too large to become a decimal number without losing precision."
                         ),
@@ -114,14 +113,14 @@ fn apply_one(
             Value::Float(f) => {
                 if !f.is_finite() {
                     return Err(NodeError::new(
-                        "conversion-failed",
+                        NodeErrorCode::ConversionFailed,
                         "This number is not finite, so it cannot become a whole number.",
                     ));
                 }
                 let rounded = f.round();
                 if rounded > i64::MAX as f64 || rounded < i64::MIN as f64 {
                     return Err(NodeError::new(
-                        "conversion-failed",
+                        NodeErrorCode::ConversionFailed,
                         format!("{f} is outside the range of a whole number."),
                     ));
                 }
@@ -133,7 +132,7 @@ fn apply_one(
         "parse-int" => match value {
             Value::Text(t) => Value::Int(t.trim().parse::<i64>().map_err(|_| {
                 NodeError::new(
-                    "conversion-failed",
+                    NodeErrorCode::ConversionFailed,
                     format!("{:?} is not a whole number.", truncate(&t)),
                 )
             })?),
@@ -143,7 +142,7 @@ fn apply_one(
         "parse-float" => match value {
             Value::Text(t) => Value::Float(t.trim().parse::<f64>().map_err(|_| {
                 NodeError::new(
-                    "conversion-failed",
+                    NodeErrorCode::ConversionFailed,
                     format!("{:?} is not a number.", truncate(&t)),
                 )
             })?),
@@ -158,7 +157,7 @@ fn apply_one(
                 "false" | "no" | "0" | "off" => Value::Bool(false),
                 _ => {
                     return Err(NodeError::new(
-                        "conversion-failed",
+                        NodeErrorCode::ConversionFailed,
                         format!("{:?} is not a true/false value.", truncate(&t)),
                     )
                     .with_hint("Accepted: true, false, yes, no, 1, 0, on, off."));
@@ -170,7 +169,7 @@ fn apply_one(
         "parse-json" => match value {
             Value::Text(t) => Value::Json(serde_json::from_str(&t).map_err(|e| {
                 NodeError::new(
-                    "conversion-failed",
+                    NodeErrorCode::ConversionFailed,
                     format!("This text is not valid JSON: {e}."),
                 )
             })?),
@@ -180,7 +179,7 @@ fn apply_one(
         "stringify-json" => match value {
             Value::Json(j) => Value::Text(serde_json::to_string(&j).map_err(|e| {
                 NodeError::new(
-                    "conversion-failed",
+                    NodeErrorCode::ConversionFailed,
                     format!("Could not write this as JSON: {e}."),
                 )
             })?),
@@ -206,14 +205,14 @@ fn apply_one(
                         Value::Float(f)
                     } else {
                         return Err(NodeError::new(
-                            "conversion-failed",
+                            NodeErrorCode::ConversionFailed,
                             "This number cannot be represented.",
                         ));
                     }
                 }
                 other => {
                     return Err(NodeError::new(
-                        "conversion-failed",
+                        NodeErrorCode::ConversionFailed,
                         format!(
                             "Expected a single value, but this JSON is {}.",
                             match other {
@@ -248,7 +247,7 @@ fn apply_one(
             Value::Handle(h) => {
                 let bytes = broker.host_read(h)?;
                 let info = crate::media::probe(&bytes).map_err(|e| {
-                    NodeError::new("not-an-image", e.to_string()).with_hint(
+                    NodeError::new(NodeErrorCode::NotAnImage, e.to_string()).with_hint(
                         "This connection expects an image. Check that the file really is one.",
                     )
                 })?;
@@ -268,7 +267,7 @@ fn apply_one(
 
         pending if PENDING_OPS.contains(&pending) => {
             return Err(NodeError::new(
-                "conversion-unavailable",
+                NodeErrorCode::ConversionUnavailable,
                 format!("This build cannot yet perform the \"{pending}\" conversion."),
             )
             .with_hint("It needs a media component that has not shipped yet."));
@@ -276,7 +275,7 @@ fn apply_one(
 
         unknown => {
             return Err(NodeError::new(
-                "conversion-failed",
+                NodeErrorCode::ConversionFailed,
                 format!("Unknown conversion \"{unknown}\"."),
             ));
         }
@@ -285,7 +284,7 @@ fn apply_one(
 
 fn cannot(op: &str, value: &Value) -> NodeError {
     NodeError::new(
-        "conversion-failed",
+        NodeErrorCode::ConversionFailed,
         format!("Cannot apply \"{op}\" to {}.", value.summary()),
     )
 }

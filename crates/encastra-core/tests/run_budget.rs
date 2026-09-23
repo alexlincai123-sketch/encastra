@@ -104,7 +104,10 @@ impl CoreComponent for Fails {
     }
 
     fn run(&self, _ctx: &mut NodeContext<'_>) -> Result<BTreeMap<String, Value>, NodeError> {
-        Err(NodeError::new(
+        // `from_component`, not `new`: this is a component the runtime did not write, refusing in
+        // a vocabulary of its own. It is the live example of the case the interface's passthrough
+        // exists for — a code with no sentence in any language, shown as the words it came with.
+        Err(NodeError::from_component(
             "test-failure",
             "This component always fails.",
         ))

@@ -379,3 +379,74 @@ fn an_empty_graph_is_valid_and_does_nothing() {
     assert!(result.is_runnable());
     assert!(result.order.is_empty());
 }
+
+#[test]
+fn every_issue_a_graph_can_produce_survives_being_serialised() {
+    // The editor reads these over an IPC boundary, as JSON. `Location` is internally tagged, and
+    // serde cannot serialise a tagged variant holding a bare string - so `Location::Node(NodeId)`
+    // failed at the moment there was something to report, and the editor's Check answered with
+    // "JSON error: cannot serialize tagged newtype variant Location::Node containing a string"
+    // instead of with the problem. Nothing in this suite had ever serialised an issue.
+    let g = graph(serde_json::json!({
+        "nodes": {
+            "a": node("test.missing"),
+            "b": node("test.sink")
+        },
+        "edges": []
+    }));
+    let result = validate(&g, &registry());
+    assert!(
+        result.errors().count() >= 1,
+        "the fixture must produce issues"
+    );
+    let json =
+        serde_json::to_string(&result).expect("a validation has to be able to reach the editor");
+    assert!(
+        json.contains("\"kind\":\"node\""),
+        "a node issue keeps its shape: {json}"
+    );
+}
+
+#[test]
+fn an_optional_setting_left_empty_is_not_configured_rather_than_wrong() {
+    // What the editor sends for a box nobody typed in is null, and two of Save File's settings
+    // are documented as "leave empty to keep the name the file already has". They were counted
+    // as errors of type - `"filename" should be string, but is empty` - and a workflow with a
+    // folder granted and a file chosen could not be run because of them.
+    let mut r = registry();
+    r.insert(component_with(
+        "test.optional",
+        serde_json::json!({}),
+        serde_json::json!({ "out": { "type": "i64" } }),
+        serde_json::json!({
+            "nickname": { "type": "string" },
+            "folder": { "type": "string", "required": true }
+        }),
+    ))
+    .unwrap();
+
+    let empty_optional = graph(serde_json::json!({
+        "nodes": { "a": { "component": "test.optional@1.0.0",
+                          "config": { "nickname": null, "folder": "C:/somewhere" } } },
+        "edges": []
+    }));
+    let result = validate(&empty_optional, &r);
+    assert!(
+        result.is_runnable(),
+        "an empty optional setting is not configured, not wrong: {:?}",
+        result.issues
+    );
+
+    // The required one, left the same way, still has to be refused - and named.
+    let empty_required = graph(serde_json::json!({
+        "nodes": { "a": { "component": "test.optional@1.0.0", "config": { "folder": null } } },
+        "edges": []
+    }));
+    let refused = validate(&empty_required, &r);
+    assert_eq!(refused.errors().count(), 1, "{:?}", refused.issues);
+    assert!(
+        refused.errors().next().unwrap().message.contains("folder"),
+        "the refusal names the setting: {:?}",
+        refused.issues
+    );
+}

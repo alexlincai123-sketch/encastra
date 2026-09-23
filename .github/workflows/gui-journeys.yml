@@ -1,0 +1,148 @@
+name: Chooser journeys
+
+# Drive the flows that decide what the application may read and write, through the interface,
+# on a machine where nobody is working.
+#
+# B5. Every filesystem permission in Encastra comes from a folder a person picked in a *native*
+# chooser, for a stated purpose — `publish-into`, `import-from`, `grant-to-component`,
+# `projects-location`, and `run-input` for a file. Until now only `projects-location` had ever
+# been driven end to end, and it is the one purpose that gates nothing. The other four had tests
+# underneath them and no evidence through them.
+#
+# A unit test cannot stand in for this. What is in doubt is the whole path — chooser, IPC, the
+# canonicalising, the registry, and then the operation the folder was picked for — and there is a
+# native modal dialog in the middle of it that no test harness ever opens.
+#
+# It runs here rather than on a developer machine because driving a modal dialog needs a desktop
+# nobody else is using, and because keystrokes aimed at a dialog have landed somewhere else in
+# this project before. The runner has a desktop, and no one is looking at it. It ran on the
+# project's self-hosted runner while hosted minutes were refused (September 2026); the repository
+# is public now and hosted runners take it again.
+#
+# The log is the evidence: scripts/release_check.py --evidence-gui reads it, and a SKIP in it is
+# NOT_VERIFIED rather than a pass.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['rc/**']
+    paths:
+      - '.github/workflows/gui-journeys.yml'
+      - 'scripts/verify/gui_journeys.ps1'
+      - 'scripts/verify/cdp.mjs'
+      - 'scripts/verify/webview2_state.ps1'
+      - 'scripts/verify/install_check.ps1'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  journeys:
+    name: Drive the choosers on a runner
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The same recipe candidate.yml and release.yml build with. For release evidence use
+      # candidate.yml, whose journeys drive the very installer that is published; this workflow
+      # builds its own copy and is for working on the harness.
+      - uses: ./.github/actions/windows-release-toolchain
+
+      - name: Build
+        shell: bash
+        run: npm run tauri:build
+
+      # Installed for real, not run out of target/: what is being tested is what a person would
+      # have, including the per-user install directory the granted folders are checked against.
+      # This step used to carry WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, because this step is what
+      # launched the application that the journeys then attached to. It no longer does, and run
+      # 35060930065 is why: the variable was provably set in the process that called Start-Process
+      # (install.log line 15), the application came up, and the browser process it created had no
+      # --remote-debugging-port anywhere on its command line. Whether that was the shell not
+      # carrying the variable to the child or a browser process created earlier without it, the
+      # remedy is the same and it belongs to the harness, not here - so the harness now stops
+      # everything of the application that is running and starts it itself, with the flag written
+      # onto the child's own environment block. See scripts/verify/gui_journeys.ps1, "the
+      # application, started by the harness that drives it".
+      #
+      # install_check still launches the installed copy, because launching and staying up is a
+      # property of the installation and is what this step is checking.
+      - name: Install it
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $installer = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          ./scripts/verify/install_check.ps1 -Installer $installer.FullName -ExpectedVersion $version |
+            Tee-Object -FilePath install.log
+          if (Select-String -Path install.log -Pattern '^FAIL' -Quiet) { throw "install_check reported a failure" }
+
+      # Run 35058615026 printed `PASS installed application launches and stays up -> pid 5080
+      # title='Encastra'` and then `FAIL CDP reachable -> fetch failed`, with the variable present
+      # in the step environment, and nothing in the log could say whether the port never opened or
+      # the flag never reached the browser process. This answers that from the job log alone, and
+      # it runs whatever happened above, because the run where it matters is the one that failed.
+      - name: Describe the WebView2 the runner has
+        if: always()
+        shell: pwsh
+        run: ./scripts/verify/webview2_state.ps1 -Port 9222 | Tee-Object -FilePath webview2.log
+
+      # -Launch: the harness stops whatever install_check left running, and everything else of this
+      # application, and starts the installed copy itself with the debugging flag on the child's own
+      # environment block. The flag is test-only; what an open debugging port on a desktop
+      # application exposes is written down in docs/security/AI-AGENT-SURFACE.md, no shipped
+      # configuration sets it, and it lives for exactly as long as the process the harness started.
+      #
+      # -Repeat 3: a chooser that works once and not twice works by accident. The suite runs three
+      # times, every line says which iteration it came from, and the SUMMARY line carries repeat=3 -
+      # which release_check.py reads, and below which it will not call this verified. What each
+      # iteration starts from, exactly: under -Launch the application is stopped and started again
+      # before iterations 2 and 3, so the runtime's in-memory grants are empty; and because this is
+      # CI (GITHUB_ACTIONS=true) the application's per-user state - the WebView2 profile holding
+      # the preferences and welcomeSeen, and the imported library - is deleted before every start.
+      # Each iteration also gets its own sandbox folders and its own empty project.
+      #
+      # The log's first line is `SUBJECT exe=... sha256=... stamp=... version=...` and the SUMMARY
+      # carries `stamp=`; release_check.py refuses the log unless that stamp is the commit it expects.
+      - name: Drive the chooser journeys
+        shell: pwsh
+        run: |
+          ./scripts/verify/gui_journeys.ps1 -Launch -Repeat 3 | Tee-Object -FilePath gui-journeys.log
+          $code = $LASTEXITCODE
+          Write-Output "gui_journeys.ps1 exited $code"
+          exit $code
+
+      # The harness writes a WebView2 AdditionalBrowserArguments policy naming a debugging port
+      # (HKLM here, because the runner is elevated) and takes it back when it ends - but a cancelled
+      # or killed job ends it without running another line of it, and run 35074744558 left the
+      # policy behind exactly that way. Before writing, the harness journals what it is about to
+      # write and what was there before; this step runs whatever happened above, restores from that
+      # journal, and prints every action. It fails the job if a debugging-port policy for this
+      # application is still in the registry afterwards.
+      - name: Take the debugging-port policy back, whatever happened above
+        if: always()
+        shell: pwsh
+        run: |
+          ./scripts/verify/gui_journeys.ps1 -RemovePolicyOnly | Tee-Object -FilePath policy-cleanup.log
+          $code = $LASTEXITCODE
+          Write-Output "gui_journeys.ps1 -RemovePolicyOnly exited $code"
+          exit $code
+
+      # Kept whatever happened: a failed run is the interesting one, and a log that only survives
+      # success is not evidence of anything.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: chooser-journeys-${{ github.run_id }}
+          path: |
+            gui-journeys.log
+            install.log
+            webview2.log
+            policy-cleanup.log
+          if-no-files-found: warn
+          retention-days: 90

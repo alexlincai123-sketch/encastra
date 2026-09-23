@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use encastra_core::journal::NodeError;
+use encastra_core::journal::{NodeError, NodeErrorCode};
 use encastra_core::session::{Fired, Trigger, TriggerContext};
 use encastra_core::value::{HandleKind, Value};
 use encastra_protocol::manifest::ComponentManifest;
@@ -101,8 +101,11 @@ impl Trigger for Watcher {
             .map(str::trim)
             .filter(|f| !f.is_empty())
             .ok_or_else(|| {
-                NodeError::new("missing-config", "No folder is set on this watcher.")
-                    .with_hint("Choose the folder to watch.")
+                NodeError::new(
+                    NodeErrorCode::MissingConfig,
+                    "No folder is set on this watcher.",
+                )
+                .with_hint("Choose the folder to watch.")
             })?
             .to_owned();
 

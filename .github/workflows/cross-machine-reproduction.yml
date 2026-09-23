@@ -1,0 +1,88 @@
+name: Cross-machine reproduction
+
+# Build this ref on a hosted runner and keep the bytes, so a developer can check whether their
+# machine produces the same ones — without spending a tag to find out.
+#
+# The release workflow already compares the runner's build against the published hashes, but it
+# only runs on a tag, and a tag that fails that comparison is spent: 0.5.0-rc.1, rc.2 and rc.3
+# each burned one on B7. This does the same build on demand and uploads the result. The check is
+# then one command on the developer machine:
+#
+#     gh run download <id> -n encastra-cross-machine-<id>
+#     python scripts/verify/pe_diff.py target/release/encastra-desktop.exe <downloaded>.exe
+#
+# Identical hashes mean the recipe is the recipe. Different ones mean scripts/pe_diff.py says
+# which bytes and in which class, which is how the MSVC toolset was identified in the first place.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['rc/**']
+    # The things whose effect this job exists to measure. Not every push: the build takes the
+    # better part of half an hour of Windows minutes, and a private repository on the free plan
+    # has two thousand a month.
+    paths:
+      - '.github/workflows/cross-machine-reproduction.yml'
+      - '.github/actions/msvc-toolset/action.yml'
+      - 'scripts/verify/toolchain.py'
+      - 'scripts/verify/installer_determinism.py'
+      - 'apps/desktop/src-tauri/nsis/hooks.nsh'
+      - '.nvmrc'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  build:
+    name: Build this ref on windows-latest
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The same recipe candidate.yml and release.yml build with.
+      - uses: ./.github/actions/windows-release-toolchain
+
+      - name: What this runner is building with
+        shell: bash
+        run: |
+          python scripts/verify/toolchain.py
+          echo "commit $(git rev-parse HEAD)"
+          echo "tree   $(git status --porcelain --untracked-files=no | wc -l) tracked files differ"
+
+      - name: Build
+        shell: bash
+        run: npm run tauri:build
+
+      # Read out of the binary rather than trusted from the environment: the remapping arrives
+      # through RUSTFLAGS, which this file also sets at workflow level, and which of the two wins
+      # belongs to the runner rather than to anything written here.
+      - name: The binary does not name the machine that built it
+        shell: bash
+        run: python scripts/verify/toolchain.py --check-binary target/release/encastra-desktop.exe
+
+      - name: The installer does not depend on when its inputs were written
+        shell: bash
+        run: python scripts/verify/installer_determinism.py
+
+      - name: Hashes
+        shell: bash
+        run: |
+          python scripts/release_identity.py --check || true
+          sha256sum target/release/encastra-desktop.exe target/release/bundle/nsis/*.exe
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: encastra-cross-machine-${{ github.run_id }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/encastra-desktop.exe
+          if-no-files-found: error
+          retention-days: 30

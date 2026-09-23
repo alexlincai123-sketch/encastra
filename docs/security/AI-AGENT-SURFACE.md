@@ -22,9 +22,25 @@ drives the editor. What exists is what WebView2 offers any Chromium host: if the
 started with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<n>`, a local
 process can attach with the Chrome DevTools Protocol, evaluate JavaScript in the editor, and
 call `window.__TAURI_INTERNALS__.invoke` — every one of the runtime's commands. The runtime QA
-in `docs/audits/2026-09-15-runtime-qa.md` did exactly this. It requires launching the process
-with that variable, which is an action of the account owner; nothing in the shipped
-configuration opens the port.
+in `docs/audits/2026-09-15-runtime-qa.md` did exactly this.
+
+There are two ways to open the port, and both are actions of whoever controls the machine:
+
+- **the environment variable** on the process at launch. WebView2 ignores it when the host runs
+  elevated;
+- **a registry policy**, a value named after the executable under
+  `Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments`. Under `HKCU` it is
+  honoured only for a process that is not elevated. Under `HKLM` it applies to every user of the
+  machine, and writing it needs an administrator.
+
+Nothing in the shipped configuration uses either. The GUI harness,
+`scripts/verify/gui_journeys.ps1 -Launch`, uses both on a hosted runner, where every process is
+elevated and the variable alone is ignored. It records what it is about to write before writing
+it, and it restores what was there on every exit, including after being killed, on its next start
+or through `-RemovePolicyOnly`. The workflow runs `-RemovePolicyOnly` whatever happened. A policy
+value left behind on a machine that is kept would open the port for every later launch of
+Encastra there. Outside CI, the harness also sends no keystrokes at all, and `-Launch` will not
+stop an Encastra that is already running unless it is given `-KillOtherInstances`.
 
 From that position, what the commands allow without any human gesture:
 

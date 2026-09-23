@@ -937,7 +937,7 @@ const fr: Messages = {
     windowWouldNotClose: 'La fenêtre n’a pas voulu se fermer. Votre travail est toujours là.',
     io: 'Quelque chose sur cet ordinateur a refusé l’opération ({reason}).',
     status: {
-      triggerError: '{node} a cessé de surveiller les changements ({reason}).',
+      triggerError: '{node} a cessé de surveiller les changements. {reason}',
       eventsDropped: {
         one: '{count} événement a été abandonné : il arrivait plus vite qu’il ne pouvait être traité.',
         other:
@@ -948,6 +948,70 @@ const fr: Messages = {
         one: 'En cours depuis {seconds} seconde.',
         other: 'En cours depuis {seconds} secondes.',
       },
+    },
+    // Pourquoi une étape d'une exécution a échoué, dans la langue du lecteur.
+    // La liste des codes vit dans `crates/encastra-core/src/journal.rs`.
+    node: {
+      missingInput: 'Il manque une entrée à cette étape. Reliez une étape qui la produit.',
+      wrongInput:
+        'Cette étape a reçu un type de valeur qu’elle ne sait pas traiter. Vérifiez ce qui lui est relié.',
+      missingConfig:
+        'Un réglage obligatoire de cette étape est vide. Renseignez-le sur l’étape elle-même.',
+      missingHandle: 'La valeur remise à cette étape n’est plus disponible. Relancez le flux.',
+      notText:
+        'Ce fichier n’est pas du texte lisible par cette version. Reliez-le plutôt à une étape qui traite des octets.',
+      notAnImage:
+        'Ce fichier n’a pas pu être lu comme une image. Vérifiez que ce qui est relié en est bien une.',
+      conversionFailed:
+        'Une valeur n’a pas pu être convertie dans ce qu’attend l’étape suivante. Reliez des types compatibles, ou ajoutez une étape qui les convertit.',
+      conversionUnavailable:
+        'Cette version ne sait pas encore faire cette conversion. Elle a besoin d’un composant qui n’est pas encore publié.',
+      invalidJson: 'Ce texte n’est pas du JSON valide : il n’y a donc rien à y lire.',
+      invalidCsv:
+        'Ce fichier n’a pas pu être lu comme un tableau. Une ligne ou l’en-tête ne suit pas le séparateur indiqué sur cette étape.',
+      badSeparator:
+        'Le séparateur doit être un seul caractère : une virgule, un point-virgule ou une tabulation.',
+      csvTooLarge:
+        'Ce tableau a plus de lignes ou de cellules que cette version n’en transforme en données. Découpez le fichier, ou filtrez-le avant cette étape.',
+      encodeFailed: 'Le résultat n’a pas pu être écrit dans le format que produit cette étape.',
+      resizeFailed:
+        'Cette image n’a pas pu être redimensionnée. Elle est peut-être endommagée, ou plus grande que ce que cette version accepte.',
+      unsupportedFormat:
+        'Cette version ne sait pas écrire ce format d’image. Choisissez PNG, JPEG ou WebP.',
+      badUrl:
+        'Cette adresse est inutilisable. Elle doit ressembler à https://exemple.com/chemin, sans nom d’utilisateur ni mot de passe.',
+      insecureUrl:
+        'Cette adresse utilise du http en clair, qui peut être lu et modifié en chemin. Utilisez https, ou activez « Autoriser le http en clair » si vous savez que l’adresse est sûre.',
+      unsupportedMethod: 'Cette étape n’envoie pas ce type de requête.',
+      requestFailed:
+        'La requête n’est pas passée. Vérifiez l’adresse, et que cette machine peut l’atteindre.',
+      responseTooLarge:
+        'La réponse dépassait ce que cette version lit. Les réponses de plus de 16 Mo sont refusées.',
+      denied:
+        'Cette étape a demandé quelque chose qui ne lui est pas permis. Accordez-le dans les autorisations de l’étape, puis relancez.',
+      readFailed:
+        'Quelque chose sur cet ordinateur n’a pas pu être lu. L’élément a peut-être été déplacé, ou cette machine ne l’autorise pas.',
+      writeFailed:
+        'Le résultat n’a pas pu être écrit sur cet ordinateur. Vérifiez que le dossier existe et que vous pouvez y écrire.',
+      moveIncomplete:
+        'Le fichier a été copié, mais l’original n’a pas pu être supprimé. La destination contient désormais une copie ; supprimez l’original vous-même si vous vouliez le déplacer.',
+      tooLarge:
+        'Ce fichier dépasse ce que cette version lit. Rien n’a été lu. Utilisez un fichier plus petit, ou découpez-le avant cette étape.',
+      clipboardUnavailable:
+        'Il n’y a pas de presse-papiers utilisable ici. Cela arrive sur une machine sans session de bureau, comme un serveur de compilation.',
+      clipboardFailed:
+        'Le presse-papiers n’a pas accepté ce que cette étape voulait y mettre. Rien n’a été copié.',
+      cancelled: 'Cette étape a été arrêtée avant d’avoir fini.',
+      runTooLong:
+        'L’exécution a dépassé la limite de temps et a été arrêtée. Ce qui était terminé figure dans le journal.',
+      runMemoryBudget:
+        'Cette étape ferait dépasser à l’exécution ce qu’elle peut retenir à la fois : elle a donc été refusée. Traitez les fichiers un par un, ou transmettez-les tels quels au lieu de les lire en texte.',
+      componentMissing:
+        'Le composant utilisé par cette étape n’est pas installé. Importez-le, ou supprimez l’étape.',
+      noImplementation:
+        'Ce composant se décrit lui-même mais n’a pas de code dans cette version. Les composants en bac à sable ne sont pas encore exécutables.',
+      contractBroken:
+        'Le composant a produit autre chose que ce qu’il déclare : le résultat n’a donc pas été transmis.',
     },
     grant: {
       folderUnusable: '{node} : ce dossier ne peut pas être utilisé ({reason}).',

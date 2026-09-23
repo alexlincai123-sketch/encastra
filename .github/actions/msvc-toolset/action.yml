@@ -1,0 +1,102 @@
+name: Pin the MSVC toolset
+description: >-
+  Put the C toolchain the published bytes are built with into the job's environment, and fail if
+  the image cannot provide it.
+
+# rustc does not carry a linker. It asks Visual Studio for one and takes whichever toolset that
+# installation calls its default, so `toolchain: 1.98.1` pins Rust and leaves the C compiler, the
+# CRT objects and the linker to whatever the runner image happens to ship. That is what stopped
+# 0.5.0-rc.3 reproducing across machines: in September 2026 `windows-latest` became
+# `win25-vs2026` (Visual Studio Enterprise 2026, default toolset 14.51.36231) while this project's
+# machine has 14.44.35207, and the two executables differed by 199 KB of code and 3.1 MB of data
+# with an identical rustc and an identical Cargo.lock. Their Rich headers named the linker builds
+# outright: 36256 there, 35228 here.
+#
+# vcvarsall sets the environment rustc's linker discovery reads, so selecting the toolset here is
+# enough — nothing has to be threaded through cargo. The version lives in
+# scripts/verify/toolchain.py, which is also what a developer runs to find out whether their
+# machine would produce the published bytes.
+
+runs:
+  using: composite
+  steps:
+    - name: Select the toolset
+      shell: pwsh
+      run: |
+        $want = python scripts/verify/toolchain.py --msvc
+        $line = python scripts/verify/toolchain.py --msvc-line
+        Write-Output "asking Visual Studio for MSVC $want (vcvars_ver $line)"
+
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        if (-not (Test-Path $vswhere)) { throw "vswhere.exe is not on this image" }
+        $vs = & $vswhere -latest -products * -property installationPath
+        $vcvarsall = Join-Path $vs 'VC\Auxiliary\Build\vcvarsall.bat'
+        if (-not (Test-Path $vcvarsall)) { throw "vcvarsall.bat not found under $vs" }
+
+        # `set` runs only if vcvarsall succeeded, so a toolset this image does not have cannot
+        # pass quietly: there is nothing to capture and the step throws.
+        $captured = cmd /c "`"$vcvarsall`" x64 -vcvars_ver=$line >nul 2>&1 && set"
+        if (-not $captured) {
+          $tools = Join-Path $vs 'VC\Tools\MSVC'
+          $have = if (Test-Path $tools) { (Get-ChildItem $tools -Directory).Name -join ', ' } else { 'none' }
+          throw "this image cannot select MSVC $line. Installed: $have"
+        }
+
+        $keep = 'VCToolsVersion','VCToolsInstallDir','VCINSTALLDIR','VSINSTALLDIR','PATH','LIB',
+                'LIBPATH','INCLUDE','WindowsSdkDir','WindowsSDKVersion','UCRTVersion','WindowsSdkBinPath'
+        $selected = $null
+        $toolsDir = $null
+        foreach ($entry in $captured) {
+          $name, $value = $entry -split '=', 2
+          if ($keep -contains $name) {
+            "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            if ($name -eq 'VCToolsVersion') { $selected = $value.Trim() }
+            if ($name -eq 'VCToolsInstallDir') { $toolsDir = $value.Trim() }
+          }
+        }
+        if ($selected -ne $want) { throw "asked for MSVC $want, got '$selected'" }
+        Write-Output "MSVC $selected"
+
+        # Name the linker outright instead of leaving it to PATH.
+        #
+        # Until something sets VCINSTALLDIR, rustc asks Visual Studio where the linker is and gets
+        # the right answer whatever PATH says. The moment a developer command prompt exists —
+        # which is the whole point of the step above — rustc takes that as the answer and resolves
+        # `link.exe` on PATH instead. A step that runs `shell: bash` gets Git for Windows' PATH,
+        # where `C:\Program Files\Git\usr\bin` comes first and holds a coreutils `link`. The build
+        # then fails with `/usr/bin/link: extra operand`, blaming the C++ workload for something
+        # it did not do. This is not hypothetical: it is what the first run with the toolset
+        # pinned did, on every crate with a build script.
+        #
+        # Cargo reads this per target and passes it to rustc as -C linker, so it holds in any
+        # shell and does not depend on PATH order at all.
+        if (-not $toolsDir) { throw "vcvarsall did not report VCToolsInstallDir" }
+        $linker = Join-Path $toolsDir 'bin\Hostx64\x64\link.exe'
+        if (-not (Test-Path $linker)) { throw "no link.exe under $toolsDir" }
+        "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        Write-Output "linker $linker"
+
+    # Proof that the selection took, rather than an assumption about how rustc searches. Inside a
+    # developer command prompt PATH is what decides, and Git for Windows ships a coreutils `link`
+    # that has come first before now. Without this, the first thing to notice would be the
+    # reproduction step at the end of the release, far too late to say why.
+    - name: The linker on PATH is that toolset's
+      shell: pwsh
+      run: python scripts/verify/toolchain.py --check
+
+    # The other half of building the same bytes twice.
+    #
+    # rustc writes the path of every source file into the binary for panic messages, and for a
+    # dependency that path is inside the Cargo registry — under the *user's* home directory, which
+    # is `runneradmin` here and something else everywhere else. The names are different lengths,
+    # so everything after the first one shifts: 433 of them in the rc.3 artefacts, three megabytes
+    # of difference between two builds that were otherwise the same. Setting RUSTFLAGS replaces
+    # whatever the workflow set, so `-D warnings` is carried along inside this value rather than
+    # left behind.
+    - name: Build paths that do not name this machine
+      shell: pwsh
+      run: |
+        $flags = python scripts/verify/toolchain.py --rustflags
+        if ($LASTEXITCODE -ne 0) { throw "could not compose RUSTFLAGS" }
+        "RUSTFLAGS=$flags" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        Write-Output "RUSTFLAGS=$flags"

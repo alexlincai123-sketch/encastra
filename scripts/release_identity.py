@@ -119,6 +119,12 @@ def signature(path: pathlib.Path) -> dict:
         '$t = if ($s.TimeStamperCertificate) { "yes" } else { "no" }; '
         'Write-Output "$($s.Status)|$($s.SignerCertificate.Subject)|$t"'
     )
+    # Windows PowerShell autoloads Get-AuthenticodeSignature out of Microsoft.PowerShell.Security.
+    # A PowerShell 7 parent exports its own PSModulePath; 5.1 inherits it, finds the Core build of
+    # that module first, cannot load it, and writes nothing to stdout while still exiting 0. The
+    # child gets to work out its own default instead of an engine's that is not its own.
+    env = {name: value for name, value in os.environ.items() if name.upper() != "PSMODULEPATH"}
+    env["ENCASTRA_ARTEFACT"] = str(path)
     try:
         out = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
@@ -126,12 +132,26 @@ def signature(path: pathlib.Path) -> dict:
             capture_output=True,
             text=True,
             check=True,
-            env={**os.environ, "ENCASTRA_ARTEFACT": str(path)},
+            env=env,
         )
     except Exception as error:
         return {"status": "unchecked", "signer": None, "timestamped": None, "error": type(error).__name__}
-    status, _, rest = out.stdout.strip().partition("|")
+    return classify(out.stdout)
+
+
+def classify(stdout: str) -> dict:
+    """What the probe's one line of output means.
+
+    `Valid` is signed and `NotSigned` is not. Every other name Authenticode can return —
+    HashMismatch, NotTrusted, UnknownError — is a signature that is present and does not verify.
+    No name at all is not a verdict: the probe did not answer, and calling that `broken` tells
+    somebody to re-sign a file that nothing has looked at.
+    """
+    status, _, rest = stdout.strip().partition("|")
     signer, _, stamped = rest.partition("|")
+    status = status.strip()
+    if not status:
+        return {"status": "unchecked", "signer": None, "timestamped": None, "raw": ""}
     state = {"Valid": "signed", "NotSigned": "unsigned"}.get(status, "broken")
     return {"status": state, "signer": signer.strip() or None, "timestamped": stamped.strip() == "yes", "raw": status}
 

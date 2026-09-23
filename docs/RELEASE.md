@@ -8,20 +8,20 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.5.0-rc.3** · built 2026-09-15 on Windows AMD64 · build commit `3264e07ab372d2370bec88b7062406cd71e3cc3a`
+**Version 0.5.0-rc.5** · built 2026-09-23 on Windows X64 by GitHub Actions run [35890233574](https://github.com/alexlincai123-sketch/encastra/actions/runs/35890233574) · build commit `1ce8e864da3eba12043684d86f4accf51707e519`
 
-Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0. Two builds of the build commit with this toolchain produce these exact bytes; `scripts/pe_diff.py` says how they differ if they do not.
+Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0 · MSVC 14.44.35207 · Windows SDK 10.0.26100.0 (AdvAPI32.Lib `ecafe89a632a35b1…`) · runner image win25-vs2026 20260907.229.1. Built twice in that run, on two machines, byte-identical; the release workflow builds the build commit a third time at the tag and requires these bytes again. `scripts/pe_diff.py` names any byte that differs.
 
 | Artefact | Size | Signature | SHA-256 |
 |---|---|---|---|
-| `Encastra_0.5.0-rc.3_x64-setup.exe` | 3.4 MB | **not signed** | `fecbf62a5735712414ae8063d6ba63daf6eff183e7b6e77654d71647e5cb5257` |
-| `encastra-desktop.exe` | 9.4 MB | **not signed** | `a30a56ea482be940fba7f472081303c518701cb54507ad2ab540bbdd305ca457` |
+| `Encastra_0.5.0-rc.5_x64-setup.exe` | 3.5 MB | **not signed** | `afaec18b217d66171a5c9c9f530d94b6e7e591ca61af18a3101733cb01674f10` |
+| `encastra-desktop.exe` | 9.4 MB | **not signed** | `14dc5d615676830ce34882fe663f64f56be32910047b20f3d20a65fdd1a40402` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.5.0-rc.3_x64-setup.exe -Algorithm SHA256
-Get-AuthenticodeSignature .\Encastra_0.5.0-rc.3_x64-setup.exe
+Get-FileHash .\Encastra_0.5.0-rc.5_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Encastra_0.5.0-rc.5_x64-setup.exe
 ```
 
 These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking — with the caveat that a hash published beside the download is only as trustworthy as the site serving both.
@@ -45,6 +45,12 @@ Everything runs from the repository root, on a **clean, committed tree**. The bi
 commit it was built from (`build.rs` embeds it; Settings → About shows it as the build commit),
 and the manifest refuses to describe a build whose tree had uncommitted changes.
 
+**Since 0.5.0-rc.5 the published bytes are built by CI, not on a developer machine.** A developer
+machine and a hosted runner cannot produce the same bytes (see *Reproducible* below for the exact
+two bytes and why); two hosted runners can. So a release publishes what `candidate.yml` built,
+reproduced on a second runner in the same run, and rebuilt a third time by `release.yml` at the
+tag.
+
 ```bash
 # 1. The gate. A release is not made from a tree that does not pass.
 npm ci
@@ -52,36 +58,51 @@ npm run lint
 npm run typecheck
 npm test
 python scripts/version.py --check
+python scripts/generated_check.py
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 python -m unittest discover -s scripts/tests
 
-# 2. The build, from the commit that will be the BUILD COMMIT. Compiles the frontend, then the
-#    Rust binary in release, then packages it.
-npm run tauri:build
+# 2. Push the commit that will be the BUILD COMMIT and build it on two hosted runners. The run
+#    builds copy A and copy B on two fresh machines with .github/actions/windows-release-toolchain,
+#    requires them byte-identical, installs copy A's installer on a third runner and drives the
+#    chooser journeys through it (repeat=3). Every job has to be green.
+git push origin <branch>
+gh workflow run candidate.yml --ref <branch>
 
-# 3. Record what came out: hashes, signature state, and the build commit read out of the binary.
-#    Writes the block above and the RELEASE constant in apps/web/src/config/site.ts.
+# 3. Put copy A into target/, having checked it is that run's: right workflow, this commit, every
+#    job green, each artefact zip equal to the digest GitHub recorded at upload, copy B identical,
+#    and the executable stamped with this commit. Writes target/release/candidate-provenance.json.
+python scripts/release_fetch.py --run <run id>
+
+# 4. Record what came out: hashes, signature state, the build commit read out of the binary, and
+#    the run and toolchain that produced it. Writes the block above and site.ts.
 python scripts/release_manifest.py --allow-unsigned     # a pre-release; refused for a production version
 
-# 4. Commit those two files, and nothing else. This is the PUBLICATION COMMIT.
+# 5. Commit those two files, and nothing else. This is the PUBLICATION COMMIT. Push it, and run CI
+#    on it: ci.evidence reads the runs of this exact commit.
 git commit -m "release: <version>" docs/RELEASE.md apps/web/src/config/site.ts
-
-# 5. Prove the publication describes the build: hashes, the binary's own stamp, the website's
-#    copy, and that only those two files changed since the build commit.
 python scripts/release_manifest.py --verify
+git push origin <branch>
+gh workflow run ci.yml --ref <branch>
 
-# 6. The verdict. Every gate above plus artefact identity, signing for the mode, a second build
-#    to compare, the CI run for this commit and the clean-machine log — one word, and
-#    release-readiness.json for anything that reads JSON rather than prose.
-npm run release:reproduce          # two builds from two paths; prints IDENTICAL or the differing bytes
-npm run release:check -- --compare %TEMP%\encastra-reproduce\a --evidence-vm docs/release/vm/<version>/install.log
+# 6. The verdict. Every gate above plus artefact identity and provenance (the run is asked again,
+#    not trusted from the record), signing for the mode, copy B as the second build, CI for this
+#    commit and the journeys log of the candidate run.
+python scripts/release_check.py --compare target/candidate/<run id>/compare \
+    --evidence-gui target/candidate/<run id>/journeys/gui-journeys.log
 
 # 7. Tag the publication commit only on BETA_READY (a pre-release) or RELEASE_READY. The release
-#    workflow checks out the build commit it names, builds it again on a clean machine, and
-#    fails unless the bytes are the published bytes.
-git tag v<version>
+#    workflow builds the build commit a third time on a clean runner, fails unless the bytes are
+#    the published bytes, and installs them. Publishing is a separate, explicit dispatch: it
+#    uploads only the bytes that run verified, and never replaces an existing release.
+git tag -a v<version> -m "Encastra <version>"
+git push origin v<version>
+gh workflow run release.yml --ref v<version> -f allow_unsigned=true -f publish=true
 ```
+
+A tag push on its own also runs `release.yml`; with no certificate and no `allow_unsigned` input it
+refuses at the unsigned-release step, by design. The dispatch in step 7 is the recorded decision.
 
 What each of those refuses, and why, is in `docs/release/` — `SIGNING_PIPELINE.md` for the
 three modes (dev, beta, release) and the signing chain, `CLEAN_WINDOWS_VM.md` for the machine
@@ -108,15 +129,29 @@ construction, and nothing noticed.
 
 ### Reproducible
 
-Two builds of the build commit with the pinned toolchain (`rust-toolchain.toml`, Node 22 or later,
-`package-lock.json`) produce byte-identical `encastra-desktop.exe` and byte-identical installers.
-The MSVC linker is passed `/Brepro` from `build.rs`, which replaces the image timestamps and the
-PDB GUID — the only bytes that used to differ — with hashes of the content, and the NSIS
-installer is told not to record the executable's modification time
-(`apps/desktop/src-tauri/nsis/hooks.nsh`, `SetDateSave off`), which was the one thing that made
-two installers of identical executables differ. `scripts/pe_diff.py A.exe B.exe` names every
-differing byte by PE structure if two builds ever disagree; an independent rebuild is compared by
-hash, and by that tool when the hash differs.
+Two builds of the build commit **on the same toolchain** produce byte-identical
+`encastra-desktop.exe` and byte-identical installers. The recipe: `rust-toolchain.toml`, `.nvmrc`,
+`package-lock.json`, the MSVC toolset pinned by `scripts/verify/toolchain.py`, build paths remapped
+out of the binary, `/Brepro` passed to the linker from `build.rs` (image timestamps and the PDB
+GUID become hashes of the content), and `SetDateSave off` in the NSIS hooks. `candidate.yml` proves
+it on every candidate (copy A = copy B, two machines) and `release.yml` proves it again at the tag.
+
+What is **not** reproducible, and why: a developer machine and a hosted runner. 0.5.0-rc.4's
+release run found them 70 bytes apart with every PE section equal. Two of those bytes are *import
+hints* — the index at which the loader first looks for a function in the DLL's export table —
+for `RevertToSelf` (imported by `clipboard-win`, through `arboard`) and `SystemFunction036`
+(imported by `getrandom` 0.2, through `ring` → `rustls` → `ureq`). Both crates declare them with
+`#[link(name = "advapi32")]`, so the linker copies the hint out of the Windows SDK's
+`um\x64\AdvAPI32.Lib`: 0x2bb and 0x31d on the developer machine, 0x2bd and 0x31f on the runner,
+with both reporting SDK 10.0.26100.0 — the file differs inside one SDK version, by servicing, which
+`vcvarsall` cannot select. The other 68 bytes are `/Brepro` doing its job: it hashes the image
+into the COFF timestamp, the debug directory and the RSDS GUID, so two different bytes anywhere
+become seventy. A wrong hint changes nothing at run time (the loader falls back to a lookup by
+name); the two builds are the same program, and they are still not the same bytes.
+
+`scripts/verify/build_environment.py` records the import library's digest and those two hints
+with every CI build, so a disagreement names its input. `scripts/pe_diff.py A.exe B.exe` names
+every differing byte by PE structure.
 
 ### What comes out
 

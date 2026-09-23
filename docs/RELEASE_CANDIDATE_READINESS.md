@@ -1,10 +1,19 @@
 # Release candidate readiness — Encastra 0.5.0-rc.3, written 2026-09-15
 
+> **This document describes 0.5.0-rc.3 and is kept as the account of it.** Work after it, towards
+> a 0.5.0-rc.4, is in `docs/audits/2026-09-16-rc4-closure.md`, which corrects three conclusions
+> reached here — §6's attribution of the cross-machine difference, the reason the runner's two
+> installers differed, and the count and status of the chooser journeys in §7 (audit §5). Where
+> the two disagree, the audit is the later measurement and this is the record of what was believed
+> at the tag.
+
 **Verdict: RELEASE CANDIDATE — BLOCKED.** Five blockers are external (a certificate, a licence
 and a legal identity, a trademark clearance, an external security assessment, a repository
 plan) and each has an owner, an exact action and the evidence that would close it (§13). Two
-are internal and are stated as such: the four native chooser flows that gate permissions have
-never been driven end to end by a person or by GUI automation on any build (§7, B5), and the
+are internal and are stated as such: the native chooser flows that gate permissions had never been
+driven end to end by a person or by GUI automation on any build at rc.3 (§7, B5 — there are five
+of them, not four; the file purpose `run-input` is the fifth, and work after this tag drives them
+on the hosted runner: audit §5), and the
 candidate's bytes are reproducible on the developer machine but **are not reproduced by the
 hosted Windows runner** (§6, B7) — found by the release workflow itself on rc.1 and measured on
 rc.2: the runner's executable is deterministic *on the runner* and differs from this machine's
@@ -54,9 +63,22 @@ artefact), **CI EXECUTED** (a run on GitHub Actions with a URL), **NOT VERIFIED*
 | The IPC surface held to its documentation and its callers | TESTED | `apps/desktop/test/ipc-surface.test.ts`: 22 commands, each named in `docs/DESKTOP.md`, each invoked from `ipc.ts` or listed as tooling |
 | Generated artefacts gated locally, not only in CI | IMPLEMENTED | `CLAUDE.md` gate: conformance matrix, fuzz corpus, third-party inventory, version + lock, release scripts |
 
-Not closed, and said so: the `NodeError` codes shown in the run journal are still English
-(`code` now travels typed; the sentences do not); `NodeError` inside a `trigger-error` status
-message is quoted verbatim inside a translated sentence.
+Left over from the row above, and now closed too: a step that *fails* put an English sentence in
+the run journal, and the Run panel, the Inspector and the `trigger-error` status line all showed
+it — the last three places the interface spoke English to a Spanish reader. The codes are now a
+pinned vocabulary rather than whatever string a call site wrote (`NodeErrorCode` in
+`crates/encastra-core/src/journal.rs`, 33 codes; `NodeError::new` takes a member, so a new reason
+to fail cannot reach a person without being named there), the fixture gained a `node` section
+written from that list, and `errors.node.*` exists in all six locales. The same three gates cover
+it in `apps/desktop/test/errors.test.ts`. A code from outside this build — a component refusing in
+a vocabulary of its own, through `NodeError::from_component` — still shows the words it came with
+rather than nothing.
+
+Still open, and smaller than it was: the free text a `NodeError` carries (a parse position, an
+operating-system error, the name of a missing component) is *dropped* for a known code rather than
+quoted inside the translated sentence, because `NodeError` has no named fields to interpolate. The
+Inspector still shows the `code`. Turning that free text into parameters, the way `AppError`
+already does, is the next step.
 
 ## 3. Tests and gates at the build commit (raw logs, not the `rtk` summary)
 
@@ -120,7 +142,26 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
   in-tree build and both fresh builds are byte-identical (installer `41168df8…`, executable
   `b5d98cef…`, 378 s and 403 s). The security session had the same result on `d527d46`. For
   `90e479d` see §14.
-- **Reproducibility, across machines: NOT ACHIEVED (B7), now measured.** The release workflow
+- **Reproducibility, across machines: NOT ACHIEVED (B7), now measured.**
+  > **Superseded after rc.3 — read `docs/audits/2026-09-16-rc4-closure.md` before this bullet.**
+  > Two of the conclusions below are wrong, and finding out why is what closed B7.
+  >
+  > The attribution "the cause is the MSVC toolset" was one of three causes. Pinning the toolset
+  > made the two executables' Rich headers byte-identical and **three megabytes still differed**:
+  > rustc writes the Cargo registry's path into the binary and that path runs through the user's
+  > home directory (`alexl` here, `runneradmin` there, 433 times each). With that remapped too,
+  > the difference is **70 bytes**, of which 68 are `/Brepro` hashing an image that differs
+  > because of the other 2 — import hints out of an `AdvAPI32.Lib` that is the same SDK version
+  > and the same size on both machines and not the same file.
+  >
+  > The claim that the runner packages **without** the `SetDateSave off` hook is also wrong. The
+  > hook was in effect on the runner: 159 of 161 extractions carry no date in *every* installer,
+  > local and runner alike. The two that do are MUI's welcome bitmap, packaged before the hook
+  > takes effect, dated whenever Tauri last downloaded NSIS — frozen on this machine, fresh on
+  > every runner job. `header_size` cannot tell the two cases apart, because `SetDateSave` is a
+  > compiler flag and emits no script bytes; a local bundle *with* the hook has the same 74 008.
+
+  The release workflow
   builds the build commit on `windows-latest` and compares with the published hashes. What the
   runner's uploaded builds of rc.2 (`90e479d`) show, under `scripts/pe_diff.py`:
   - **The runner is deterministic with itself for the executable:** two runs (tag push and
@@ -179,7 +220,7 @@ Baseline at the start of the cycle (`main` @ `f2446b5`): cargo 316 / vitest 502 
 | Clean Windows VM on this machine | **BLOCKED — EXTERNAL INFRASTRUCTURE.** Windows 11 Home: no Hyper-V, no Windows Sandbox; no Docker, no VirtualBox. `docs/release/CLEAN_WINDOWS_VM.md` is the procedure |
 | Hosted Windows runner (`release.yml` → `install`) | **CI EXECUTED on rc.3, twice** (runs 34986561347 and 34986561591, on the runner's own build): installer `NotSigned` as documented · silent install exit 0 in 4 s · binary in the per-user directory · ProductVersion `0.5.0-rc.3` · build stamp `3264e07` read from the installed binary · uninstaller present · HKCU uninstall entry, nothing under HKLM · Start Menu shortcut · the installed application launches and stays up (`title='Encastra'`) · uninstall exit 0 and nothing left. It cannot drive a native chooser (B5) |
 | Real install of the beta on this machine | done by the security session for `c975bd4`; the candidate was **not** installed here (the runtime QA ran the built executable) |
-| **Native chooser journeys with a purpose** | **NOT VERIFIED on any build.** The 17/17 GUI run of 2026-09-15 drove Settings → Projects → Browse — `projects-location`, the one purpose that gates nothing. Publish-into, import-from, grant-to-component and the new file chooser have never been driven by a person or by `gui_chooser.ps1`. This is the internal blocker (B5): it needs a machine where nobody is working, and this session could not use this one for it |
+| **Native chooser journeys with a purpose** | **NOT VERIFIED at rc.3.** The 17/17 GUI run of 2026-09-15 drove Settings → Projects → Browse — `projects-location`, the one purpose that gates nothing. The other four — `publish-into`, `import-from`, `grant-to-component`, and `run-input`, the file purpose added in the `rc/consent` wave, which makes **five** purposes in all and not the four written above — had never been driven by a person or by `gui_chooser.ps1`. This is the internal blocker (B5): it needs a machine where nobody is working, and this session could not use this one for it. **Superseded after this tag:** the hosted runner is that machine, `scripts/verify/gui_journeys.ps1` drives the journeys there three times over, and what is closed, what is not, and the two defects found on the way are in `docs/audits/2026-09-16-rc4-closure.md` §5 |
 
 ## 8. Signing
 
@@ -248,8 +289,9 @@ findings, and what happened to each:
 | F19 | P3 | The two `.encastra` dialogs stay in the editor beside prose saying choosers moved | `DESKTOP.md` says which two stay and why a project path is not a permission |
 
 The reviewer's answer to question 3 — the worst outcome for a tester — was data loss in a folder
-they trusted (F5/F14), not a tampered installer. Both are fixed above; the honest residue is
-that neither fix has been exercised through the GUI on this build (B5).
+they trusted (F5/F14), not a tampered installer. Both are fixed above; the honest residue at this
+tag is that neither fix had been exercised through the GUI on this build (B5). What has been
+exercised since, and on which machine, is in `docs/audits/2026-09-16-rc4-closure.md` §5.
 
 ## 13. Blockers
 
@@ -259,9 +301,9 @@ that neither fix has been exercised through the GUI on this build (B5).
 | B2 | No licence / legal identity | owner (+ counsel) | nobody has any rights to the software; no EULA binds; no signing identity | choose among `docs/LICENSING.md`; record the holder; add `LICENSE`; set an SPDX id or `LicenseRef-…` | — | a commit with `LICENSE` and `NOTICE` naming the holder; `cargo deny` green; drafts reviewed |
 | B3 | Trademark not cleared | owner (+ attorney) | the name may infringe; a domain is taken | clearance search, classes 9 and 42, US + EU + ES; decide on filing | — | the search report; a filing receipt if filed |
 | B4 | No external security assessment | owner (+ provider) | every security claim is the project's own | contract a test against `v0.5.0-rc.1` with the hand-off | the tag (done) | the report and the fixes it produces |
-| B5 | **Chooser journeys with a purpose never driven** | owner, or this project on a free machine | the permission-gating flows of this candidate have no GUI evidence on any build | on a machine where nobody is working: install the candidate, run `scripts/verify/install_check.ps1`, then `scripts/verify/gui_chooser.ps1` extended to publish-into, import-from, grant-to-component and the file chooser — or do the four flows by hand and attach the observations to `docs/audits/` | the candidate (done) | PASS lines for the four flows on `137c93a` |
+| B5 | **Chooser journeys with a purpose never driven** | owner, or this project on a free machine | the permission-gating flows of this candidate have no GUI evidence on any build | **Being closed after this tag — see `docs/audits/2026-09-16-rc4-closure.md`.** The "free machine" turned out to be the hosted runner: `.github/workflows/gui-journeys.yml` builds, installs and drives the app there, and UI Automation reaches the WebView2 tree and the native dialog. `scripts/verify/gui_journeys.ps1` drives all five purposes, cancel and confirm each, and goes on to do the thing the folder was chosen for. Separately, the purpose checks are now tested where they are *decided* rather than only in their helpers: 15 command-level tests with a mutation table, because inverting a purpose constant at a call site used to break nothing | the candidate (done) | a `gui_journeys.ps1` log with no FAIL and no SKIP, read by `release_check.py --evidence-gui` |
 | B6 | Branch protection unavailable | owner | a private repository on a free plan cannot protect `main` | GitHub Pro, or make the repository public (which is B2's decision) | B2 | the protection rule visible on `main` |
-| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | the diff is the MSVC toolset, read from both executables' Rich headers (§6: runner 35721/36256, this machine 35207/35228). Two ways, pick one: (a) pin the toolset in CI to the developer's 14.44.35207 (`ilammy/msvc-dev-cmd` with `toolset`, if the runner image carries it) and rebuild; or (b) make the runner's build the published artefact — the runner reproduces itself run to run — and have the developer machine reproduce *it* with the same toolset. Separately, the runner packages without the file-date hook (confirmed by reproducing its exact difference locally with the hook removed): find why `installerHooks` does not reach the runner's `makensis` (`tauri build --verbose` prints the `makensis` line with the hooks' `/X!include`, or its absence) and make the release fail when the property is absent, without depending on that log: after `tauri build`, hash the installer and the executable, run `npx --workspace @encastra/desktop tauri bundle` (packages only, no recompile; it patches the executable in place, so require the executable's hash unchanged) and require the second installer byte-identical to the first — a saved modification time makes them differ, the hook makes them identical | none | `release.yml`'s "the build reproduces the published hashes" step green on a tag, and two runner installers of one commit identical |
+| B7 | **Bytes not reproduced across machines** | this project | "reproducible" currently means "on this machine"; a tester or a runner building the tag gets different bytes and cannot tell a toolchain difference from a tampered build | **Addressed after this tag — see `docs/audits/2026-09-16-rc4-closure.md`.** The action taken was not the one prescribed here, because the prescription was based on an incomplete attribution: the MSVC toolset was one of three causes. Pinned the toolset (`.github/actions/msvc-toolset`, `vcvars_ver=14.44` — the image does carry 14.44.35207), remapped the build paths out of the binary (`--remap-path-prefix`, because the registry path runs through the user's home directory), and made the installer's determinism a gate that re-stamps NSIS between packagings. The installer cause was *not* a missing hook. What remains is 70 bytes, 68 of them `/Brepro` hashing the other 2, which are import hints from a differently-serviced `AdvAPI32.Lib` inside an identical SDK version — not pinnable from the repository | none | measured: identical sizes, `.text` identical, 70 bytes differing and each one accounted for; installer-determinism gate green **on the runner** |
 
 ## 14. Integration record, final numbers, self-critique
 

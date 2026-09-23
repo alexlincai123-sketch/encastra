@@ -47,7 +47,7 @@ credential, the machine or the provider, and the exact action.
 | Code-signing certificate | owner + a CA (money, legal identity) | buy an OV/EV certificate or a signing service in a jurisdiction that will issue to the seller (`docs/SIGNING.md`: Azure Artifact Signing is closed to individuals outside US/CA as of 2026-08-29); add `WINDOWS_CERTIFICATE` and `WINDOWS_CERTIFICATE_PASSWORD` as repository secrets | dispatch `release.yml`; `signing` turns PASS by itself |
 | Clean-VM verification | owner (a Windows VM, an hour) | `docs/release/CLEAN_WINDOWS_VM.md`: 10 steps, 4 scripted; keep the logs in `docs/release/vm/<version>/` | `release:check --evidence-vm <log>` turns `clean_vm` PASS |
 | External penetration test | a provider (money) | hand over `docs/security/PENTEST_HANDOFF.md`; register findings as `ENC-EXT-NN` | `pentest` is recorded PASS by a person, not by a script |
-| Licence, terms, privacy, EULA, trademark | owner + lawyer | `docs/legal/README.md` lists each decision and its input; replace `UNLICENSED`; search the mark | `legal` is recorded by a person |
+| Licence, terms, privacy, EULA, trademark | owner + lawyer | `docs/legal/README.md` lists each decision and its input; counsel review of `LICENSE` (proprietary since 2026-09-23); search the mark | `legal` is recorded by a person |
 | CI on the release commit | owner (a push) | the remote exists (`github.com/alexlincai123-sketch/encastra`, private); push the RC branch/tag — the parallel session does the pushes | `ci.evidence` reads the run through `gh` |
 
 ## What is now automated

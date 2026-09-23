@@ -350,6 +350,7 @@ pub const GRANT_KINDS: &[&str] = &["folder-unusable", "folder-not-chosen", "not-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use encastra_core::journal::NodeErrorCode;
     use encastra_publish::listing::Kind;
     use std::collections::BTreeSet;
 
@@ -480,7 +481,7 @@ mod tests {
         // quotes verbatim until then. Flattening this to a sentence would throw the code away.
         let value = serde_json::to_value(StatusMessage::TriggerError {
             node: "watch".into(),
-            error: NodeError::new("missing-config", "no folder is set"),
+            error: NodeError::new(NodeErrorCode::MissingConfig, "no folder is set"),
         })
         .expect("serialises");
         assert_eq!(value["kind"], "trigger-error");
@@ -514,7 +515,7 @@ mod tests {
         vec![
             StatusMessage::TriggerError {
                 node: "watch".into(),
-                error: NodeError::new("missing-config", "no folder is set"),
+                error: NodeError::new(NodeErrorCode::MissingConfig, "no folder is set"),
             },
             StatusMessage::EventsDropped { count: 3 },
             StatusMessage::NothingRan { problems: 2 },
@@ -598,6 +599,11 @@ mod tests {
             "app": KINDS,
             "grant": GRANT_KINDS,
             "status": STATUS_KINDS,
+            // Not a command refusal but the same contract: a step that fails puts one of these
+            // codes in the run journal, and the Run panel and the Inspector have to have a
+            // sentence for it in six languages. Owned by `encastra-core` rather than by this
+            // file, because that is where a step actually fails.
+            "node": NodeErrorCode::ALL,
             "project": project_kinds(),
             "library": library_kinds(),
             "bundle": bundle_kinds(),

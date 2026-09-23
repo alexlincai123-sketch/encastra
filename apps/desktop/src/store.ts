@@ -17,8 +17,9 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import { create } from 'zustand';
+import { chooseFile, chooseFolder, describeFailure } from './chooser';
 import type { Demo } from './demos';
-import { describeAppError, describeStatusMessage, importErrorIn } from './errors';
+import { describeStatusMessage, importErrorIn, isAppError } from './errors';
 import { subscribe, type WorkflowStatus } from './events';
 import {
   cut,
@@ -109,6 +110,13 @@ interface EditorState {
 
   /** Live state while something is running. Distinct from the journal, which is the record. */
   running: boolean;
+  /**
+   * How many status events the runtime has sent. Not shown anywhere: it is how an answer that
+   * has been overtaken is recognised. `startWorkflow` returns "running", and a workflow of one
+   * step can finish - and report that it finished - before that answer is applied, which left
+   * the interface saying "En ejecución" over a run that had ended, until something else was run.
+   */
+  statusSeq: number;
   watching: boolean;
   runs: number;
   pending: number;
@@ -177,6 +185,21 @@ interface EditorState {
   connect: (connection: Connection) => void;
   setInput: (node: string, port: string, path: string) => void;
   setGrant: (grant: GrantSpec) => void;
+  /**
+   * Asks for the folder a step's setting names, and says so when the runtime refuses the one
+   * that was picked.
+   *
+   * Here rather than on the button for the reason `restoreVersion` is here: the Inspector has no
+   * error surface of its own and never needed one — a failed action of its own puts a sentence in
+   * the status bar, through the store. Opening the chooser from the button and dropping the
+   * rejection on the floor was the one thing in that panel that said nothing at all.
+   *
+   * A chooser closed with nothing changes nothing and shows nothing. That is a cancel, not a
+   * refusal, and it is the distinction this whole method exists to keep.
+   */
+  chooseConfigFolder: (nodeId: string, key: string) => Promise<void>;
+  /** The same for the file an unconnected input needs before the graph can run. */
+  chooseEntryInput: (nodeId: string, port: string) => Promise<void>;
   showRecording: (journal: RunJournal, label: string) => void;
   check: () => Promise<void>;
   run: () => Promise<void>;
@@ -282,6 +305,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   dirty: false,
   view: 'home',
   running: false,
+  statusSeq: 0,
   watching: false,
   runs: 0,
   pending: 0,
@@ -335,11 +359,22 @@ export const useEditor = create<EditorState>((set, get) => ({
         id: makeId(componentRef),
         type: 'component',
         position: at,
+        selected: true,
         data: { componentRef, config, disabled: false },
       };
-      // A newly placed node is the one you want to configure, so it is selected immediately.
+      // A newly placed node is the one you want to configure, so it is selected immediately —
+      // in both of the places a selection lives. React Flow owns the selection; `selectedNodeId`
+      // is this store's mirror of it. Setting only the mirror looked right and did nothing:
+      // React Flow still held the old selection, fired `onSelectionChange` with it on the next
+      // render, and `select()` put the store straight back — so the step just placed from the
+      // palette was not the selected one, the inspector stayed on "select a step to configure
+      // it", and somebody working from the keyboard had no way to reach the step they had just
+      // placed except by hunting for it with the arrow keys. `Canvas.tsx`'s `go` documents the
+      // same mechanism for arrow-key selection, and `pasteClipboard` below writes both halves
+      // for the same reason. So: the new node carries `selected`, every node already on the
+      // canvas is written unselected, and `selectedNodeId` names the new one.
       return {
-        nodes: [...s.nodes, node],
+        nodes: [...s.nodes.map((n) => ({ ...n, selected: false })), node],
         selectedNodeId: node.id,
         validation: null,
         dirty: true,
@@ -518,6 +553,28 @@ export const useEditor = create<EditorState>((set, get) => ({
     set((s) => ({
       grants: [...s.grants.filter((g) => !(g.node === grant.node && g.kind === grant.kind)), grant],
     }));
+  },
+
+  async chooseConfigFolder(nodeId, key) {
+    // This path becomes a step's folder, and the folder in a grant on the next run. It is chosen
+    // to be given to a component and recorded as nothing else, so it does not also become
+    // somewhere a publication may be written.
+    const choice = await chooseFolder('grant-to-component');
+    if (choice.outcome === 'refused') {
+      set({ message: { tone: 'error', text: choice.text } });
+      return;
+    }
+    // Backed out of. Nothing was chosen, so nothing was refused and there is nothing to say.
+    if (choice.outcome === 'chosen') get().setConfig(nodeId, key, choice.path);
+  },
+
+  async chooseEntryInput(nodeId, port) {
+    const choice = await chooseFile();
+    if (choice.outcome === 'refused') {
+      set({ message: { tone: 'error', text: choice.text } });
+      return;
+    }
+    if (choice.outcome === 'chosen') get().setInput(nodeId, port, choice.path);
   },
 
   showRecording(journal, label) {
@@ -949,6 +1006,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       },
       status: (status: WorkflowStatus) => {
         set((s) => ({
+          statusSeq: s.statusSeq + 1,
           running: status.running,
           watching: status.watching,
           runs: status.runs,
@@ -979,7 +1037,16 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ busy: true, message: null, journal: null, liveNodes: {} });
     try {
       const state = get();
+      const seq = state.statusSeq;
       const status = await ipc.startWorkflow(state.toGraph(), state.inputs, state.grants);
+      // Only if the run has not already reported for itself. A one-step workflow finishes in
+      // milliseconds and announces that it has, and applying "running" on top of that left the
+      // status bar saying so over a run that was over - measured on a runner: sixty seconds
+      // later it still said "En ejecución" while the file it had written sat on disk.
+      if (get().statusSeq !== seq) {
+        set({ view: 'builder' });
+        return;
+      }
       set({
         running: status.running,
         watching: status.watching,
@@ -991,6 +1058,12 @@ export const useEditor = create<EditorState>((set, get) => ({
       });
     } catch (error) {
       set({ message: { tone: 'error', text: describe(error) }, running: false });
+      // "Este flujo todavía no puede ejecutarse: hay 2 cosa(s) que corregir antes" - and nowhere
+      // to see the two. The runtime counts the problems and sends the count; the issues stay on
+      // its side (AppError::WorkflowInvalid). run() has the other shape and keeps its validation,
+      // so the Inspector lists them there; this path had a number and a silence, which is a
+      // message telling somebody to go and look at a panel that is empty. One more call fills it.
+      if (isAppError(error) && error.kind === 'workflow-invalid') await get().check();
     } finally {
       set({ busy: false });
     }
@@ -1385,23 +1458,17 @@ function asImportFailure(error: unknown): ImportError | string {
   return importErrorIn(error) ?? describe(error);
 }
 
+/**
+ * One sentence for a rejection, whatever shape it arrived in.
+ *
+ * This was written out here until the chooser needed the same thing. It lives in `chooser.ts`
+ * now — a structured refusal gets its translated sentence, an `Error` or a string keeps its own
+ * words, a bare object with a `message` is a rejected Tauri command that did not cross as an
+ * `Error`, and nothing at all says so. One copy, so a chooser refusal and a failed save cannot
+ * drift into being described two different ways.
+ */
 function describe(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  // A structured refusal from the runtime: a tag, and the values a sentence needs. Every tag has
-  // a sentence in all six languages, which is the point of the whole contract — this line used to
-  // render whatever English the runtime had built, to whoever happened to be reading.
-  const described = describeAppError(error);
-  if (described !== null) return described;
-  // Anything else carrying a `message` is a rejection that crossed the bridge as a plain object
-  // rather than as an `Error` — which is what a rejected Tauri command looks like on this side,
-  // and which used to be reported as silence even though the runtime had said precisely what
-  // was wrong.
-  if (typeof error === 'object' && error !== null) {
-    const { message } = error as { message?: unknown };
-    if (typeof message === 'string' && message.length > 0) return message;
-  }
-  return translate('messages.runtimeSilent');
+  return describeFailure(error);
 }
 
 /**

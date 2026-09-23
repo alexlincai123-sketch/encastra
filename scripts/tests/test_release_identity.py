@@ -150,5 +150,56 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(self.tree.run("--check").returncode, 0)
 
 
+class Signature(unittest.TestCase):
+    """The probe's silence is not a verdict about the file.
+
+    Run under PowerShell 7, the Authenticode probe inherits a PSModulePath that Windows PowerShell
+    cannot load Microsoft.PowerShell.Security from. The cmdlet is then not found, the error goes to
+    stderr, the exit code is still 0, and stdout is `||no`. Read as `broken`, that turned an
+    unsigned beta artefact into "signature present but not valid — do not distribute; re-sign",
+    and the release gate failed a release that was correct.
+    """
+
+    def test_an_empty_status_is_unchecked_and_not_broken(self) -> None:
+        self.assertEqual(release_identity.classify("||no")["status"], "unchecked")
+        self.assertEqual(release_identity.classify("")["status"], "unchecked")
+
+    def test_a_status_that_is_not_valid_or_notsigned_is_still_broken(self) -> None:
+        for status in ("HashMismatch", "NotTrusted", "UnknownError"):
+            self.assertEqual(release_identity.classify(f"{status}|CN=x|no")["status"], "broken")
+
+    def test_the_two_good_answers_are_read_as_before(self) -> None:
+        self.assertEqual(release_identity.classify("NotSigned||no")["status"], "unsigned")
+        signed = release_identity.classify("Valid|CN=Someone|yes")
+        self.assertEqual(signed["status"], "signed")
+        self.assertEqual(signed["signer"], "CN=Someone")
+        self.assertTrue(signed["timestamped"])
+
+    def test_the_probe_does_not_hand_the_child_another_engines_module_path(self) -> None:
+        if sys.platform != "win32":  # Elsewhere the probe never runs at all.
+            self.skipTest("the Authenticode probe only runs on Windows")
+        seen: dict[str, str] = {}
+
+        class Recorded:
+            stdout = "NotSigned||no"
+
+        def fake_run(_argv, **kwargs):
+            seen.update(kwargs.get("env") or {})
+            return Recorded()
+
+        real_run, real_path = release_identity.subprocess.run, os.environ.get("PSModulePath")
+        release_identity.subprocess.run = fake_run
+        os.environ["PSModulePath"] = r"C:\Program Files\PowerShell\Modules"
+        try:
+            state = release_identity.signature(pathlib.Path("x.exe"))
+        finally:
+            release_identity.subprocess.run = real_run
+            os.environ.pop("PSModulePath", None)
+            if real_path is not None:
+                os.environ["PSModulePath"] = real_path
+        self.assertEqual(state["status"], "unsigned")
+        self.assertEqual([name for name in seen if name.upper() == "PSMODULEPATH"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

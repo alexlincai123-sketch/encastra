@@ -109,7 +109,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
     slug: 'eula',
     title: 'End User License Agreement',
     summary:
-      'The terms under which the Windows installer grants you a licence to run the application.',
+      'Draft terms under which the application would be licensed to run. Not in force: the installer shows no licence page.',
     sections: [
       {
         heading: 'Grant',

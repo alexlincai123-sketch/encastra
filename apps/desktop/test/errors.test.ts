@@ -23,11 +23,15 @@ import {
   APP_ERROR_KEYS,
   BUNDLE_ERROR_KEYS,
   describeAppError,
+  describeNodeError,
   describeStatusMessage,
   GRANT_REFUSAL_KEYS,
   importErrorIn,
   isAppError,
+  isKnownNodeError,
   LIBRARY_ERROR_KEYS,
+  NODE_ERROR_CODES,
+  NODE_ERROR_KEYS,
   PROJECT_ERROR_KEYS,
   STATUS_MESSAGE_KEYS,
   statusMessageKey,
@@ -41,7 +45,7 @@ import fr from '../src/i18n/locales/fr';
 import italian from '../src/i18n/locales/it';
 import pt from '../src/i18n/locales/pt';
 import { IMPORT_ERROR_KEYS } from '../src/library';
-import type { AppError, StatusMessage } from '../src/types';
+import type { AppError, NodeError, StatusMessage } from '../src/types';
 
 const KINDS: {
   app: string[];
@@ -51,6 +55,7 @@ const KINDS: {
   bundle: string[];
   import: string[];
   status: string[];
+  node: string[];
 } = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/error-kinds.json', import.meta.url)), 'utf8'),
 );
@@ -177,6 +182,11 @@ describe('the error contract', () => {
     // Not an error vocabulary, but pinned the same way: the status bar is the one line somebody
     // watches while a workflow runs, and it used to be the one line nobody translated.
     expect(Object.keys(STATUS_MESSAGE_KEYS).sort()).toEqual([...KINDS.status].sort());
+    // Nor is this one: a step that fails puts a code in the run journal, and the Run panel and
+    // the Inspector are what somebody reads while working out why. `NodeErrorCode` in
+    // `crates/encastra-core/src/journal.rs` writes the list; adding a code there and not a key
+    // here fails exactly this line, which is the whole reason the fixture exists.
+    expect(NODE_ERROR_CODES.slice().sort()).toEqual([...KINDS.node].sort());
   });
 
   it('has a sample for every kind, so the checks below cover all of them', () => {
@@ -199,6 +209,22 @@ describe('every key exists in every language', () => {
     // Read out of the locale file rather than through `translate()`, which falls back to English
     // and would report a missing Spanish sentence as a passing test.
     const missing = everyKey.filter((key) => lookup(MESSAGES[locale], key) === undefined);
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s has a sentence for every code a failed step can carry', (locale) => {
+    // Driven by the fixture the Rust test writes, not by `NODE_ERROR_KEYS`, and the key is
+    // derived here rather than looked up: that makes this fail when a code is added in
+    // `journal.rs` and nobody writes the six sentences, which is the case the whole arrangement
+    // exists to catch — and it keeps failing even if somebody maps the new code to a key that
+    // does not exist.
+    const missing = KINDS.node.filter(
+      (code) =>
+        lookup(
+          MESSAGES[locale],
+          `errors.node.${code.replace(/-(.)/g, (_, c) => c.toUpperCase())}`,
+        ) === undefined,
+    );
     expect(missing).toEqual([]);
   });
 
@@ -240,6 +266,20 @@ describe('no accidental English', () => {
         refusals: [{ kind: 'folder-not-chosen', node: 'save' }],
       };
       expect(describeAppError(refused, t)).not.toEqual(describeAppError(refused, english));
+    },
+  );
+
+  it.each(LOCALES.filter((locale) => locale !== 'en'))(
+    '%s describes every way a step can fail in its own words',
+    (locale) => {
+      const t = inLocale(locale);
+      const copied = NODE_ERROR_CODES.filter((code) => {
+        const error: NodeError = { code, message: 'the runtime’s own words', retryable: false };
+        const theirs = describeNodeError(error, t);
+        const ours = describeNodeError(error, english);
+        return theirs === ours && !IDENTICAL_BY_DESIGN.has(theirs);
+      });
+      expect(copied).toEqual([]);
     },
   );
 
@@ -294,21 +334,37 @@ describe('describeStatusMessage', () => {
     );
   });
 
-  it('quotes a stopped watcher reason inside a sentence the reader can read', () => {
+  it('names the watcher and translates the reason rather than quoting English', () => {
+    const spanish = inLocale('es');
+    const stopped: StatusMessage = {
+      kind: 'trigger-error',
+      node: 'watch',
+      // `message` is what the runtime built, in English. It used to be what the status bar
+      // showed, inside an otherwise Spanish sentence.
+      error: { code: 'missing-config', message: 'no folder is set', retryable: false },
+    };
+    const described = describeStatusMessage(stopped, spanish, 'es');
+
+    expect(described).toContain('watch');
+    expect(described).toContain(spanish('errors.node.missingConfig'));
+    expect(described).not.toContain('no folder is set');
+    // The code travels so the reason can be translated; it is not shown as a tag, because a
+    // person reading the status bar has no use for one.
+    expect(described).not.toContain('missing-config');
+  });
+
+  it('still quotes a code it has no sentence for, rather than saying nothing', () => {
     const described = describeStatusMessage(
       {
         kind: 'trigger-error',
         node: 'watch',
-        error: { code: 'missing-config', message: 'no folder is set', retryable: false },
+        error: { code: 'from-a-component', message: 'the disk went away', retryable: false },
       },
       t,
       'en',
     );
     expect(described).toContain('watch');
-    expect(described).toContain('no folder is set');
-    // The code travels so a later build can translate the reason itself; it is not shown as a
-    // tag today, because a person reading the status bar has no use for one.
-    expect(described).not.toContain('missing-config');
+    expect(described).toContain('the disk went away');
   });
 
   it('gives an unknown status tag a readable sentence, and marks it as one', () => {
@@ -318,6 +374,56 @@ describe('describeStatusMessage', () => {
       'en',
     );
     expect(described).toBe(t(UNKNOWN_ERROR_KEY, { kind: 'from-the-future' }));
+  });
+});
+
+describe('describeNodeError', () => {
+  const t = inLocale('en');
+
+  it('says something readable for every code, with no placeholder and no bare key', () => {
+    for (const code of NODE_ERROR_CODES) {
+      const described = describeNodeError(
+        { code, message: 'the runtime’s own words', retryable: false },
+        t,
+      );
+      expect(described, code).toBeTruthy();
+      expect(described, code).not.toMatch(PLACEHOLDER);
+      expect(described, code).not.toMatch(BARE_KEY);
+      // The point of the whole exercise: what the runtime built is not what the reader sees.
+      expect(described, code).not.toBe('the runtime’s own words');
+    }
+  });
+
+  it('passes a code it has never heard of through as the words it came with', () => {
+    // A component this build did not write refuses in its own vocabulary — `NodeError::
+    // from_component` in `crates/encastra-core/src/journal.rs`, and `test-failure` in
+    // `crates/encastra-core/tests/run_budget.rs` is a live one. Its message is the only words
+    // anybody has for it, so it survives rather than being replaced by a blank or a tag.
+    const error: NodeError = {
+      code: 'a-code-from-a-component',
+      message: 'This component always fails.',
+      hint: 'Try something else.',
+      retryable: false,
+    };
+    expect(describeNodeError(error, t)).toBe('This component always fails.');
+    expect(isKnownNodeError(error)).toBe(false);
+    // And the panels use that flag to decide whether the English hint is worth showing.
+    expect(isKnownNodeError({ code: 'denied', message: 'x', retryable: false })).toBe(true);
+  });
+
+  it('resolves the code, not the message, so two failures with one code read alike', () => {
+    // The mechanism stated as a property: the sentence depends on `code` alone. If this ever
+    // started falling back to `message` for a known code, these two would differ.
+    const first = describeNodeError(
+      { code: 'denied', message: 'fs.write refused', retryable: false },
+      t,
+    );
+    const second = describeNodeError(
+      { code: 'denied', message: 'net.http refused', hint: 'ignored', retryable: false },
+      t,
+    );
+    expect(first).toBe(second);
+    expect(first).toBe(t(NODE_ERROR_KEYS.denied));
   });
 });
 

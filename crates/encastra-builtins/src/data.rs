@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, LazyLock};
 
-use encastra_core::journal::{LogLevel, NodeError};
+use encastra_core::journal::{LogLevel, NodeError, NodeErrorCode};
 use encastra_core::runner::{CoreComponent, NodeContext};
 use encastra_core::value::Value;
 use encastra_protocol::manifest::ComponentManifest;
@@ -48,8 +48,11 @@ impl CoreComponent for ParseJson {
     fn run(&self, ctx: &mut NodeContext<'_>) -> Result<Outputs, NodeError> {
         let text = text_input(ctx, "text")?;
         let parsed: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-            NodeError::new("invalid-json", format!("This is not valid JSON: {e}."))
-                .with_hint("The message says which line and column the problem is on.")
+            NodeError::new(
+                NodeErrorCode::InvalidJson,
+                format!("This is not valid JSON: {e}."),
+            )
+            .with_hint("The message says which line and column the problem is on.")
         })?;
         Ok(one("json", Value::Json(parsed)))
     }
@@ -105,7 +108,7 @@ impl CoreComponent for WriteJson {
         }
         .map_err(|e| {
             NodeError::new(
-                "encode-failed",
+                NodeErrorCode::EncodeFailed,
                 format!("Could not write this as JSON: {e}."),
             )
         })?;
@@ -164,7 +167,7 @@ fn separator(ctx: &NodeContext<'_>) -> Result<u8, NodeError> {
     match configured.as_bytes() {
         [single] if single.is_ascii() => Ok(*single),
         _ => Err(NodeError::new(
-            "bad-separator",
+            NodeErrorCode::BadSeparator,
             format!("{configured:?} is not a single character."),
         )
         .with_hint("Use one character, such as , or ; or a tab.")),
@@ -208,7 +211,7 @@ impl CoreComponent for ReadCsv {
                 .headers()
                 .map_err(|e| {
                     NodeError::new(
-                        "invalid-csv",
+                        NodeErrorCode::InvalidCsv,
                         format!("The header row could not be read: {e}."),
                     )
                 })?
@@ -224,7 +227,10 @@ impl CoreComponent for ReadCsv {
         let mut cells = 0usize;
         for record in reader.records() {
             let record = record.map_err(|e| {
-                NodeError::new("invalid-csv", format!("A row could not be read: {e}."))
+                NodeError::new(
+                    NodeErrorCode::InvalidCsv,
+                    format!("A row could not be read: {e}."),
+                )
             })?;
 
             // Every cell becomes a heap string inside a map inside an array: fifty to a hundred
@@ -234,8 +240,7 @@ impl CoreComponent for ReadCsv {
             // different table, and a silently different one.
             cells += record.len();
             if rows.len() >= MAX_CSV_ROWS || cells > MAX_CSV_CELLS {
-                return Err(NodeError::new(
-                    "csv-too-large",
+                return Err(NodeError::new(NodeErrorCode::CsvTooLarge,
                     format!(
                         "This file has more than {MAX_CSV_ROWS} rows or {MAX_CSV_CELLS} cells,                          which is more than this build turns into a table."
                     ),
@@ -329,7 +334,7 @@ impl CoreComponent for WriteCsv {
         let value = json_input(ctx, "rows")?;
         let serde_json::Value::Array(rows) = value else {
             return Err(NodeError::new(
-                "wrong-input",
+                NodeErrorCode::WrongInput,
                 "This needs a list of rows, and it received something else.",
             )
             .with_hint("Connect the output of Read CSV, or anything that produces a list."));
@@ -352,7 +357,7 @@ impl CoreComponent for WriteCsv {
         if write_header && !columns.is_empty() {
             writer
                 .write_record(&columns)
-                .map_err(|e| NodeError::new("encode-failed", e.to_string()))?;
+                .map_err(|e| NodeError::new(NodeErrorCode::EncodeFailed, e.to_string()))?;
         }
 
         for row in &rows {
@@ -366,14 +371,18 @@ impl CoreComponent for WriteCsv {
             };
             writer
                 .write_record(&record)
-                .map_err(|e| NodeError::new("encode-failed", e.to_string()))?;
+                .map_err(|e| NodeError::new(NodeErrorCode::EncodeFailed, e.to_string()))?;
         }
 
         let bytes = writer
             .into_inner()
-            .map_err(|e| NodeError::new("encode-failed", e.to_string()))?;
-        let text = String::from_utf8(bytes)
-            .map_err(|_| NodeError::new("encode-failed", "The result was not valid text."))?;
+            .map_err(|e| NodeError::new(NodeErrorCode::EncodeFailed, e.to_string()))?;
+        let text = String::from_utf8(bytes).map_err(|_| {
+            NodeError::new(
+                NodeErrorCode::EncodeFailed,
+                "The result was not valid text.",
+            )
+        })?;
 
         ctx.log(LogLevel::Info, format!("Wrote {} rows.", rows.len()));
         Ok(one("text", Value::Text(text)))

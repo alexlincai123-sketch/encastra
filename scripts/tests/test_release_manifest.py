@@ -79,7 +79,11 @@ class Repo:
             pe_fixture.build(code=b"\x90\x90\xc3", payload=b"installer" + payload)
         )
 
-    def manifest(self, *flags: str) -> subprocess.CompletedProcess:
+    def manifest(self, *flags: str, local_build: bool = True) -> subprocess.CompletedProcess:
+        # Since 0.5.0-rc.5 a manifest describes a fetched candidate build unless --local-build says
+        # otherwise; these tests are about everything else the manifest refuses, on local bytes.
+        if local_build and not {"--verify", "--build-commit"} & set(flags):
+            flags = (*flags, "--local-build")
         return subprocess.run(
             [sys.executable, str(SCRIPT), *flags],
             cwd=self.root,

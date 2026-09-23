@@ -44,7 +44,11 @@ function PaletteItem({ manifest }: { manifest: ComponentManifest }) {
         event.dataTransfer.effectAllowed = 'copy';
       }}
       // Dragging is the natural gesture, but everything on this canvas must also be reachable
-      // from the keyboard, so activating the button places the node too.
+      // from the keyboard, so activating the button places the node too. It is a real <button>
+      // because that is what gives Enter and Space the same effect as a click; a <div onClick>
+      // would keep the mouse working and drop the keyboard in silence. The promise is kept by
+      // apps/desktop/test/palette.test.tsx, which renders this component into a document and
+      // presses it all three ways.
       onClick={() => addNode(reference, { x: 220, y: 140 })}
       title={`${reference}\n${manifest.description ?? ''}`}
     >

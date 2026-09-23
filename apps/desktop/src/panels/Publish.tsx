@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useFocusTrap } from '../a11y/focus';
+import { chooseFolderOrExplain } from '../chooser';
 import { useTranslation } from '../i18n';
 import { ipc } from '../ipc';
 import { type DraftFields, draftProblems, listingId } from '../publish';
@@ -105,7 +106,12 @@ export function Publish() {
     // Chosen to publish *into*. `prepare_publication` checks that exact pair before it writes
     // anything, so a folder picked elsewhere in the session — to import from, or browsed for in
     // Settings — is not somewhere this can land.
-    const into = await ipc.pickFolder('publish-into');
+    //
+    // The chooser can refuse, and that refusal used to reject here — outside the `try` below, so
+    // nothing caught it and the panel showed nothing at all. It goes to the same error line every
+    // other failure in this panel uses. Busy stays off while the chooser is up, as it always was:
+    // there is nothing in flight to report until a folder exists.
+    const into = await chooseFolderOrExplain('publish-into', setError);
     if (!into) return;
     setBusy(true);
     setError(null);

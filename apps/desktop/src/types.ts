@@ -65,7 +65,7 @@ export interface PortRef {
 
 export type IssueLocation =
   | { kind: 'graph' }
-  | { kind: 'node'; 0: string }
+  | { kind: 'node'; node: string }
   | { kind: 'port'; 0: PortRef }
   | { kind: 'edge'; from: PortRef; to: PortRef };
 
@@ -107,7 +107,57 @@ export interface LogLine {
   message: string;
 }
 
+/**
+ * Every reason a step of this build can fail.
+ *
+ * The other half of `NodeErrorCode` in `crates/encastra-core/src/journal.rs`, mirrored here for
+ * the same reason the refusal vocabularies are: `NODE_ERROR_KEYS` in `errors.ts` is a total
+ * `Record` over this union, so a code added on the Rust side and mirrored here stops the build
+ * until somebody writes the sentence. `test/fixtures/error-kinds.json` — written by a Rust test —
+ * is what catches the case where nobody mirrors it at all.
+ */
+export type NodeErrorCode =
+  | 'missing-input'
+  | 'wrong-input'
+  | 'missing-config'
+  | 'missing-handle'
+  | 'not-text'
+  | 'not-an-image'
+  | 'conversion-failed'
+  | 'conversion-unavailable'
+  | 'invalid-json'
+  | 'invalid-csv'
+  | 'bad-separator'
+  | 'csv-too-large'
+  | 'encode-failed'
+  | 'resize-failed'
+  | 'unsupported-format'
+  | 'bad-url'
+  | 'insecure-url'
+  | 'unsupported-method'
+  | 'request-failed'
+  | 'response-too-large'
+  | 'denied'
+  | 'read-failed'
+  | 'write-failed'
+  | 'move-incomplete'
+  | 'too-large'
+  | 'clipboard-unavailable'
+  | 'clipboard-failed'
+  | 'cancelled'
+  | 'run-too-long'
+  | 'run-memory-budget'
+  | 'component-missing'
+  | 'no-implementation'
+  | 'contract-broken';
+
 export interface NodeError {
+  /**
+   * One of `NodeErrorCode` for anything this build refuses — but typed as a `string`, because a
+   * component the runtime did not write may refuse in a vocabulary of its own, and a journal from
+   * a newer build may carry a code this interface predates. `describeNodeError` shows the
+   * component's own words for those rather than nothing.
+   */
   code: string;
   message: string;
   hint?: string;

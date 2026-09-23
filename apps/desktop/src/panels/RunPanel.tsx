@@ -20,6 +20,7 @@
  * touching React or the DOM; see `../../test/run-panel.test.ts`.
  */
 
+import { describeNodeError, isKnownNodeError } from '../errors';
 // Plain functions rather than `useTranslation()`: everything below `dotModifier` is exported and
 // exercised directly by `../../test/run-panel.test.ts` with no React tree to render, and
 // `store.ts`'s own `summarise` calls `outcomeSummary`'s `runPanel.outcome.*` keys the same way —
@@ -292,10 +293,15 @@ export function RunPanel() {
                   ) : null}
                 </button>
 
-                {failed ? (
+                {failed && step.record?.error ? (
+                  // The sentence, in the reader's language, resolved from the journal's `code`.
+                  // The runtime's English `hint` is shown only when the code is one this build
+                  // has no sentence for: then the component's own words are all there is, and
+                  // dropping half of them would lose the only advice on offer. See
+                  // `describeNodeError`.
                   <div className="note note--error run-panel__step-note">
-                    <strong>{step.record?.error?.message}</strong>
-                    {step.record?.error?.hint ? (
+                    <strong>{describeNodeError(step.record.error, t)}</strong>
+                    {!isKnownNodeError(step.record.error) && step.record.error.hint ? (
                       <span className="note__hint">{step.record.error.hint}</span>
                     ) : null}
                   </div>

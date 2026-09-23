@@ -1513,6 +1513,11 @@ select.input {
   inset: 0;
   z-index: 60;
   display: grid;
+  /* The row is bounded by the window. Without this the implicit row sizes itself to the panel, so
+     the panel's `max-height: 100%` is measured against its own height and limits nothing: on any
+     window shorter than the panel, the body never scrolls and the footer with Prepare, Import and
+     Close is below the window, where nothing can reach it. */
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
   padding: var(--space-4);
   background: rgb(0 0 0 / 55%);

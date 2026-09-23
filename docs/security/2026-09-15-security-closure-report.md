@@ -239,7 +239,7 @@ report does not pretend otherwise.
 
 ## 11. Release artefacts
 
-Built by this session from a fresh detached worktree at **`966c5e0`** (`C:\Users\alexl\encastra-release`),
+Built by this session from a fresh detached worktree at **`966c5e0`** (`C:\Users\<developer>\encastra-release`),
 Rust 1.98.1 (`rust-toolchain.toml`), Node 22, after `python3 scripts/version.py --check`,
 `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace` (313/0), `tsc`, Biome,
 `vitest` (500/0), `cargo deny check`, `npm audit` (0), then `npm run tauri:build`.

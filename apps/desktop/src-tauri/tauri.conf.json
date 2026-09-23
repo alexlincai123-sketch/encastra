@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Encastra",
-  "version": "0.5.0-rc.3",
+  "version": "0.5.0-rc.5",
   "identifier": "dev.encastra.app",
   "build": {
     "frontendDist": "../dist",
@@ -32,6 +32,7 @@
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
     "shortDescription": "Build software from parts that fit.",
     "longDescription": "Encastra runs a typed graph of sandboxed components on your machine.",
+    "copyright": "Copyright (c) 2026 the Encastra author. All rights reserved. See LICENSE.",
     "windows": {
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",

@@ -11,7 +11,7 @@
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
-use encastra_core::journal::{LogLevel, NodeError};
+use encastra_core::journal::{LogLevel, NodeError, NodeErrorCode};
 use encastra_core::runner::{CoreComponent, NodeContext};
 use encastra_core::value::Value;
 use encastra_protocol::manifest::ComponentManifest;
@@ -76,7 +76,7 @@ impl CoreComponent for Http {
 
         if url.scheme == "http" && !ctx.config_bool("allow_http").unwrap_or(false) {
             return Err(NodeError::new(
-                "insecure-url",
+                NodeErrorCode::InsecureUrl,
                 "This address uses plain http, which can be read and changed in transit.",
             )
             .with_hint(
@@ -151,7 +151,7 @@ fn send(
         }
         other => {
             return Err(NodeError::new(
-                "unsupported-method",
+                NodeErrorCode::UnsupportedMethod,
                 format!("{other} is not a method this component sends."),
             ));
         }
@@ -166,9 +166,11 @@ fn send(
             return Ok((code, String::new()));
         }
         Err(error) => {
-            return Err(NodeError::new("request-failed", describe(&error))
-                .with_hint("Check the address, and that this machine can reach it.")
-                .retryable());
+            return Err(
+                NodeError::new(NodeErrorCode::RequestFailed, describe(&error))
+                    .with_hint("Check the address, and that this machine can reach it.")
+                    .retryable(),
+            );
         }
     };
 
@@ -180,7 +182,7 @@ fn send(
         .read_to_string()
         .map_err(|error| {
             NodeError::new(
-                "response-too-large",
+                NodeErrorCode::ResponseTooLarge,
                 format!("The response could not be read: {}.", describe_read(&error)),
             )
             .with_hint("Responses above 16 MB are refused.")
@@ -248,8 +250,11 @@ impl UrlParts {
 /// allowed.
 fn url_parts(url: &str) -> Result<UrlParts, NodeError> {
     let bad = |why: &str| {
-        NodeError::new("bad-url", format!("That address is not usable: {why}."))
-            .with_hint("It should look like https://example.com/path.")
+        NodeError::new(
+            NodeErrorCode::BadUrl,
+            format!("That address is not usable: {why}."),
+        )
+        .with_hint("It should look like https://example.com/path.")
     };
 
     let (scheme, rest) = url
@@ -268,7 +273,7 @@ fn url_parts(url: &str) -> Result<UrlParts, NodeError> {
     // Credentials in a URL would put a password in the journal and in the permission prompt.
     if authority.contains('@') {
         return Err(NodeError::new(
-            "bad-url",
+            NodeErrorCode::BadUrl,
             "Addresses with a user name and password in them are not accepted.",
         )
         .with_hint("Send credentials as a header or in the body instead."));
