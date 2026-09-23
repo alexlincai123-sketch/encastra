@@ -69,7 +69,7 @@ const en: Messages = {
         'Encastra is a working name. The trademark registers have not been searched, so nothing here claims the name is legally clear —',
       nameLinkText: 'why that is written down',
       licencePrefix:
-        'No licence has been chosen for the source. The legal documents on this site are',
+        'The source is proprietary: the repository is public to be read, not to be copied. The legal documents on this site are',
       licenceLinkText: 'unreviewed drafts',
     },
   },
@@ -1159,7 +1159,8 @@ const en: Messages = {
         sandbox:
           'The sandbox for third-party code, with its time, memory and fuel limits actually enforced.',
         signing: 'Signing, for both the application and anything published.',
-        licence: 'A licence decision for the source, which today has none.',
+        licence:
+          'Counsel signing off the licence. The source is proprietary and its terms are written down; no lawyer has read them.',
         registry:
           'The registry, with immutable versions and permissions disclosed before installing.',
         legal: 'A legal review of the terms a marketplace and its creators would be agreeing to.',
