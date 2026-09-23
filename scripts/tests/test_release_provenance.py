@@ -18,6 +18,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import struct
 import subprocess
 import sys
@@ -487,7 +488,11 @@ class ManifestClaimsTests(unittest.TestCase):
     def test_a_hand_edited_signed_claim_over_unsigned_bytes_fails_verify(self) -> None:
         self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
         doc = self.repo.root / "docs/RELEASE.md"
-        doc.write_text(doc.read_text("utf-8").replace("**not signed**", "signed — Encastra Ltd"), "utf-8")
+        # The Signature column says "**not signed**" on Windows and "unchecked — ..." elsewhere.
+        column = re.compile(r"^(\| `[^`]+` \| [^|]+ \| )[^|]+( \|)", re.M)
+        edited = column.sub(lambda m: m.group(1) + "signed — Encastra Ltd" + m.group(2), doc.read_text("utf-8"))
+        self.assertEqual(edited.count("signed — Encastra Ltd"), 2)
+        doc.write_text(edited, "utf-8")
         site = self.repo.root / "apps/web/src/config/site.ts"
         site.write_text(site.read_text("utf-8").replace("signed: false", "signed: true"), "utf-8")
         self.repo.commit("release")

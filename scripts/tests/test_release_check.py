@@ -22,6 +22,8 @@ from test_release_identity import Tree  # noqa: E402
 
 SCRIPT = HERE.parent / "release_check.py"
 MANIFEST = HERE.parent / "release_manifest.py"
+# Authenticode can only be read on Windows; elsewhere the signing check is NOT_VERIFIED.
+READS_AUTHENTICODE = sys.platform == "win32"
 GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false"]
 
 SITE_TS = """export const VERSION = '{v}';
@@ -99,7 +101,9 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertEqual(report["mode"], "beta")
         self.assertEqual(status_of(report, "artefacts.identity"), "PASS")
         self.assertEqual(status_of(report, "manifest.verify"), "PASS")
-        self.assertEqual(status_of(report, "signing"), "PASS")
+        # Only Windows can read Authenticode; anywhere else the state is unknown, and unknown is
+        # NOT_VERIFIED rather than "unsigned, accepted" (fix/signature-probe).
+        self.assertEqual(status_of(report, "signing"), "PASS" if READS_AUTHENTICODE else "NOT_VERIFIED")
         self.assertEqual(status_of(report, "clean_vm"), "EXTERNAL_REQUIRED")
         self.assertEqual(report["verdict"], "BLOCKED")
         self.assertIn("gate.scripts", report["reason"])
@@ -111,7 +115,7 @@ class ReleaseCheckTests(unittest.TestCase):
         tree.installer("0.6.0")
         code, report, _ = tree.check()
         self.assertEqual(report["mode"], "release")
-        self.assertEqual(status_of(report, "signing"), "FAIL")
+        self.assertEqual(status_of(report, "signing"), "FAIL" if READS_AUTHENTICODE else "NOT_VERIFIED")
         self.assertEqual(report["verdict"], "BLOCKED")
         self.assertEqual(code, 1)
 
