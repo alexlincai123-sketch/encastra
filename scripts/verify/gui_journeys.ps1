@@ -1842,6 +1842,11 @@ function SetValue($el, $text) {
 }
 # Any sentence on screen matching a pattern - how a refusal is read back in the reader's own
 # language, rather than inferred from a state that is not shown.
+# What the application is saying right now, in one line: the status bar, the view it is on, and
+# every problem note the Inspector is showing. A FAIL that says only "it said nothing" cannot be
+# acted on; this is what turns that into the next question.
+$CDP_SAYS_JS = "(()=>{const s=document.querySelector('footer.statusbar > span');const v=document.querySelector('.sidebar__item[aria-current=page]');const n=[...document.querySelectorAll('.note--error,.note--warn')].map(e=>e.innerText.replace(/\s+/g,' ').slice(0,160));return 'view='+(v?v.innerText.trim():'?')+' status='+(s?s.innerText.trim():'(empty)')+' notes['+n.length+']='+n.join(' / ');})()"
+function AppSays { return (OneLine (Cdp-Eval $CDP_SAYS_JS)) }
 function FindText($pattern, $seconds) {
     for ($i = 0; $i -lt $seconds * 4; $i++) {
         foreach ($e in (Descendants (AppWindow))) {
@@ -3552,7 +3557,7 @@ function Journey3 {
                     } elseif ($notPub) {
                         Report $true 'j3 a junction is resolved or refused, never followed blindly' "read the target it points at, which holds no publication: '$notPub'"
                     } else {
-                        Report $false 'j3 a junction is resolved or refused, never followed blindly' 'the chooser closed and the application said nothing about it'
+                        Report $false 'j3 a junction is resolved or refused, never followed blindly' "the chooser closed and the application said none of the things this looks for; it is on $(AppSays)"
                     }
                     $close = Wait 'Button' '^(Cerrar|Close)$' 5
                     if ($close) { ClickInView $close $CDP_SCROLL_PANEL_CLOSE 'j3 the Import panel Close button'; Start-Sleep -Milliseconds 500 }
@@ -3580,7 +3585,7 @@ function Journey3 {
                 if ($confirm -and $confirm.Current.IsEnabled) {
                     ClickInView $confirm $CDP_SCROLL_IMPORT_CONFIRM 'j3 the Import panel Import button'
                     $taken = FindText '(Recibido Journey evidence|Imported Journey evidence)' 25
-                    Report ($null -ne $taken) 'j3 importing put it in the library' "'$taken'"
+                    Report ($null -ne $taken) 'j3 importing put it in the library' "'$taken'$(if (-not $taken) { " - the application is on $(AppSays)" })"
                 } else {
                     Report $false 'j3 the Import button is armed for a folder that was read' "enabled=$($confirm.Current.IsEnabled)"
                 }
@@ -3779,9 +3784,21 @@ function Journey45 {
             if ($stateNow -and $stateNow -ne $stateBefore -and $stateNow -ne '|0') { $ranSays = $stateNow; break }
             Start-Sleep -Milliseconds 300
         }
+        # A changed status bar is not a started run. Run 35806099348 pressed Run, the bar changed to
+        # "Este flujo todavía no puede ejecutarse: hay 3 cosa(s) que corregir antes", and this line
+        # passed - then the write that never happened was reported as the failure. The application
+        # refusing to run an incomplete graph is the application being right; this says so.
+        if ($ranSays -match '(?i)(todav.a no puede ejecutarse|cannot run yet|cosa\(s\) que corregir|problems? to fix|No se ha ejecutado nada|Nothing ran|No se ejecut)') {
+            $refusedToRun = $ranSays
+            $ranSays = $null
+        } else { $refusedToRun = $null }
         $panelNow = ''
         if (-not $ranSays) { $panelNow = OneLine (Cdp-Eval "(document.querySelector('.run-panel')||{innerText:[]}).innerText") }
-        Report ([bool]$ranSays) 'j4/j5 pressing Run actually started a run' "the status bar and run panel went from '$(OneLine $stateBefore)' to '$(OneLine $ranSays)'$(if (-not $ranSays) { "; they never changed, and the run panel still reads '$panelNow' - either nothing was invoked (the note above says which element was) or the run never began" })"
+        if ($refusedToRun) {
+            Report $false 'j4/j5 pressing Run actually started a run' "the application refused to run this graph: '$(OneLine $refusedToRun)' - it is on $(AppSays)"
+        } else {
+            Report ([bool]$ranSays) 'j4/j5 pressing Run actually started a run' "the status bar and run panel went from '$(OneLine $stateBefore)' to '$(OneLine $ranSays)'$(if (-not $ranSays) { "; they never changed, and the run panel still reads '$panelNow' - either nothing was invoked (the note above says which element was) or the run never began" })"
+        }
         $saved = $null
         for ($i = 0; $i -lt 60; $i++) {
             $hit = @(Get-ChildItem -Force -Path $grantFolder -File -ErrorAction SilentlyContinue)
@@ -3791,6 +3808,7 @@ function Journey45 {
         $runSays = FindText '(correcto|correctos|ok|fallido|failed|Nada se ha ejecutado|Nothing ran)' 3
         $because = ''
         if (-not $inputSeeded) { $because = " - and the run had no starting material to begin with: the line above says the chooser never seeded one, so this is that failure and not a second one" }
+        elseif ($refusedToRun) { $because = " - and no run was ever allowed to start: the application refused this graph ('$(OneLine $refusedToRun)'), which the line above reports, so this is that failure and not a second one" }
         elseif (-not $ranSays) { $because = " - and no run started at all: the line above says the application never reported an outcome, so this is that failure and not a second one" }
         Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'$because"
 
