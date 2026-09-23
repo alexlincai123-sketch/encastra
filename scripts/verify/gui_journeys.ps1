@@ -2010,8 +2010,13 @@ function HwndUiaName($h) {
 # A Save As dialog and a folder picker are not the same dialog and do not label that box the
 # same way, so they are looked up separately rather than through one chain that happens to suit
 # whichever was driven first.
-$FILE_NAME_LABEL = '(?i)(file *name|nombre de archivo|nombre del archivo)'
-$FOLDER_NAME_LABEL = '(?i)(folder|carpeta|file *name|nombre de archivo|nombre del archivo)'
+#
+# Anchored, and "Nombre:" on its own is one of them: the Save As dialog on Windows 11 26200 labels
+# its box exactly that, and run 35804105124 turned the whole dialog down looking for "nombre de
+# archivo". Anchoring is what makes the bare word safe to accept - "Vista de carpetas Shell" and
+# the "Nombre" column header are not a name box, and now do not read as one.
+$FILE_NAME_LABEL = '(?i)^\s*(file *name|name|nombre(\s+(de|del)\s+archivo)?)\s*:?\s*$'
+$FOLDER_NAME_LABEL = '(?i)^\s*(folder|carpeta|file *name|name|nombre(\s+(de|del)\s+archivo)?)\s*:?\s*$'
 # And what it is never, on either dialog. A file dialog also carries a search box; a path typed
 # into a search box reads back out of it perfectly, runs a search, and saves nothing. That is
 # `j2-save : the path is in the chooser -> '...journeys.encastra'` immediately above `j2 project
