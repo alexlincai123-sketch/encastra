@@ -213,7 +213,7 @@ This is an inventory, not a legal opinion — see `docs/LICENSING.md`.
 | syn | 3.0.5 | MIT OR Apache-2.0 | https://github.com/dtolnay/syn |
 | synstructure | 0.13.2 | MIT | https://github.com/mystor/synstructure |
 | tao | 0.35.3 | Apache-2.0 | https://github.com/tauri-apps/tao |
-| tauri | 2.11.5 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
+| tauri | 2.11.6 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
 | tauri-codegen | 2.6.3 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
 | tauri-macros | 2.6.3 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
 | tauri-plugin-dialog | 2.7.3 | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
@@ -252,8 +252,8 @@ This is an inventory, not a legal opinion — see `docs/LICENSING.md`.
 | unicode-ident | 1.0.24 | (MIT OR Apache-2.0) AND Unicode-3.0 | https://github.com/dtolnay/unicode-ident |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 | https://github.com/unicode-rs/unicode-segmentation |
 | untrusted | 0.9.0 | ISC | https://github.com/briansmith/untrusted |
-| ureq | 3.4.1 | MIT OR Apache-2.0 | https://github.com/algesten/ureq |
-| ureq-proto | 0.6.2 | MIT OR Apache-2.0 | https://github.com/algesten/ureq-proto |
+| ureq | 3.4.2 | MIT OR Apache-2.0 | https://github.com/algesten/ureq |
+| ureq-proto | 0.6.4 | MIT OR Apache-2.0 | https://github.com/algesten/ureq-proto |
 | url | 2.5.8 | MIT OR Apache-2.0 | https://github.com/servo/rust-url |
 | urlpattern | 0.3.0 | MIT | https://github.com/denoland/rust-urlpattern |
 | utf8-zero | 0.8.1 | MIT OR Apache-2.0 | https://github.com/algesten/utf8-zero |
