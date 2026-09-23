@@ -2017,10 +2017,27 @@ $FOLDER_NAME_LABEL = '(?i)(folder|carpeta|file *name|nombre de archivo|nombre de
 # `j2-save : the path is in the chooser -> '...journeys.encastra'` immediately above `j2 project
 # saved to disk -> exists=False`: the read-back was honest about the text and silent about the
 # control. Nothing matching this is accepted, whichever route found it.
-$SEARCH_LABEL = '(?i)(search|buscar|find|filtro|filter)'
+#
+# "buscar" is not what Windows calls it. Run 35801961287 typed three paths into `Edit 'Cuadro de
+# búsqueda'` and every one of them read back perfectly: the noun is búsqueda, the pattern had the
+# verb, and nothing here turned it down. Both spellings, because an accented character that has
+# to survive a file, a pipe and a log is a bad thing to depend on.
+$SEARCH_LABEL = '(?i)(search|buscar|b[uú]squeda|find|filtro|filter)'
+# The classes a shell search box has. A name that was not matched above cannot make one of these
+# into a name box, whatever it is called in whatever language.
+$SEARCH_CLASSES = @('SearchEditBox', 'SearchBox')
+# The classes the file-name control actually has. A labelled control of some other class - the
+# folder tree, the view, a static - is not it, whatever the label says.
+$NAME_FIELD_CLASSES = @('ComboBox', 'ComboBoxEx32', 'Edit')
 function LooksLikeSearch($name) {
     if (-not $name) { return $false }
     return (([string]$name) -match $SEARCH_LABEL)
+}
+# The same question asked of a window rather than of a label: what it is called can be missing or
+# in a language this file does not know, and the class cannot.
+function IsSearchWindow($h) {
+    if ($h -eq $NULLPTR) { return $false }
+    return ($SEARCH_CLASSES -contains (HwndClass $h))
 }
 # The file-name control's well-known ids. 1148 is the ComboBoxEx32 the Vista-style dialog wraps
 # the edit in - the edit inside it is 1001 - and 1152 and 1090 belong to the older dialogs. The
@@ -2095,12 +2112,38 @@ function DlgNameField($dlg, $kind) {
     # path went into the search box: on this dialog the search box comes before the name box in
     # the tree, so "the first Edit" was never the name box at all. Labelled as the name box beats
     # a real window handle, which beats merely being writable.
+    # Before any of that: the control this dialog labels as its name box, whatever control type UI
+    # Automation gives it, as long as it owns a window and is one of the classes a name box has.
+    #
+    # On Windows 11 26200 the Save As name box publishes as `Pane 'Nombre:'` whose window is a
+    # ComboBox, holding the Edit with ctrlId 1001 - and the whole group reports as NOT being under
+    # this dialog's handle, so GetDlgItem finds nothing and the class walk below the dialog finds
+    # nothing. Run 35801961287 is what that cost: with no route to it, the best Edit on the dialog
+    # was the search box. Writing goes to the Edit inside when there is one, because a bare combo
+    # keeps its own model (see TypeIntoDialog), and to the combo itself when there is not.
+    foreach ($c in (Descendants $dlg)) {
+        $label = $c.Current.Name
+        if (-not $label -or $label -notmatch $wanted) { continue }
+        if (LooksLikeSearch $label) { $script:fieldRejected += "UIA labelled '$label'"; continue }
+        if ($c.Current.NativeWindowHandle -eq 0) { continue }
+        $h = Hwnd $c
+        $cls = HwndClass $h
+        if (IsSearchWindow $h) { $script:fieldRejected += "UIA labelled '$label' ($cls)"; continue }
+        if ($NAME_FIELD_CLASSES -notcontains $cls) { continue }
+        if ($cls -eq 'Edit') { return (NameFieldCandidate $h $NULLPTR $c $label $wanted "UIA labelled Edit '$label'") }
+        $inner = ChildByClass $h 'Edit' 3
+        if ($inner -ne $NULLPTR -and -not (IsSearchWindow $inner)) {
+            return (NameFieldCandidate $inner $h $null (HwndUiaName $inner) $wanted "UIA labelled $cls '$label' -> Edit")
+        }
+        return (NameFieldCandidate $h $NULLPTR $c $label $wanted "UIA labelled $cls '$label'")
+    }
     $best = $null; $bestScore = -1
     foreach ($c in (Descendants $dlg)) {
         if ($c.Current.ControlType.ProgrammaticName -ne 'ControlType.Edit') { continue }
         $label = $c.Current.Name
         if (LooksLikeSearch $label) { $script:fieldRejected += "UIA descendant Edit '$label'"; continue }
         $handled = ($c.Current.NativeWindowHandle -ne 0)
+        if ($handled -and (IsSearchWindow (Hwnd $c))) { $script:fieldRejected += "UIA descendant Edit '$label' (SearchEditBox)"; continue }
         $writable = ((HasValuePattern $c) -and -not (IsReadOnly $c))
         if (-not $handled -and -not $writable) { continue }
         $score = 0
