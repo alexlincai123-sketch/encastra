@@ -3858,13 +3858,17 @@ function Journey45 {
         $panelSays = if ($null -eq $saved) { "; the run panel says: $(OneLine (Cdp-Eval "(document.querySelector('.run-panel')||{innerText:''}).innerText"))" } else { '' }
         Report ($null -ne $saved) 'j4 the granted folder was actually written into by the run' "file='$saved' status='$runSays'$because$panelSays"
 
-        # The negative probe below presses Run again, and Run is not on screen while a run is still
-        # going: the button reads Stop. Waiting for the run to end is not the same as asserting
-        # anything about it - what it did is the line above.
-        for ($i = 0; $i -lt 40; $i++) {
-            if ((Wait 'Button' '^(Ejecutar|Run)$' 1)) { break }
+        # The negative probe below presses Run again, and Run is not on screen while a run is
+        # still going: the button reads Stop. Waiting for the run to end is not the same as
+        # asserting anything about it - what it did is the line above. Asked of the page rather
+        # than of UI Automation, which is slower than the thing it is waiting for.
+        $ended = $false
+        for ($i = 0; $i -lt 120; $i++) {
+            if ((MessageNow) -notmatch '(?i)(En ejecuci|Running|Vigilando|Watching)') { $ended = $true; break }
             Start-Sleep -Milliseconds 500
         }
+        Note "j4/j5 the run ended $(if ($ended) { "after about $([int]($i * 0.5))s" } else { "- it did NOT: the status bar still reads '$(MessageNow)' after 60s" })"
+        if ($ended) { [void](Wait 'Button' '^(Ejecutar|Run)$' 10) }
 
         # =========================================================================================
         # NEGATIVE - a folder chosen for one purpose does not answer another.
