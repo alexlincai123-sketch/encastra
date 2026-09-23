@@ -1,0 +1,14 @@
+installed before: 0.5.0-rc.4
+installer: C:\actions-runner\_work\encastra\encastra\target\release\bundle\nsis\Encastra_0.5.0-rc.4_x64-setup.exe  sha256=43b7c08012844edfbe443dd7ae2307574829fb0e8d2b298fa61d3bdfac6427a6
+PASS  installer signature state as documented (NotSigned)  -> NotSigned
+PASS  silent install exit code  -> 0 in 1s
+PASS  binary present in the per-user install directory  -> C:\Users\alexl\AppData\Local\Encastra\encastra-desktop.exe
+PASS  installed ProductVersion  -> 0.5.0-rc.4 (FileVersion 0.5.0-rc.4)
+installed binary sha256: 88adc249fa4204cbf9698657de2da25c33e77e56305cd45625961fd122062aa8  size: 9871872
+installed binary build stamp: 639163a809eb8af685b892b6c4c79f3b6d9f91dc
+PASS  uninstaller present  -> C:\Users\alexl\AppData\Local\Encastra\uninstall.exe
+PASS  HKCU uninstall entry  -> DisplayVersion=0.5.0-rc.4 InstallLocation="C:\Users\alexl\AppData\Local\Encastra"
+PASS  nothing written under HKLM (per-user install)  -> 0 entries
+PASS  Start Menu shortcut  -> C:\Users\alexl\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Encastra.lnk
+install dir ACL: C:\Users\alexl\AppData\Local\Encastra NT AUTHORITY\SYSTEM:(I)(OI)(CI)(F) |                                       BUILTIN\Administradores:(I)(OI)(CI)(F) |                                       AKUINU\alexl:(I)(OI)(CI)(F)
+PASS  installed application launches and stays up  -> pid 42284 title='Encastra'
