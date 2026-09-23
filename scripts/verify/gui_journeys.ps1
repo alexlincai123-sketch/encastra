@@ -3817,7 +3817,7 @@ function Journey45 {
         # "Este flujo todavía no puede ejecutarse: hay 3 cosa(s) que corregir antes", and this line
         # passed - then the write that never happened was reported as the failure. The application
         # refusing to run an incomplete graph is the application being right; this says so.
-        if ($ranSays -match '(?i)(todav.a no puede ejecutarse|cannot run yet|cosa\(s\) que corregir|problems? to fix|No se ha ejecutado nada|Nothing ran|No se ejecut)') {
+        if ($ranSays -match '(?i)(todav.a no puede ejecutarse|cannot run yet|cosa\(s\) que corregir|problemas? por resolver|problems? to fix|No se ha ejecutado nada|Nothing ran|No se ejecut)') {
             $refusedToRun = $ranSays
             $ranSays = $null
         } else { $refusedToRun = $null }
