@@ -1,8 +1,8 @@
 # End-user licence agreement — DRAFT, not in force
 
 *Structure for a lawyer. Shown by the installer (`MUI_PAGE_LICENSE`, Tauri `bundle.licenseFile`)
-once it exists; today the installer shows no licence page, and that is correct for an
-unlicensed tree.*
+once it exists; today the installer shows no licence page, and that is correct until an
+end-user licence exists. The source licence is `LICENSE` (proprietary, all rights reserved).*
 
 **ENCASTRA — END-USER LICENCE AGREEMENT**
 

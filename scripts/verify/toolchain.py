@@ -57,10 +57,10 @@ def rustflags() -> list[str]:
 
     rustc writes the path of every source file it compiles into the binary, for panic messages and
     `#[track_caller]`. For a dependency that path is inside the Cargo registry, which lives under
-    the *user's* home directory — `C:\\Users\\alexl\\.cargo\\registry\\...` on this machine,
+    the *user's* home directory — `C:\\Users\\<developer>\\.cargo\\registry\\...` on this machine,
     `C:\\Users\\runneradmin\\.cargo\\...` on a hosted runner. The names are different lengths, so
     every string after the first shifts and two otherwise identical builds come out megabytes
-    apart. Counted in the 0.5.0-rc.3 artefacts: `alexl` 119 times in one, `runneradmin` 120 in the
+    apart. Counted in the 0.5.0-rc.3 artefacts: the developer's account name 119 times in one, `runneradmin` 120 in the
     other.
 
     `--remap-path-prefix` rewrites them to something that does not name the machine. The flags
