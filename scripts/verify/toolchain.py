@@ -255,6 +255,43 @@ def names_the_machine(binary: Path) -> list[str]:
     return [f"{path} x{count}" for path, count in sorted(seen.items())]
 
 
+def names_its_tools(binary: Path) -> list[str]:
+    """The tool builds this binary's Rich header records, if it has one.
+
+    The Rich header sits between the DOS stub and the PE signature and names the build of every
+    tool that contributed, the linker included. GitHub services Visual Studio inside the pinned
+    toolset directory, so two runner images can both select MSVC 14.44.35207 and still run
+    `link.exe` 14.44.35228 on one and 14.44.35229 on the other — and the header says which, which
+    `/Brepro` then hashes into every timestamp. build.rs passes `/EMITTOOLVERSIONINFO:NO` to leave
+    it out; that switch is undocumented, and a linker that stopped honouring it would keep the header
+    without a word, so the answer is read out of the image rather than trusted to the flag.
+
+    Returns one entry per record ("product P build B xN"), or ["undecodable"] for a header whose
+    records cannot be read, and [] when there is none.
+    """
+    data = binary.read_bytes()
+    if len(data) < 0x40 or data[:2] != b"MZ":
+        return []
+    e_lfanew = int.from_bytes(data[0x3C:0x40], "little")
+    end = data.find(b"Rich", 0x40, min(e_lfanew, len(data)))
+    if end < 0 or end + 8 > len(data):
+        return []
+    key = int.from_bytes(data[end + 4 : end + 8], "little")
+    start = None
+    for offset in range(0x40, end, 4):
+        if int.from_bytes(data[offset : offset + 4], "little") ^ key == 0x536E6144:  # "DanS"
+            start = offset
+            break
+    if start is None:
+        return ["undecodable"]
+    records = []
+    for offset in range(start + 16, end - 7, 8):
+        compid = int.from_bytes(data[offset : offset + 4], "little") ^ key
+        count = int.from_bytes(data[offset + 4 : offset + 8], "little") ^ key
+        records.append(f"product {compid >> 16} build {compid & 0xFFFF} x{count}")
+    return records or ["undecodable"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="The tools a release is built with.")
     parser.add_argument("--check", action="store_true", help="exit 1 unless this machine agrees")
@@ -262,7 +299,7 @@ def main() -> int:
     parser.add_argument("--msvc", action="store_true", help="print the pinned MSVC toolset")
     parser.add_argument("--msvc-line", action="store_true", help="print it as vcvarsall wants it")
     parser.add_argument("--rustflags", action="store_true", help="print the RUSTFLAGS a release build needs")
-    parser.add_argument("--check-binary", type=Path, help="exit 1 if this binary names the machine that built it")
+    parser.add_argument("--check-binary", type=Path, help="exit 1 if this binary names the machine or the tool builds that made it")
     args = parser.parse_args()
 
     if args.msvc:
@@ -294,7 +331,18 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+        tools = names_its_tools(args.check_binary)
+        if tools:
+            print(
+                f"{args.check_binary.name} has a Rich header naming the tool builds that made it: "
+                f"{', '.join(tools)}. Two runner images that differ only in a serviced link.exe "
+                "would not produce the same bytes; build.rs passes /EMITTOOLVERSIONINFO:NO so that "
+                "they do, and this linker did not honour it.",
+                file=sys.stderr,
+            )
+            return 1
         print(f"{args.check_binary.name} does not name the machine that built it")
+        print(f"{args.check_binary.name} has no Rich header")
         return 0
 
     report = survey()

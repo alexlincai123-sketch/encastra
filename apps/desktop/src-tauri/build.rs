@@ -15,6 +15,16 @@
 //! argument for this package's binaries, rather than in `RUSTFLAGS` or `.cargo/config.toml`, because
 //! an environment variable set by CI overrides both of those silently and the release build is the
 //! one place the flag must not be lost.
+//!
+//! **That two runner images give the same bytes.** The linker also writes a Rich header, a record of
+//! the build number of every tool that touched the image — the linker's own included. GitHub services
+//! Visual Studio inside the pinned toolset directory, so two `windows-latest` images can both say
+//! MSVC 14.44.35207 and still carry `link.exe` 14.44.35228 and 14.44.35229. Candidate 35931433246
+//! built on one of each: `.text`, `.data` and `.rsrc` identical, the Rich header one build number
+//! apart, and `/Brepro`, which hashes the whole image, carried that into every timestamp and the PDB
+//! GUID. `/EMITTOOLVERSIONINFO:NO` leaves the Rich header out. It is undocumented, and a linker that
+//! stopped honouring it would keep the header without failing, so `scripts/verify/toolchain.py
+//! --check-binary` refuses any image that still has one.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -77,6 +87,7 @@ fn main() {
 
     if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
         println!("cargo:rustc-link-arg-bins=/Brepro");
+        println!("cargo:rustc-link-arg-bins=/EMITTOOLVERSIONINFO:NO");
     }
 
     rerun_on_git_change(&manifest_dir);
