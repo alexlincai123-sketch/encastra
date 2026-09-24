@@ -133,6 +133,37 @@ impl TriggerSet {
     pub fn build(&self, id_at_version: &str) -> Option<Box<dyn Trigger>> {
         self.by_ref.get(id_at_version).map(|factory| factory())
     }
+
+    pub fn contains(&self, id_at_version: &str) -> bool {
+        self.by_ref.contains_key(id_at_version)
+    }
+}
+
+/// What a session of this graph can count as filled from outside it when Start is pressed.
+///
+/// The triggers' outputs always: the session produces them. The inputs the application fills in
+/// — the file a person picked — only when the graph runs once. A graph with a trigger that mounts
+/// runs once per event instead, and each of those runs is seeded by its event and nothing else
+/// (see [`Session::tick`]); counting the pick there let Start accept a graph whose every event
+/// then failed for the one input nobody filled. The editor's check asks this same question, so the
+/// two cannot disagree about which graph is runnable.
+pub fn supplied_at_start(
+    graph: &Graph,
+    registry: &dyn ComponentRegistry,
+    triggers: &TriggerSet,
+    supplied_by_app: &std::collections::BTreeSet<PortRef>,
+) -> std::collections::BTreeSet<PortRef> {
+    let mut supplied = trigger_ports(graph, registry);
+    // The same three conditions `start_with_supplied` mounts a trigger on.
+    let watches = graph.nodes.values().any(|node| {
+        is_trigger(node, registry)
+            && !node.disabled
+            && triggers.contains(&node.component.to_string())
+    });
+    if !watches {
+        supplied.extend(supplied_by_app.iter().cloned());
+    }
+    supplied
 }
 
 /// What happened on one turn of the loop.
@@ -215,8 +246,7 @@ impl Session {
         id: impl Into<String>,
         supplied_by_app: &std::collections::BTreeSet<PortRef>,
     ) -> Result<Self, Validation> {
-        let mut supplied = trigger_ports(&graph, registry);
-        supplied.extend(supplied_by_app.iter().cloned());
+        let supplied = supplied_at_start(&graph, registry, triggers, supplied_by_app);
         let validation = validate_with_supplied(&graph, registry, &supplied);
         if !validation.is_runnable() {
             return Err(validation);
@@ -575,6 +605,84 @@ mod tests {
             )
             .is_ok(),
             "a file the person picked feeds that input as surely as a trigger's output does"
+        );
+    }
+
+    #[test]
+    fn a_watching_graph_does_not_count_a_pick_that_no_event_would_carry() {
+        // Each event of a watching session is seeded by its trigger and nothing else, so a file
+        // picked in the chooser never reaches those runs. Counting it at Start accepted the graph
+        // and then failed every event with `missing-input`; Start has to refuse it instead, and
+        // the editor's check (the same function) has to show the unconnected input.
+        let mut inner = crate::registry::InMemoryRegistry::new();
+        inner.insert(manifest("test.trigger", true)).unwrap();
+        inner
+            .insert(
+                ComponentManifest::parse(
+                    &serde_json::json!({
+                        "schema": 1, "id": "test.sink", "version": "1.0.0", "name": "sink",
+                        "runtime": ">=0.1.0", "kind": "core",
+                        "ports": { "inputs": {
+                            "value": { "type": "i64", "required": true },
+                            "file": { "type": "i64", "required": true }
+                        } }
+                    })
+                    .to_string(),
+                )
+                .expect("fixture manifest must be valid"),
+            )
+            .unwrap();
+        let graph = Graph::parse(
+            &serde_json::json!({
+                "nodes": {
+                    "t": { "component": "test.trigger@1.0.0" },
+                    "save-1": { "component": "test.sink@1.0.0" }
+                },
+                "edges": [ { "from": { "node": "t", "port": "value" }, "to": { "node": "save-1", "port": "value" } } ]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let picked = std::collections::BTreeSet::from([PortRef {
+            node: NodeId("save-1".into()),
+            port: "file".into(),
+        }]);
+
+        let mut watching = TriggerSet::new();
+        watching.insert("test.trigger@1.0.0", || {
+            Box::new(Burst {
+                per_poll: 1,
+                polls_left: 1,
+            })
+        });
+        assert!(
+            !supplied_at_start(&graph, &inner, &watching, &picked)
+                .contains(picked.iter().next().unwrap()),
+            "a watching graph must not count the pick"
+        );
+        let refused = Session::start_with_supplied(
+            graph.clone(),
+            &inner,
+            CoreComponentSet::default(),
+            &watching,
+            "watch-1",
+            &picked,
+        );
+        assert_eq!(
+            refused
+                .err()
+                .expect("Start must refuse: no event carries the picked file")
+                .errors()
+                .count(),
+            1,
+            "exactly the input the pick cannot fill"
+        );
+
+        // With nothing that mounts, the same graph runs once and the pick does reach it.
+        assert!(
+            supplied_at_start(&graph, &inner, &TriggerSet::new(), &picked)
+                .contains(picked.iter().next().unwrap()),
+            "a graph that runs once counts the pick"
         );
     }
 
