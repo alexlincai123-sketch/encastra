@@ -602,6 +602,22 @@ class GuiJourneyEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(check.status, "FAIL")
 
+    def test_one_failed_check_in_an_otherwise_complete_log_is_a_failure(self) -> None:
+        # Every iteration and every journey section passes and the tally agrees with the lines, so
+        # nothing but the FAIL line itself stands between this log and a PASS. The test above ends
+        # its log early and would fail for other reasons, so it could not tell whether a FAIL line
+        # is read at all.
+        good = self.three_passing_runs(self.EXPECTED)
+        broken = "FAIL  j2 the folder the person picked was not used  -> another folder  [iteration 2/3]\n"
+        text = good.replace(
+            "PASS  j2 something  -> observed  [iteration 2/3]\n",
+            "PASS  j2 something  -> observed  [iteration 2/3]\n" + broken,
+        ).replace("failed=0", "failed=1")
+        check = self.judge(text)
+        self.assertEqual(check.status, "FAIL")
+        self.assertIn("1 failed", check.evidence)
+        self.assertIn("another folder", check.evidence)
+
     def test_a_skip_is_still_not_a_pass_however_many_times_it_ran(self) -> None:
         check = self.judge(
             self.subject(self.EXPECTED)

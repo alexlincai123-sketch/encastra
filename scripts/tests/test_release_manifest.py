@@ -311,6 +311,30 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("hashes to", result.stderr)
         self.assertIn("states build commit", result.stderr)
 
+    def test_verify_refuses_a_build_commit_that_is_not_in_the_history(self) -> None:
+        # A commit off to one side with the same tree: the diff to HEAD is only the publication, the
+        # binary states it, the hashes match - and the tag still does not contain the commit that
+        # made the bytes. Only the ancestry rule refuses it.
+        trunk = self.repo.git("rev-parse", "--abbrev-ref", "HEAD")
+        self.repo.git("checkout", "-q", "-b", "side")
+        self.repo.git("commit", "-q", "--allow-empty", "-m", "same tree, other history")
+        side = self.repo.git("rev-parse", "HEAD")
+        self.repo.build(side)
+        self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
+        published = {
+            path: (self.repo.root / path).read_text("utf-8")
+            for path in ("docs/RELEASE.md", "apps/web/src/config/site.ts")
+        }
+        self.repo.git("checkout", "-q", "--", ".")
+        self.repo.git("checkout", "-q", trunk)
+        for path, text in published.items():
+            (self.repo.root / path).write_text(text, "utf-8")
+        self.repo.commit("publication on the trunk, naming the side commit")
+        result = self.repo.manifest("--verify")
+        self.assertEqual(result.returncode, 5, result.stderr)
+        self.assertIn("is not an ancestor", result.stderr)
+        self.assertIn(side, result.stderr)
+
     def test_verify_lets_a_bumped_version_move_on(self) -> None:
         self.repo.build(self.head)
         self.assertEqual(self.repo.manifest("--allow-unsigned").returncode, 0)
