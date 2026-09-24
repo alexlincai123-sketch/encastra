@@ -20,7 +20,7 @@ use encastra_core::registry::{ComponentRegistry, InMemoryRegistry};
 use encastra_core::runner::{
     CoreComponentSet, RunObserver, RunRequest, execute_request, run_seeded,
 };
-use encastra_core::session::{Session, TriggerSet};
+use encastra_core::session::{Session, TriggerSet, supplied_at_start};
 use encastra_core::validate::{Validation, validate_with_supplied};
 use encastra_core::value::{HandleKind, Value};
 // `Status` under another name: this crate already has one, and it answers a different question
@@ -491,7 +491,9 @@ fn validate_graph(
     graph: Graph,
     inputs: Vec<InputSpec>,
 ) -> Validation {
-    let supplied: BTreeSet<PortRef> = inputs.iter().map(InputSpec::port_ref).collect();
+    let picked: BTreeSet<PortRef> = inputs.iter().map(InputSpec::port_ref).collect();
+    // The rule Start applies, so Check and Start agree about a graph with a trigger in it.
+    let supplied = supplied_at_start(&graph, &state.registry, &state.triggers, &picked);
     validate_with_supplied(&graph, &state.registry, &supplied)
 }
 
