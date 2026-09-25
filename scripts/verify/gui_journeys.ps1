@@ -1009,16 +1009,25 @@ $byPid = New-Object System.Windows.Automation.PropertyCondition($A::ProcessIdPro
 function AppWindow { $root.FindAll($T::Children, $byPid) | Where-Object { $_.Current.ClassName -eq 'Tauri Window' } | Select-Object -First 1 }
 function Descendants($el) { if (-not $el) { return @() }; @($el.FindAll($T::Descendants, $TRUE_COND)) }
 
+# Every lookup here is for something the PAGE draws. Some WebView2 runtimes also publish, under the
+# same window and ahead of the page in tree order, the browser frame's own hidden caption buttons -
+# `BrowserCaptionButtonContainer` > Button 'Minimize' / 'Maximize' / 'Close', class
+# `WindowsCaptionButton`, framework Chrome, rect Empty. The clean Windows 11 VM's inbox runtime
+# 140.0.3485.66 does (docs/release/CLEAN_VM_ACCEPTANCE.md, the DIAG-UIA dump); the runners' 152 did
+# not. There, `Wait 'Button' '^(Cerrar|Close)$'` at the end of j2 found that 'Close' before the
+# Publish panel's, invoked it, and closed the application - every later journey then failed for a
+# reason that was the harness's. Such a button is never page content, so it is never a match.
+function IsPageElement($e) { $e.Current.ClassName -ne 'WindowsCaptionButton' }
 function Find($scopeEl, $ctrl, $namePattern) {
     foreach ($e in (Descendants $scopeEl)) {
-        if ($e.Current.ControlType.ProgrammaticName -eq "ControlType.$ctrl" -and $e.Current.Name -match $namePattern) { return $e }
+        if ($e.Current.ControlType.ProgrammaticName -eq "ControlType.$ctrl" -and $e.Current.Name -match $namePattern -and (IsPageElement $e)) { return $e }
     }
     return $null
 }
 function FindEvery($scopeEl, $ctrl, $namePattern) {
     $out = @()
     foreach ($e in (Descendants $scopeEl)) {
-        if ($e.Current.ControlType.ProgrammaticName -eq "ControlType.$ctrl" -and $e.Current.Name -match $namePattern) { $out += $e }
+        if ($e.Current.ControlType.ProgrammaticName -eq "ControlType.$ctrl" -and $e.Current.Name -match $namePattern -and (IsPageElement $e)) { $out += $e }
     }
     return $out
 }
@@ -1209,9 +1218,12 @@ function ElementFacts($el) {
         if (-not $n) { $n = '' }
         if ($n.Length -gt 70) { $n = $n.Substring(0, 70) }
         $r = $c.BoundingRectangle
-        return ("type={0} automationId='{1}' name='{2}' enabled={3} offscreen={4} keyboardFocusable={5} rect=({6},{7} {8}x{9}) hwnd={10} helpText='{11}' patterns={12}" -f `
-            ($c.ControlType.ProgrammaticName -replace '^ControlType\.', ''), $c.AutomationId, $n, $c.IsEnabled, $c.IsOffscreen, $c.IsKeyboardFocusable, `
-            [int]$r.Left, [int]$r.Top, [int]$r.Width, [int]$r.Height, $c.NativeWindowHandle, (HelpTextOf $el), ($pats -join '+'))
+        # An element with no geometry reports Rect.Empty (infinite coordinates), and casting that to
+        # [int] throws - which once replaced the one line that would have named the element pressed.
+        $rect = if ($r.IsEmpty -or [double]::IsInfinity($r.Left) -or [double]::IsNaN($r.Left)) { 'Empty' } else { '{0},{1} {2}x{3}' -f [int]$r.Left, [int]$r.Top, [int]$r.Width, [int]$r.Height }
+        return ("type={0} automationId='{1}' name='{2}' class='{3}' enabled={4} offscreen={5} keyboardFocusable={6} rect=({7}) hwnd={8} helpText='{9}' patterns={10}" -f `
+            ($c.ControlType.ProgrammaticName -replace '^ControlType\.', ''), $c.AutomationId, $n, $c.ClassName, $c.IsEnabled, $c.IsOffscreen, $c.IsKeyboardFocusable, `
+            $rect, $c.NativeWindowHandle, (HelpTextOf $el), ($pats -join '+'))
     } catch { return "(the element could not be read: $($_.Exception.GetType().Name))" }
 }
 # The window Chromium renders into, which is where a keystroke aimed at the page has to be sent.
