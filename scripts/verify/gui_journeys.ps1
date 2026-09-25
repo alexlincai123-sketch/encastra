@@ -1851,11 +1851,20 @@ function HasValuePattern($el) {
     try { [void]$el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern); return $true } catch { return $false }
 }
 # Chromium's SetValue on a text input dispatches the input event React listens for, so the store
-# sees the change. The value is read back rather than assumed.
+# sees the change. The value is read back rather than assumed - and read until it is what was set,
+# for a bounded time: UI Automation publishes the new value when WebView2's accessibility tree
+# catches up, and on a machine that had just restarted one read 200 ms later still saw the old one
+# (0.5.0-rc.6, Clean VM CLEAN-007: namespace read back '' while the publication written from that
+# same draft carried it). What is returned is still what UI Automation says at the end, so a value
+# that never lands is reported exactly as before.
 function SetValue($el, $text) {
     $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($text)
-    Start-Sleep -Milliseconds 200
-    return (ValueOf $el)
+    $deadline = (Get-Date).AddSeconds(5)
+    do {
+        Start-Sleep -Milliseconds 200
+        $now = ValueOf $el
+    } while ($now -ne $text -and (Get-Date) -lt $deadline)
+    return $now
 }
 # Any sentence on screen matching a pattern - how a refusal is read back in the reader's own
 # language, rather than inferred from a state that is not shown.
