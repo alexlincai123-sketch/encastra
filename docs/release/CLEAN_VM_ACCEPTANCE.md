@@ -293,6 +293,12 @@ candidate built by `candidate.yml` and its own acceptance run.
   PASS, and requires the installer and executable those cycles ran - name, SHA-256, version, build
   commit - to be this tree's artefacts. A `verdict.json` beside the cycles must equal the re-derived
   one. A log, or a verdict on its own, is never PASS (`scripts/tests/test_release_check_vm.py`).
+  Since the rc.6 review the judge also ties each cycle directory to what the host captured:
+  `plan.json`/`expected.json` must be the files hashed onto the disc, the serial BOOT/CLEANVM-DONE
+  lines must name the same cycle, mode and faults, and the digest CLEAN-002 computed must be the
+  expected installer's; every cycle judged together must share installer, base image and harness
+  commit; acceptance cycles run the journeys with repeat >= 3. The limit that remains: someone who
+  rewrites `serial.log` itself, on the lab host, can forge a cycle - nothing outside the lab signs it.
 * **The journeys run with `GITHUB_ACTIONS=true`** (their "unattended desktop" switch), which also
   clears the application's per-user state before each launch they make. Persistence is therefore
   checked by CLEAN-006/007/011 directly, not through the journeys.

@@ -17,6 +17,17 @@ Host-side checks, which read what the host itself recorded and so owe nothing to
     the DNS names it asked for are recorded as EVIDENCE only - the capture cannot say which process
     sent a frame, and Windows itself calls Microsoft - with one rule: a DNS question for a name
     containing "encastra" fails the cycle;
+  * plan.json, expected.json and harness-manifest.json in the cycle directory must hash to what
+    lab.sh recorded from the disc it built (harness.sha256): they are the files the VM was given;
+  * the serial line (QEMU's capture, which the guest cannot rewrite afterwards) must agree with
+    them: every BOOT line's cycle, mode and injected faults, the CLEANVM-DONE cycle, and the
+    installer digests CLEAN-002 computed for the candidate and the upgrade source. A cycle directory
+    copied under another name, or a plan edited after the run, disagrees with its own serial line;
+    a guest told it ran a LOCAL DEV BUILD is never acceptance;
+  * all the cycles judged together are ONE run: the same installer, base image and harness commit,
+    negative cycles included (they prove that THIS harness sees faults);
+  * the acceptance cycles run the journeys no weaker than make_harness.py's defaults
+    (repeat >= 3, at least 100 PASS lines per iteration);
   * for CLEAN-012 and CLEAN-013, the WebView2 profile databases the guest copied out after the
     uninstall are opened (read-only, on a temporary copy) and any row in logins, cookies, autofill
     or credit_cards fails the scenario.
@@ -103,8 +114,15 @@ REQUIRED = {
                             "final inventory is populated"],
 }
 
-SERIAL_ASSERT = re.compile(r"^\S+ (PASS|FAIL) (\S+) (.*?) -> ")
+SERIAL_ASSERT = re.compile(r"^\S+ (PASS|FAIL) (\S+) (.*?) -> (.*)$")
 SERIAL_RESULT = re.compile(r"^\S+ RESULT (\S+) (\S+) assertions=(\d+) failed=(\d+)")
+# What the guest said it was, on the channel the host captured (entry.ps1): every boot, and the end.
+SERIAL_BOOT = re.compile(r"^\S+ BOOT cycle=(\S*) boot=\d+ next=\d+ mode=(\S*) inject=(\S*)$")
+SERIAL_DONE = re.compile(r"^\S+ CLEANVM-DONE cycle=(\S*)")
+# The digest CLEAN-002 computed, as the guest printed it (scenarios.ps1).
+SHA_ASSERTION = "installer sha256 is the published digest"
+# make_harness.py's defaults. An acceptance cycle may be stricter, never weaker.
+MIN_JOURNEYS_REPEAT, MIN_JOURNEYS_PASS = 3, 100
 SUMMARY_RE = re.compile(r"^SUMMARY\s+passed=(\d+) failed=(\d+) skipped=(\d+)\s+repeat=(\d+)\s+stamp=(\S+)")
 
 # QEMU options that create (or name) a network backend. A backend that is not restricted user
@@ -152,6 +170,7 @@ class Cycle:
     netdev: list[str] = field(default_factory=list)
     network: dict = field(default_factory=dict)
     network_problems: list[str] = field(default_factory=list)
+    dev_build_on_serial: bool = False
 
 
 def load_json(p: pathlib.Path):
@@ -170,6 +189,39 @@ def parse_serial(text: str) -> tuple[dict[str, list[tuple[str, str]]], dict[str,
         if m:
             asserts.setdefault(m.group(2), []).append((m.group(1), m.group(3)))
     return asserts, results
+
+
+def serial_identity(text: str, plan: dict, expected: dict) -> tuple[list[str], bool]:
+    """Problems between what the host captured on COM1 and what the cycle directory claims, and
+    whether the guest was told it was running a local dev build.
+
+    plan.json and expected.json live on the host and could be edited after the run; the serial log
+    is what QEMU wrote while the VM ran. So the cycle name, mode and injected faults are taken from
+    the BOOT lines, and the installer digest from the one CLEAN-002 computed, and each must agree
+    with the files. A copy of cycle A renamed B still says cycle=A on its serial line.
+    """
+    problems: list[str] = []
+    lines = [l.rstrip() for l in text.splitlines()]
+    want = (str(plan.get("cycle")), str(plan.get("mode")), ",".join(str(i) for i in (plan.get("inject") or [])))
+    boots = [m.groups() for m in (SERIAL_BOOT.match(l) for l in lines) if m]
+    if not boots:
+        problems.append("the serial line has no BOOT line: nothing the host captured says which cycle this was")
+    for got in boots:
+        if got != want:
+            problems.append(f"serial BOOT says cycle={got[0]} mode={got[1]} inject={got[2]}; plan.json says cycle={want[0]} mode={want[1]} inject={want[2]}")
+            break
+    for m in (SERIAL_DONE.match(l) for l in lines):
+        if m and m.group(1) != want[0]:
+            problems.append(f"serial CLEANVM-DONE says cycle={m.group(1)}; plan.json says {want[0]}")
+            break
+    # scenarios.ps1 Test-Artifact labels each installer it hashes: the candidate, and in an upgrade
+    # cycle the version it upgrades from.
+    for label, key in (("candidate", "installer"), ("upgrade_from", "upgrade_from")):
+        digest = (expected.get(key) or {}).get("sha256")
+        for m in (SERIAL_ASSERT.match(l) for l in lines):
+            if m and m.group(1) == "PASS" and m.group(2) == "CLEAN-002" and m.group(3) == f"{label} {SHA_ASSERTION}" and m.group(4).strip() != digest:
+                problems.append(f"CLEAN-002 computed {m.group(4).strip()[:64]} for the {label} on the serial line; expected.json names {digest}")
+    return problems, any("LOCAL DEV BUILD" in l for l in lines)
 
 
 def check_journeys_log(path: pathlib.Path, expected: dict) -> list[str]:
@@ -590,6 +642,14 @@ def load_cycle(path: pathlib.Path) -> Cycle:
     for f, h in manifest.items():
         if seen.get(f) != h:
             problems.append(f"harness disc file {f}: manifest {h} vs disc {seen.get(f)}")
+    # The plan and the expectations judged here are the ones the VM was given: lab.sh hashed the
+    # disc (harness.sha256) as it built it, and copied these three files out of it.
+    for name in ("plan.json", "expected.json", "harness-manifest.json"):
+        f = path / name
+        if not f.is_file() or seen.get(name) != sha256_file(f):
+            problems.append(f"{name} in the cycle directory is not the file the VM was given (harness.sha256 says {seen.get(name)})")
+    identity_problems, dev_on_serial = serial_identity(serial_text, plan, expected)
+    problems.extend(identity_problems)
     base_sha = ""
     if (path / "base.sha256").exists():
         base_sha = next((l.split()[0] for l in (path / "base.sha256").read_text().splitlines() if l.endswith("base.qcow2")), "")
@@ -600,11 +660,24 @@ def load_cycle(path: pathlib.Path) -> Cycle:
             rec = load_json(rp)
             scenarios[rec["scenario_id"]] = judge_scenario(rec["scenario_id"], rec, serial_a, serial_r, expected, results)
     env = load_json(results / "environment.json") if (results / "environment.json").exists() else {}
-    return Cycle(path, plan["cycle"], plan, expected, scenarios, problems, base_sha, env, netdev, network, network_problems)
+    name = plan.get("cycle")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"{path / 'plan.json'} names no cycle")
+    return Cycle(path, name, plan, expected, scenarios, problems, base_sha, env, netdev, network, network_problems, dev_on_serial)
 
 
 def is_clean_acceptance(c: Cycle) -> list[str]:
     p = []
+    if c.dev_build_on_serial:
+        p.append(f"cycle {c.name}: the guest was told it ran a LOCAL DEV BUILD (serial line), not the published artefact")
+    try:
+        repeat = int(c.plan.get("journeys_repeat") or 0)
+        min_pass = int(c.plan.get("journeys_min_pass_per_iteration") or 0)
+    except (TypeError, ValueError):
+        repeat = min_pass = 0
+    if repeat < MIN_JOURNEYS_REPEAT or min_pass < MIN_JOURNEYS_PASS:
+        weak = [f"{k}={v} < {m}" for k, v, m in (("repeat", repeat, MIN_JOURNEYS_REPEAT), ("min_pass", min_pass, MIN_JOURNEYS_PASS)) if v < m]
+        p.append(f"cycle {c.name} ran the journeys weaker than acceptance allows ({', '.join(weak)})")
     if c.plan.get("inject"):
         p.append(f"cycle {c.name} carried injected faults {c.plan['inject']}")
     if c.plan.get("tamper_installer") or c.plan.get("omit_installer"):
@@ -673,6 +746,9 @@ def discover_cycles(root: pathlib.Path) -> tuple[list[pathlib.Path], list[str]]:
         except (ValueError, KeyError, TypeError):
             problems.append(f"{d.name}: plan.json is unreadable or names no cycle")
             continue
+        if not isinstance(name, str) or not name:
+            problems.append(f"{d.name}: plan.json names no cycle ({name!r})")
+            continue
         if name in seen:
             problems.append(f"cycle {name} is claimed by both {seen[name]} and {d.name}; move the superseded run out of the evidence directory")
             continue
@@ -703,6 +779,17 @@ def judge(cycles: list[Cycle], negative_spec: dict) -> dict:
                           "judge": judge_identity(negative_spec), "cycles": {c.name: cycle_identity(c) for c in cycles}}
     if len(upg) > 1:
         verdict["problems"].append(f"more than one upgrade cycle ({', '.join(c.name for c in upg)}): which one is the evidence is not something to guess")
+    # One run: every cycle judged together - the negative ones too, which prove THIS harness sees
+    # faults - was told about the same installer, booted the same base image and carried the same
+    # harness commit. Negative cycles from another candidate's run prove nothing about this one.
+    for label, key in (("installer", lambda c: tuple((c.expected.get("installer") or {}).get(k) for k in INSTALLER_FIELDS)),
+                       ("base image", lambda c: c.base_sha),
+                       ("harness commit", lambda c: c.plan.get("harness_commit"))):
+        values = {}
+        for c in cycles:
+            values.setdefault(key(c), []).append(c.name)
+        if len(values) > 1:
+            verdict["problems"].append(f"the cycles are not one run: {len(values)} different {label}s ({'; '.join(', '.join(v) for v in values.values())})")
     counted = [c for c in (by_name.get("A"), by_name.get("B")) if c is not None] + upg[:1]
     idents = {tuple((c.expected.get("installer") or {}).get(k) for k in INSTALLER_FIELDS) for c in counted}
     if len(idents) > 1:

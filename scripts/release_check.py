@@ -463,19 +463,22 @@ def check_vm(evidence: pathlib.Path | None, entries: list[dict] | tuple = (), ve
         if fails:
             return Check("clean_vm", FAIL, f"{len(fails)} failed check(s) in {evidence.name}: {fails[0][:120]}")
         return Check("clean_vm", EXTERNAL, f"{evidence.name} is an install_check log: it shows one install, not a Clean VM acceptance (no cycles, no negatives, no artefact binding)", VM_ACTION)
+    try:
+        return _check_vm_cycles(evidence, entries, version, commit)
+    except Exception as error:  # noqa: BLE001 - evidence the gate cannot read is not evidence, and a crash is not a verdict
+        return Check("clean_vm", FAIL, f"the Clean VM evidence could not be judged: {type(error).__name__}: {str(error)[:160]}")
 
+
+def _check_vm_cycles(evidence: pathlib.Path, entries, version: str | None, commit: str | None) -> Check:
     judge = _load_judge()
     dirs, problems = judge.discover_cycles(evidence)
     if problems:
         return Check("clean_vm", FAIL, problems[0])
     if not dirs:
         return Check("clean_vm", FAIL, f"no cycle directory (one holding a plan.json) under {evidence}")
-    try:
-        spec = json.loads((CLEANVM / "negative-spec.json").read_text("utf-8"))
-        cycles = [judge.load_cycle(d) for d in dirs]
-        result = judge.judge(cycles, spec)
-    except Exception as error:  # noqa: BLE001 - evidence that cannot be read is not evidence
-        return Check("clean_vm", FAIL, f"the cycles could not be judged: {type(error).__name__}: {str(error)[:160]}")
+    spec = json.loads((CLEANVM / "negative-spec.json").read_text("utf-8"))
+    cycles = [judge.load_cycle(d) for d in dirs]
+    result = judge.judge(cycles, spec)
     # One acceptance run, nothing beside it: A, B, one upgrade cycle and the negative cycles. A dev
     # build or a superseded run left in the directory is not evidence of this candidate.
     upgrades = [c.name for c in cycles if c.plan.get("mode") == "upgrade" and not c.plan.get("inject")]
@@ -525,6 +528,8 @@ def check_vm(evidence: pathlib.Path | None, entries: list[dict] | tuple = (), ve
                 kept = json.loads(stored.read_text("utf-8-sig"))
             except ValueError:
                 return Check("clean_vm", FAIL, f"{name} is not JSON")
+            if not isinstance(kept, dict):
+                return Check("clean_vm", FAIL, f"{name} is not a verdict object")
             if kept != rederived:
                 differs = next((k for k in sorted(set(kept) | set(rederived)) if kept.get(k) != rederived.get(k)), "?")
                 return Check("clean_vm", FAIL, f"{name} differs from the verdict re-derived from the cycles (first difference: {differs})")

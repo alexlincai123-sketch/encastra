@@ -113,19 +113,18 @@ class Fixture:
         self.results = self.dir / "results"
         (self.results / "scenarios").mkdir(parents=True)
         self.plan = {"cycle": name, "mode": mode, "inject": inject or [], "tamper_installer": False,
-                     "omit_installer": False, "harness_dirty": False}
-        self.serial: list[str] = []
+                     "omit_installer": False, "harness_dirty": False, "journeys_repeat": 3,
+                     "journeys_min_pass_per_iteration": 100, "harness_commit": "c" * 40}
+        self.expected = copy.deepcopy(EXPECTED)
+        # What entry.ps1 prints first on every boot, and last.
+        self.serial: list[str] = [f"t BOOT cycle={name} boot=1 next=0 mode={mode} inject={','.join(inject or [])}"]
         ids = report.FULL_REQUIRED if mode == "full" else report.UPGRADE_REQUIRED
         for sid in ids:
             self.add(sid)
-        self.serial.append("t CLEANVM-DONE")
+        self.serial.append(f"t CLEANVM-DONE cycle={name}")
         (self.results / "environment.json").write_text(json.dumps({"build": "26200.6584", "machine_guid": "g"}))
-        manifest = {"plan.json": "1" * 64}
-        (self.dir / "harness-manifest.json").write_text(json.dumps(manifest))
-        (self.dir / "harness.sha256").write_text(f"{'1' * 64}  ./plan.json\n")
         (self.dir / "base.sha256").write_text(f"{base_sha}  base.qcow2\n")
         (self.dir / "qemu.exit").write_text("0\n")
-        (self.dir / "expected.json").write_text(json.dumps(EXPECTED))
         (self.dir / "qemu.cmdline").write_text(QEMU_CMDLINE.replace("cycles/X", f"cycles/{name}").replace("cleanvm-X", f"cleanvm-{name}"))
         self.write_capture(default_frames(), big_endian=big_endian_capture)
         self.flush()
@@ -134,11 +133,15 @@ class Fixture:
             (s3 / "install-dir.json").write_text(json.dumps([{"path": "encastra-desktop.exe", "sha256": "e" * 64}]))
 
     def add(self, sid: str, names=None, oks=None, result="PASS", evidence=None, serial=True):
-        names = names or [f"{frag} (check)" for frag in report.REQUIRED.get(sid, ["generic check"])]
+        # Named the way scenarios.ps1 names them where the judge reads the name itself.
+        names = names or [f"candidate {frag}" if frag == report.SHA_ASSERTION else f"{frag} (check)"
+                          for frag in report.REQUIRED.get(sid, ["generic check"])]
         oks = oks if oks is not None else [True] * len(names)
+        # CLEAN-002 prints the digest it computed; everything else an opaque value.
+        seen = [SHA if report.SHA_ASSERTION in n else "x" for n in names]
         rec = {"scenario_id": sid, "result": result, "forced_reason": None,
                "artifact": {"file": SETUP, "sha256": SHA, "version": "0.5.0-rc.5"},
-               "assertions": [{"name": n, "ok": o, "observed": "x"} for n, o in zip(names, oks)],
+               "assertions": [{"name": n, "ok": o, "observed": v} for n, o, v in zip(names, oks, seen)],
                "evidence": evidence or []}
         d = self.results / "scenarios" / sid
         d.mkdir(parents=True, exist_ok=True)
@@ -148,9 +151,20 @@ class Fixture:
             rec["evidence"] = [f"scenarios/{sid}/gui-journeys.log"]
             (d / "result.json").write_text(json.dumps(rec))
         if serial:
-            for n, o in zip(names, oks):
-                self.serial.append(f"t {'PASS' if o else 'FAIL'} {sid} {n} -> x")
+            for n, o, v in zip(names, oks, seen):
+                self.serial.append(f"t {'PASS' if o else 'FAIL'} {sid} {n} -> {v}")
             self.serial.append(f"t RESULT {sid} {result} assertions={len(names)} failed={oks.count(False)}")
+
+    def rebind(self, sha: str) -> None:
+        """Turn this cycle into a complete, self-consistent run of another installer."""
+        self.expected["installer"]["sha256"] = sha
+        for d in (self.results / "scenarios").iterdir():
+            rec = self.record(d.name)
+            rec["artifact"]["sha256"] = sha
+            rec["assertions"] = [{**a, "observed": sha} if report.SHA_ASSERTION in a["name"] else a for a in rec["assertions"]]
+            self.write_record(d.name, rec)
+        self.serial = [l.replace(f"-> {SHA}", f"-> {sha}") for l in self.serial]
+        self.flush()
 
     def record(self, sid: str) -> dict:
         return json.loads((self.results / "scenarios" / sid / "result.json").read_text())
@@ -164,9 +178,20 @@ class Fixture:
     def profile(self, sid: str) -> pathlib.Path:
         return self.results / "scenarios" / sid / "webview2-profile"
 
-    def flush(self):
+    def flush(self, rehash: bool = True):
+        """Write the files as lab.sh leaves them: plan.json, expected.json and harness-manifest.json
+        copied off the disc, and harness.sha256 hashed from that disc. `rehash=False` edits the
+        copies after the fact, the way a person editing the cycle directory would."""
         (self.dir / "plan.json").write_text(json.dumps(self.plan))
+        (self.dir / "expected.json").write_text(json.dumps(self.expected))
         (self.dir / "serial.log").write_text("\n".join(self.serial) + "\n")
+        if not rehash:
+            return
+        digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()  # noqa: E731
+        manifest = {n: digest(self.dir / n) for n in ("plan.json", "expected.json")}
+        (self.dir / "harness-manifest.json").write_text(json.dumps(manifest))
+        disc = {**manifest, "harness-manifest.json": digest(self.dir / "harness-manifest.json")}
+        (self.dir / "harness.sha256").write_text("".join(f"{h}  ./{n}\n" for n, h in disc.items()))
 
 
 class ReportTest(unittest.TestCase):
@@ -339,21 +364,98 @@ class ReportTest(unittest.TestCase):
         self.assertNotEqual(before, self.verdict()["subject"]["cycles"]["A"]["evidence_sha256"])
 
     def test_cycles_that_ran_different_installers_are_not_one_acceptance(self):
-        other = json.loads((self.B.dir / "expected.json").read_text())
-        other["installer"]["sha256"] = "9" * 64
-        (self.B.dir / "expected.json").write_text(json.dumps(other))
-        for sid in report.FULL_REQUIRED:  # the records name the artefact they were told about
-            rec = self.B.record(sid); rec["artifact"]["sha256"] = "9" * 64; self.B.write_record(sid, rec)
+        self.B.rebind("9" * 64)  # a complete, self-consistent run - of another build
         v = self.assertNotPass("A on one installer and B on another")
         self.assertTrue(any("one installer" in p for p in v["problems"]), v["problems"])
 
     def test_an_installer_without_an_executable_hash_is_not_a_subject(self):
-        for fixture in (self.A, self.B, self.U):
-            data = json.loads((fixture.dir / "expected.json").read_text())
-            del data["installer"]["exe_sha256"]
-            (fixture.dir / "expected.json").write_text(json.dumps(data))
+        for fixture in (self.A, self.B, self.U, self.N):
+            del fixture.expected["installer"]["exe_sha256"]
+            fixture.flush()
         v = self.assertNotPass("nothing names the executable that was under test")
         self.assertTrue(any("exe_sha256" in p for p in v["problems"]), v["problems"])
+
+    # --- The cycle directory against what the host captured (independent review, rc.6) --------
+
+    def test_a_copy_of_cycle_A_renamed_B_is_refused(self):
+        import shutil
+        shutil.rmtree(self.B.dir)
+        shutil.copytree(self.A.dir, self.B.dir)
+        self.A.dir, a_dir = self.B.dir, self.A.dir  # edit the copy through the fixture's writer...
+        self.A.plan["cycle"] = "B"
+        self.A.flush()  # ...re-hashing everything a person could re-hash
+        self.A.dir, self.A.plan["cycle"] = a_dir, "A"
+        v = self.assertNotPass("one run standing in for A and B")
+        self.assertTrue(any("serial BOOT says cycle=A" in p for p in v["problems"]), v["problems"])
+
+    def test_an_end_line_for_another_cycle_is_refused(self):
+        self.B.serial = [l.replace("CLEANVM-DONE cycle=B", "CLEANVM-DONE cycle=A") for l in self.B.serial]
+        self.B.flush()
+        v = self.assertNotPass("the serial line ends another cycle")
+        self.assertTrue(any("CLEANVM-DONE says cycle=A" in p for p in v["problems"]), v["problems"])
+
+    def test_a_plan_edited_after_the_run_is_refused(self):
+        self.A.plan["journeys_repeat"] = 5
+        self.A.flush(rehash=False)
+        v = self.assertNotPass("plan.json is no longer the file the VM was given")
+        self.assertTrue(any("plan.json in the cycle directory" in p for p in v["problems"]), v["problems"])
+
+    def test_expectations_edited_after_the_run_are_refused(self):
+        self.A.expected["installer"]["version"] = "0.5.0-rc.9"
+        self.A.flush(rehash=False)
+        v = self.assertNotPass("expected.json is no longer the file the VM was given")
+        self.assertTrue(any("expected.json in the cycle directory" in p for p in v["problems"]), v["problems"])
+
+    def test_a_mode_or_fault_list_that_disagrees_with_the_serial_line_is_refused(self):
+        self.N.plan["inject"] = []  # hide the fault, and re-hash the files
+        self.N.flush()
+        cycles = [report.load_cycle(f.dir) for f in (self.A, self.B, self.U, self.N)]
+        self.assertTrue(any("serial BOOT" in p for p in cycles[3].problems), cycles[3].problems)
+
+    def test_a_digest_on_the_serial_line_other_than_the_expected_one_is_fail(self):
+        self.A.serial = [l.replace(f"-> {SHA}", "-> " + "8" * 64) for l in self.A.serial]
+        self.A.flush()
+        v = self.assertNotPass("the guest hashed another installer")
+        self.assertTrue(any("CLEAN-002 computed 8888" in p for p in v["problems"]), v["problems"])
+
+    def test_the_upgrade_source_digest_is_bound_to_its_own_expectation(self):
+        u = self.U
+        u.expected["upgrade_from"] = {"file": "Encastra_0.5.0-rc.4_x64-setup.exe", "sha256": "4" * 64, "version": "0.5.0-rc.4", "tag": "v0.5.0-rc.4"}
+        u.serial.insert(1, f"t PASS CLEAN-002 upgrade_from {report.SHA_ASSERTION} -> {'4' * 64}")
+        u.flush()
+        self.assertEqual(report.serial_identity((u.dir / "serial.log").read_text(), u.plan, u.expected)[0], [],
+                         "a second digest, for the upgrade source, is not the candidate's")
+        u.serial[1] = f"t PASS CLEAN-002 upgrade_from {report.SHA_ASSERTION} -> {'5' * 64}"
+        u.flush()
+        problems = report.serial_identity((u.dir / "serial.log").read_text(), u.plan, u.expected)[0]
+        self.assertTrue(any("for the upgrade_from" in p for p in problems), problems)
+
+    def test_a_dev_build_named_on_the_serial_line_is_not_acceptance(self):
+        self.A.serial = [l.replace("host verified the (check) -> x", "host verified the (check) -> LOCAL DEV BUILD of abc - not a release") for l in self.A.serial]
+        self.A.flush()
+        v = self.assertNotPass("plan.json and expected.json say release, the guest was told dev build")
+        self.assertTrue(any("LOCAL DEV BUILD" in p for p in v["problems"]), v["problems"])
+
+    def test_negative_cycles_from_another_run_are_not_evidence(self):
+        for label, edit in (("installer", lambda n: n.rebind("7" * 64)),
+                            ("base image", lambda n: (n.dir / "base.sha256").write_text(f"{'d' * 64}  base.qcow2\n")),
+                            ("harness commit", lambda n: (n.plan.__setitem__("harness_commit", "e" * 40), n.flush()))):
+            with self.subTest(label):
+                self.tmp.cleanup()
+                self.setUp()
+                edit(self.N)
+                v = self.assertNotPass(f"a negative cycle with another {label}")
+                self.assertTrue(any(f"different {label}s" in p for p in v["problems"]), v["problems"])
+
+    def test_journeys_weaker_than_acceptance_are_not_acceptance(self):
+        for key, value in (("journeys_repeat", 1), ("journeys_min_pass_per_iteration", 0)):
+            with self.subTest(key):
+                self.tmp.cleanup()
+                self.setUp()
+                self.B.plan[key] = value
+                self.B.flush()
+                v = self.assertNotPass(f"{key}={value}")
+                self.assertTrue(any("weaker than acceptance" in p for p in v["problems"]), v["problems"])
 
     def test_two_upgrade_cycles_are_ambiguous(self):
         u2 = Fixture(self.root, "U2", mode="upgrade")

@@ -150,16 +150,10 @@ class VmGateTests(unittest.TestCase):
     def test_cycles_that_ran_different_installers_cannot_pass(self) -> None:
         # B is a complete, self-consistent run - of another build. Every record in it agrees with
         # its own expected.json, so only the cross-cycle identity can catch it.
-        data = json.loads((self.B.dir / "expected.json").read_text())
-        data["installer"]["sha256"] = "9" * 64
-        (self.B.dir / "expected.json").write_text(json.dumps(data))
-        for sid in report.FULL_REQUIRED:
-            rec = self.B.record(sid)
-            rec["artifact"]["sha256"] = "9" * 64
-            self.B.write_record(sid, rec)
+        self.B.rebind("9" * 64)
         check = self.gate()
         self.assertEqual(check.status, release_check.FAIL)
-        self.assertIn("one installer", check.evidence)
+        self.assertIn("different installers", check.evidence)
 
     # --- the gate does not take the judge's word for it ------------------------------------------
 
