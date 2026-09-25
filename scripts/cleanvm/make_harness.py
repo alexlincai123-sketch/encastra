@@ -139,20 +139,55 @@ def verify_release(tag: str, setup: pathlib.Path, exe: pathlib.Path, sums: pathl
     }
 
 
+def verify_dev_build(setup: pathlib.Path, exe: pathlib.Path) -> dict:
+    """A local build of this checkout - evidence that a fix works on a clean machine, never a release.
+
+    Its identity is what can be checked here: the tracked tree is clean, the executable is stamped
+    with HEAD (not `-dirty`), and the installer is the one tauri:build just wrote beside it. The
+    disc says so, the plan says so, and report.py refuses such a cycle as acceptance evidence.
+    """
+    head = git("rev-parse", "HEAD")
+    if git("status", "--porcelain", "--untracked-files=no"):
+        raise Refused("the tracked tree is dirty; a dev build must be of a commit")
+    data = exe.read_bytes()
+    stamp = re.search(rb"encastra-build-commit=([0-9a-f]{40})(-dirty)?;", data)
+    if not stamp or stamp.group(2) or stamp.group(1).decode() != head:
+        raise Refused(f"dev executable stamp {stamp.group(0) if stamp else None!r} is not HEAD {head}")
+    version = json.loads((ROOT / "apps" / "desktop" / "src-tauri" / "tauri.conf.json").read_text())["version"]
+    if f"Encastra_{version}_x64-setup.exe" != setup.name:
+        raise Refused(f"{setup.name} is not the installer tauri:build writes for version {version}")
+    return {
+        "file": setup.name, "sha256": sha256(setup), "version": version, "build_commit": head,
+        "exe_sha256": sha256(exe), "installed_exe_sha256": hashlib.sha256(installed_exe_bytes(data)).hexdigest(),
+        "signature": "NotSigned", "tag": None, "tag_commit": head, "github_release": False,
+        "dev_build": True, "host_verified": True,
+        "host_evidence": [f"LOCAL DEV BUILD of {head} - not a release", "tracked tree clean", f"executable stamped {head[:12]}",
+                          f"installer name matches version {version}"],
+    }
+
+
 def build(args: argparse.Namespace) -> int:
     out = pathlib.Path(args.out)
     if out.exists():
         raise Refused(f"{out} exists; each cycle gets a new disc")
-    rel = pathlib.Path(args.release_dir)
-    setup = next(rel.glob("Encastra_*_x64-setup.exe"))
-    exe = rel / "encastra-desktop.exe"
-    sums = rel / "SHA256SUMS"
-    cand = verify_release(args.tag, setup, exe, sums)
+    if args.dev_setup:
+        setup, exe = pathlib.Path(args.dev_setup), pathlib.Path(args.dev_exe)
+        cand = verify_dev_build(setup, exe)
+        sums = None
+    else:
+        rel = pathlib.Path(args.release_dir)
+        setup = next(rel.glob("Encastra_*_x64-setup.exe"))
+        exe = rel / "encastra-desktop.exe"
+        sums = rel / "SHA256SUMS"
+        cand = verify_release(args.tag, setup, exe, sums)
     cand["sums_file"] = "SHA256SUMS"
     expected = {"installer": cand}
     (out / "artifacts").mkdir(parents=True)
     shutil.copy2(setup, out / "artifacts" / setup.name)
-    shutil.copy2(sums, out / "artifacts" / "SHA256SUMS")
+    if sums is not None:
+        shutil.copy2(sums, out / "artifacts" / "SHA256SUMS")
+    else:
+        (out / "artifacts" / "SHA256SUMS").write_text(f"{cand['sha256']}  {setup.name}\n{cand['exe_sha256']}  {exe.name}\n", newline="\n")
     if args.mode == "upgrade":
         a_setup, a_exe = pathlib.Path(args.upgrade_from_setup), pathlib.Path(args.upgrade_from_exe)
         a = verify_release(args.upgrade_from_tag, a_setup, a_exe, None)
@@ -178,6 +213,7 @@ def build(args: argparse.Namespace) -> int:
         "cycle": args.cycle, "mode": args.mode, "steps": steps, "inject": args.inject,
         "tamper_installer": args.tamper_installer, "omit_installer": args.omit_installer,
         "journeys_repeat": args.repeat, "journeys_min_pass_per_iteration": args.min_pass,
+        "dev_build": bool(args.dev_setup),
         "harness_commit": git("rev-parse", "HEAD"), "harness_dirty": bool(git("status", "--porcelain", "--", "scripts/cleanvm", "scripts/verify")),
     }
     if args.critical is not None:
@@ -198,7 +234,9 @@ def main() -> int:
     ap.add_argument("--steps", help="comma-separated steps instead of the mode's plan (negative cycles)")
     ap.add_argument("--critical", help="comma-separated critical steps (default: CLEAN-001,002,003)")
     ap.add_argument("--tag", default="v0.5.0-rc.5")
-    ap.add_argument("--release-dir", required=True)
+    ap.add_argument("--release-dir", help="a `gh release download` of --tag (the artefact under acceptance)")
+    ap.add_argument("--dev-setup", help="a LOCAL build's installer instead of a release (evidence for a fix; never acceptance)")
+    ap.add_argument("--dev-exe", help="the encastra-desktop.exe of that local build")
     ap.add_argument("--upgrade-from-tag", default="v0.5.0-rc.4")
     ap.add_argument("--upgrade-from-setup")
     ap.add_argument("--upgrade-from-exe")
@@ -209,6 +247,10 @@ def main() -> int:
     ap.add_argument("--tamper-installer", action="store_true")
     ap.add_argument("--omit-installer", action="store_true")
     args = ap.parse_args()
+    if bool(args.dev_setup) == bool(args.release_dir) or bool(args.dev_setup) != bool(args.dev_exe):
+        ap.error("give either --release-dir, or --dev-setup with --dev-exe")
+    if args.dev_setup and args.mode == "upgrade":
+        ap.error("an upgrade cycle upgrades between published versions only")
     try:
         return build(args)
     except Refused as e:

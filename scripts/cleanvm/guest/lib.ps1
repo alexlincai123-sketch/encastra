@@ -168,7 +168,10 @@ function Start-App([switch]$Cdp, [hashtable]$ExtraEnv) {
     $psi.UseShellExecute = $false
     # A clean child environment: this harness's PATH carries nothing of the harness disc.
     $psi.Environment['PATH'] = $script:CleanPath
-    $psi.Environment.Remove('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS') | Out-Null
+    # Nothing of the harness in the product's environment: the debugging flag (added back below
+    # only when asked for), the execution-policy override the harness itself runs under, and the
+    # CI switch gui_journeys reads.
+    foreach ($k in 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS', 'PSExecutionPolicyPreference', 'GITHUB_ACTIONS') { $psi.Environment.Remove($k) | Out-Null }
     if ($Cdp) { $psi.Environment['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = "--remote-debugging-port=$($script:CdpPort)" }
     if ($ExtraEnv) { foreach ($k in $ExtraEnv.Keys) { $psi.Environment[$k] = [string]$ExtraEnv[$k] } }
     [System.Diagnostics.Process]::Start($psi)
@@ -248,15 +251,36 @@ function Get-Inventory([switch]$NoNameScan) {
             Get-ChildItem -LiteralPath $d -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } }))
     # Per-user service instances (AarSvc_1a2b3, BcastDVRUserService_...) get a new suffix for every
     # logon session; the suffix is replaced so a restart does not read as a change of services.
-    # A service that appears or disappears is always a change. A START MODE change is judged only
-    # for services whose binary is outside Windows: Windows flips its own (BITS Auto->Manual, PcaSvc
-    # Manual->Auto were both seen with nothing installed that could touch them); those are kept in
-    # services_windows_start as evidence and not compared.
+    # A service that appears or disappears is always a change, and so is any change of start mode -
+    # except for the two Windows services seen flipping their own start mode with nothing installed
+    # that could touch them (BITS Auto->Manual, PcaSvc Manual->Auto). Named, not a whole class.
     $svc = @(Get-CimInstance Win32_Service)
     $inv.services = @($svc | ForEach-Object { "$($_.Name -replace '_[0-9a-f]{4,8}$', '_<session>')|$($_.PathName)" } | Sort-Object -Unique)
     $isWin = { param($s) ([string]$s.PathName).TrimStart('"') -like "$env:SystemRoot\*" }
     $inv.services_thirdparty_start = @($svc | Where-Object { -not (& $isWin $_) } | ForEach-Object { "$($_.Name)|$($_.StartMode)|$($_.PathName)" } | Sort-Object -Unique)
-    $inv.services_windows_start = @($svc | Where-Object { & $isWin $_ } | ForEach-Object { "$($_.Name -replace '_[0-9a-f]{4,8}$', '_<session>')|$($_.StartMode)" } | Sort-Object -Unique)
+    $inv.services_windows_start = @($svc | Where-Object { (& $isWin $_) -and $_.Name -notin 'BITS', 'PcaSvc' } | ForEach-Object { "$($_.Name -replace '_[0-9a-f]{4,8}$', '_<session>')|$($_.StartMode)" } | Sort-Object -Unique)
+    # Per-user and machine autostart points beyond Run/RunOnce and the Startup folders.
+    $inv.autostart_extra = @(@(foreach ($pair in @(
+                    @('HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon', 'Shell'),
+                    @('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon', 'Shell'),
+                    @('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon', 'Userinit'),
+                    @('HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows', 'Load'),
+                    @('HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows', 'Run'),
+                    @('HKCU:\Software\Microsoft\Command Processor', 'AutoRun'),
+                    @('HKLM:\SOFTWARE\Microsoft\Command Processor', 'AutoRun'),
+                    @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders', 'Startup'))) {
+                $p = Get-ItemProperty -LiteralPath $pair[0] -ErrorAction SilentlyContinue
+                $v = if ($p -and (@($p.PSObject.Properties | ForEach-Object { $_.Name }) -contains $pair[1])) { $p.($pair[1]) } else { '(absent)' }
+                "$($pair[0])|$($pair[1])=$v" }) | Sort-Object)
+    # Application registration: App Paths and RegisteredApplications, per user and per machine.
+    $inv.registration = @(@(foreach ($k in 'HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths') {
+                Get-ChildItem -LiteralPath $k -ErrorAction SilentlyContinue | ForEach-Object { "$k\$($_.PSChildName)" } }) +
+        @(foreach ($k in 'HKCU:\Software\RegisteredApplications', 'HKLM:\SOFTWARE\RegisteredApplications') {
+                $p = Get-ItemProperty -LiteralPath $k -ErrorAction SilentlyContinue
+                if ($p) { foreach ($prop in $p.PSObject.Properties) { if ($prop.Name -notmatch '^PS') { "$k|$($prop.Name)" } } } }) | Sort-Object)
+    # The top of %TEMP%, as evidence of what an installer or uninstaller left there (not compared:
+    # Windows and PowerShell write there constantly).
+    $inv.temp_top = @(Get-ChildItem -LiteralPath $env:TEMP -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object)
     $inv.scheduled_tasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue | ForEach-Object { "$($_.TaskPath)$($_.TaskName)" } | Sort-Object)
     $inv.uninstall_entries = @(@(foreach ($k in 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall') {
             Get-ChildItem -LiteralPath $k -ErrorAction SilentlyContinue | ForEach-Object {
@@ -283,8 +307,14 @@ function Get-Inventory([switch]$NoNameScan) {
     $inv
 }
 
-function Save-Inventory([string]$label) {
-    $inv = Get-Inventory
+# Every surface that must look, after uninstall and at the end, exactly as the baseline had it.
+# (hkcu_software is judged separately: Tauri keeps one key there with the user data.)
+$script:PersistenceSurfaces = @('run_keys', 'autostart_extra', 'startup_items', 'services', 'services_thirdparty_start',
+    'services_windows_start', 'scheduled_tasks', 'uninstall_entries', 'shortcuts', 'firewall_rules', 'environment',
+    'hkcu_classes', 'hklm_software', 'registration', 'webview2_policies')
+
+function Save-Inventory([string]$label, [switch]$NoNameScan) {
+    $inv = Get-Inventory -NoNameScan:$NoNameScan
     Save-Json $inv (Join-Path $script:R "inventory\$label.json")
     $inv
 }

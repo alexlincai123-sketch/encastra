@@ -150,8 +150,14 @@ cycle() {
   local pump=$!
   qemu_run "$C" "$C/overlay.qcow2" \
     -drive id=cd0,file="$C/harness.iso",if=none,media=cdrom,readonly=on -device ide-cd,drive=cd0,bus=ahci.1 \
-    -drive id=res,file="$C/results.img",if=none,format=raw -device ide-hd,drive=res,bus=ahci.2 &
+    -drive id=res,file="$C/results.img",if=none,format=raw -device ide-hd,drive=res,bus=ahci.2 \
+    -object filter-dump,id=cap0,netdev=n0,file="$C/net.pcap" &
   local qpid=$!
+  # The command line the VM really ran with (report.py requires restrict=on in it), and every
+  # frame the guest sent (net.pcap): restricted networking stops traffic, the capture records it.
+  local qp=''
+  for _ in $(seq 30); do qp=$(pgrep -f -- "-name cleanvm-$name" | head -1); [ -n "$qp" ] && break; sleep 0.5; done
+  if [ -n "$qp" ]; then tr '\0' ' ' < "/proc/$qp/cmdline" > "$C/qemu.cmdline"; else log "cycle $name: QEMU command line not found"; fi
   ( sleep "$TIMEOUT"; kill -TERM "$qpid" 2>/dev/null && echo timeout > "$C/timed-out" ) &
   local guard=$!
   set +e; wait "$qpid"; local rc=$?; set -e

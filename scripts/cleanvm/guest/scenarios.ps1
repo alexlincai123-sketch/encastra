@@ -14,6 +14,17 @@ $DEV_DIRS = @(
 )
 $DEV_ENV = 'CARGO_HOME', 'RUSTUP_HOME', 'NODE_PATH', 'NVM_HOME', 'VSINSTALLDIR', 'VCToolsInstallDir', 'WindowsSdkDir', 'RUSTFLAGS'
 
+# "Unchanged" means something only if the list was read at all: a query that failed silently
+# (every inventory query runs with -ErrorAction SilentlyContinue, as a standard user) gives an
+# empty list twice, and two empty lists are equal. So each inventory has to be populated to a
+# floor a stock Windows 11 is far above, and must contain the harness's own Run value.
+function Assert-InventoryPopulated($inv, [string]$label) {
+    $floors = [ordered]@{ services = 100; services_windows_start = 100; scheduled_tasks = 50; firewall_rules = 100; uninstall_entries = 5; hklm_software = 5; environment = 5; hkcu_software = 3; autostart_extra = 8 }
+    $short = @(foreach ($k in $floors.Keys) { $n = @(Prop $inv $k).Count; if ($n -lt $floors[$k]) { "$k=$n<$($floors[$k])" } })
+    Check "$label inventory is populated (each surface read, not an empty failure)" ($short.Count -eq 0) (($floors.Keys | ForEach-Object { "$_>=$($floors[$_])" }) -join ' ') $(if ($short.Count) { $short -join ' ' } else { (($floors.Keys | ForEach-Object { "$_=$(@(Prop $inv $_).Count)" }) -join ' ') })
+    Check "$label inventory sees the harness's own Run value (CleanVmAgent)" (@(@(Prop $inv 'run_keys') | Where-Object { $_ -match '\|CleanVmAgent=' }).Count -eq 1) 'present' (Short (Prop $inv 'run_keys'))
+}
+
 function Get-WorkDir { $d = Join-Path $env:LOCALAPPDATA 'cleanvm-work'; if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force $d | Out-Null }; $d }
 
 function Get-EncastraUninstallEntries {
@@ -195,7 +206,8 @@ function Scenario-CLEAN001 {
         Observe 'webview2_runtime' $envRec.webview2_runtime
         Observe 'machine_guid' $envRec.machine_guid
         Set-Content -LiteralPath $marker -Value "cycle $($script:Plan.cycle) started $(Now)"
-        Save-Inventory 'baseline' | Out-Null
+        $baseInv = Save-Inventory 'baseline'
+        Assert-InventoryPopulated $baseInv 'baseline'
     }
 }
 
@@ -211,7 +223,8 @@ function Test-Artifact($art, [string]$label) {
     $sums = Join-Path $script:H "artifacts\$($art.sums_file)"
     $line = if (Test-Path -LiteralPath $sums) { Get-Content -LiteralPath $sums | Where-Object { $_ -match [regex]::Escape($art.file) } | Select-Object -First 1 } else { $null }
     Check "$label SHA256SUMS on the disc names this digest for this file" ($null -ne $line -and $line -match "^$($art.sha256)\s") "$($art.sha256)  $($art.file)" (Short $line)
-    Check "$label host verified the published identity (release digest = SHA256SUMS = RELEASE.md at the tag)" ([bool]$art.host_verified) 'true' (Short $art.host_evidence)
+    $idWhat = if ([bool](Prop $art 'dev_build')) { "LOCAL DEV BUILD's identity (tracked tree clean, stamp = HEAD) - not a release" } else { 'published identity (release digest = SHA256SUMS = RELEASE.md at the tag)' }
+    Check "$label host verified the $idWhat" ([bool]$art.host_verified) 'true' (Short $art.host_evidence)
     $sig = Get-AuthenticodeSignature -LiteralPath $path
     Check "$label signature state is the documented one ($($art.signature))" ([string]$sig.Status -eq $art.signature) $art.signature $sig.Status
     # Where a person would have it: a copy in Downloads, re-hashed after the copy.
@@ -273,7 +286,7 @@ function Assert-InstallFootprint($before, $after, [string]$what) {
     $d = Diff-List $before.uninstall_entries $after.uninstall_entries
     $enc = @($d.added | Where-Object { $_ -match '\|Encastra$' })
     Check "$what adds exactly one Encastra uninstall entry, under HKCU" ($enc.Count -eq 1 -and $enc[0] -like 'HKCU:*' -and @($d.added).Count -eq 1 -and @($d.removed).Count -eq 0) 'one HKCU entry' (Short $d)
-    foreach ($cat in 'run_keys', 'startup_items', 'services', 'services_thirdparty_start', 'scheduled_tasks', 'firewall_rules', 'environment', 'hkcu_classes', 'hklm_software', 'webview2_policies') {
+    foreach ($cat in @($script:PersistenceSurfaces | Where-Object { $_ -notin 'uninstall_entries', 'shortcuts' })) {
         $dd = Diff-List $before.$cat $after.$cat
         Check "$what leaves $cat unchanged" (@($dd.added).Count -eq 0 -and @($dd.removed).Count -eq 0) 'no change' (Short $dd)
     }
@@ -300,6 +313,14 @@ function Scenario-CLEAN003 {
         Evidence 'install-dir.json' $listing | Out-Null
         Observe 'installed_files' @($listing | ForEach-Object { $_.path })
         Check 'install directory holds the executable and the uninstaller' (@($listing | Where-Object { $_.path -in 'encastra-desktop.exe', 'uninstall.exe' }).Count -eq 2) 'encastra-desktop.exe, uninstall.exe' (Short ($listing | ForEach-Object { $_.path }))
+        # What really keeps HKLM, services and machine-wide state out of reach is that nothing runs
+        # elevated: both the installer and the uninstaller it leaves must ask for no more than the
+        # caller has (requestedExecutionLevel asInvoker in their embedded manifests).
+        foreach ($pe in @(@('installer', $st.installer_copy), @('uninstaller', $script:Uninstaller))) {
+            $txt = if (Test-Path -LiteralPath $pe[1]) { [IO.File]::ReadAllText($pe[1], [Text.Encoding]::GetEncoding(28591)) } else { '' }
+            $lvl = [regex]::Match($txt, 'requestedExecutionLevel\s+level="([A-Za-z]+)"').Groups[1].Value
+            Check "the $($pe[0]) asks for no elevation (manifest requestedExecutionLevel asInvoker)" ($lvl -eq 'asInvoker') 'asInvoker' $(if ($lvl) { $lvl } else { 'no manifest level found' })
+        }
         $acl = (& icacls.exe $script:InstallDir) -join ' | '
         Observe 'install_dir_acl' $acl
         $after = Save-Inventory 'post-install'
@@ -673,7 +694,8 @@ function Scenario-CLEAN009 {
                     $s = Cdp 'eval' "(async()=>{const g=$gj;try{await window.__TAURI_INTERNALS__.invoke('save_project',{path:$(JsStr $case.path),name:'x',graph:g,label:null});return {ok:true};}catch(e){return {ok:false,error:e};}})()" 60000
                     $res = if ($s.ok) { [pscustomobject]@{ ok = [bool]$s.value.ok; transport = $null; error = $(if (@($s.value.PSObject.Properties | ForEach-Object { $_.Name }) -contains 'error') { $s.value.error } else { $null }); value = $null } } else { [pscustomobject]@{ ok = $false; transport = $s.error; error = $null; value = $null } }
                     Test-Refused $case.what $res '^project/io/'
-                    Check "$($case.what): nothing written" (-not (Test-Path -LiteralPath $case.path)) 'absent' (Test-Path -LiteralPath $case.path)
+                    $tmp = [IO.Path]::ChangeExtension($case.path, 'encastra-writing')
+                    Check "$($case.what): nothing written (neither the file nor its .encastra-writing temporary)" (-not (Test-Path -LiteralPath $case.path) -and -not (Test-Path -LiteralPath $tmp)) 'both absent' "file=$(Test-Path -LiteralPath $case.path) temporary=$(Test-Path -LiteralPath $tmp)"
                 }
                 $ro = Join-Path $work 'read-only.encastra'
                 Copy-Item -LiteralPath $oddFile -Destination $ro -Force
@@ -683,6 +705,10 @@ function Scenario-CLEAN009 {
                 $res = if ($s.ok) { [pscustomobject]@{ ok = [bool]$s.value.ok; transport = $null; error = $(if (@($s.value.PSObject.Properties | ForEach-Object { $_.Name }) -contains 'error') { $s.value.error } else { $null }); value = $null } } else { [pscustomobject]@{ ok = $false; transport = $s.error; error = $null; value = $null } }
                 Test-Refused 'save_project over a read-only file' $res '^project/io/'
                 Check 'the read-only file is unchanged' ((Sha256 $ro) -eq $roSha) $roSha (Sha256 $ro)
+                # The save writes beside the target first and moves into place (Project::save); a
+                # failed move must not leave that copy behind. (RC5 does: found by this check.)
+                $roTmp = [IO.Path]::ChangeExtension($ro, 'encastra-writing')
+                Check 'a refused save leaves no .encastra-writing temporary beside the target' (-not (Test-Path -LiteralPath $roTmp)) 'absent' "$roTmp exists=$(Test-Path -LiteralPath $roTmp)"
                 (Get-Item -LiteralPath $ro).IsReadOnly = $false
             }
         }
@@ -769,6 +795,17 @@ function Invoke-Uninstall([string]$label) {
     Check "$label no application process before uninstalling" ($left -eq 0) 0 $left
     Check "$label uninstaller present" (Test-Path -LiteralPath $script:Uninstaller) $script:Uninstaller (Test-Path -LiteralPath $script:Uninstaller)
     $tag = $label -replace '[^A-Za-z0-9]+', '-'
+    # The machine while the product is installed and has been used, just before it goes: anything
+    # the application created at run time and the uninstaller then removed (an autostart value, a
+    # scheduled task) is visible here and nowhere else. Only the installation's own footprint may
+    # differ from the baseline.
+    $base = Load-Json (Join-Path $script:R 'inventory\baseline.json')
+    $inUse = Save-Inventory "pre-$($tag.Trim('-'))" -NoNameScan
+    foreach ($cat in $script:PersistenceSurfaces) {
+        if ($cat -in 'uninstall_entries', 'shortcuts') { continue }
+        $dd = Diff-List (Prop $base $cat) $inUse.$cat
+        Check "$label while installed and used, $cat is as the baseline had it" (@($dd.added).Count -eq 0 -and @($dd.removed).Count -eq 0) 'no change' (Short $dd)
+    }
     $t0 = Get-Date
     $p = Start-Process -FilePath $script:Uninstaller -ArgumentList '/S' -PassThru
     $null = $p.Handle
@@ -811,6 +848,19 @@ function Invoke-Uninstall([string]$label) {
     $cred = @($kept | Where-Object { $_ -notmatch '\\EBWebView\\' -and $_ -match '(?i)(token|credential|password|secret|\.pem$|\.key$|\.pfx$)' })
     Check "$label no credential-like file among the user data that is kept" ($cred.Count -eq 0) 0 (Short $cred)
     Observe "$($tag)user_data_files_kept" $kept.Count
+    # The WebView2 profile is where a browser would keep credentials; its databases go to the host,
+    # where report.py counts the rows in logins, cookies, autofill and credit_cards (the guest has no
+    # SQLite). Absent means the profile never created that database.
+    $prof = Join-Path $script:AppDataLocal 'EBWebView\Default'
+    $dbDir = Join-Path $script:ScenarioDir 'webview2-profile'
+    New-Item -ItemType Directory -Force -Path $dbDir | Out-Null
+    foreach ($db in @(@('Login Data', 'Login Data'), @('Network\Cookies', 'Cookies'), @('Web Data', 'Web Data'))) {
+        $src = Join-Path $prof $db[0]
+        if (Test-Path -LiteralPath $src) {
+            Copy-Item -LiteralPath $src -Destination (Join-Path $dbDir $db[1]) -Force
+            [void]$script:Cur.evidence.Add("scenarios/$($script:Cur.scenario_id)/webview2-profile/$($db[1])")
+        }
+    }
     Test-KeptRegistry $label
 }
 
@@ -841,7 +891,7 @@ function Scenario-CLEAN012 {
         Invoke-Uninstall 'uninstall:'
         $base = Load-Json (Join-Path $script:R 'inventory\baseline.json')
         $now = Save-Inventory 'post-uninstall'
-        foreach ($cat in 'run_keys', 'startup_items', 'services', 'services_thirdparty_start', 'scheduled_tasks', 'uninstall_entries', 'shortcuts', 'firewall_rules', 'environment', 'hkcu_classes', 'hklm_software', 'webview2_policies') {
+        foreach ($cat in $script:PersistenceSurfaces) {
             $dd = Diff-List $base.$cat $now.$cat
             Check "after uninstall, $cat is as the baseline had it" (@($dd.added).Count -eq 0 -and @($dd.removed).Count -eq 0) 'no change' (Short $dd)
         }
@@ -974,7 +1024,11 @@ function Scenario-CONTAMINATION {
         Expect 'every persistence surface equals the baseline; the only Encastra-named paths left are the documented user data and the harness''s own folders'
         $base = Load-Json (Join-Path $script:R 'inventory\baseline.json')
         $now = Save-Inventory 'final'
-        foreach ($cat in 'run_keys', 'startup_items', 'services', 'services_thirdparty_start', 'scheduled_tasks', 'uninstall_entries', 'shortcuts', 'firewall_rules', 'environment', 'hkcu_classes', 'hklm_software', 'webview2_policies') {
+        Assert-InventoryPopulated $now 'final'
+        $dtemp = Diff-List (Prop $base 'temp_top') $now.temp_top
+        Observe 'temp_top_added' @($dtemp.added)
+        Evidence 'temp-top-diff.json' $dtemp | Out-Null
+        foreach ($cat in $script:PersistenceSurfaces) {
             $dd = Diff-List $base.$cat $now.$cat
             Check "$cat unchanged from the baseline" (@($dd.added).Count -eq 0 -and @($dd.removed).Count -eq 0) 'no change' (Short $dd)
         }
