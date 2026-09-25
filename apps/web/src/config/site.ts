@@ -103,16 +103,16 @@ export const RELEASE: {
   installerFormat: string;
 } = {
   /** Exactly as published in docs/RELEASE.md. */
-  installerFilename: 'Encastra_0.5.0-rc.5_x64-setup.exe',
-  installerVersion: '0.5.0-rc.5',
+  installerFilename: 'Encastra_0.5.0-rc.6_x64-setup.exe',
+  installerVersion: '0.5.0-rc.6',
   installerSize: '3.5 MB',
-  installerSha256: 'afaec18b217d66171a5c9c9f530d94b6e7e591ca61af18a3101733cb01674f10',
+  installerSha256: '3085bff8d54873db5ed916b193b22112bb8244055651ba6d4ec2d5a9214ed248',
   binaryFilename: 'encastra-desktop.exe',
   binarySize: '9.4 MB',
-  binarySha256: '14dc5d615676830ce34882fe663f64f56be32910047b20f3d20a65fdd1a40402',
-  builtOn: '2026-09-23',
+  binarySha256: 'afd091c4897d578ebc0a4ddbc9d95fb9b47d399169a9d07c571217e59e18b377',
+  builtOn: '2026-09-25',
   builtFor: 'Windows X64',
-  commit: '1ce8e864da3eba12043684d86f4accf51707e519',
+  commit: '8803a4fa3a3e20ff5372efb33399b0131f0e45fc',
   signed: false,
   /** Installer format. Per user, no administrator required. See docs/RELEASE.md. */
   installerFormat: 'NSIS',
