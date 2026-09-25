@@ -52,7 +52,9 @@ MUTANTS = {
     "M31 IPv6 frames ignored": ('        elif etype == 0x86DD:\n', '        elif False:\n'),
     "M32 negative cycle network ignored": ('        if c.network_problems:', '        if False:'),
     "M33 profile not checked": ('    if sid in PROFILE_SCENARIOS:', '    if False:'),
-    "M34 kept credential rows ignored": ('            if n:\n                problems.append(f"credential-like', '            if False:\n                problems.append(f"credential-like'),
+    "M34 kept credential rows ignored": ('                problems.append(f"credential-like data kept after uninstall: {t}={n}', '                pass  # problems.append(f"credential-like data kept after uninstall: {t}={n}'),
+    "M36 secret-looking autofill ignored": ('                    if SECRETISH.search(k) or SECRETISH.search(v):', '                    if False:'),
+    "M37 every autofill row passes": ('            if t == "autofill":', '            if t == "autofill" or True:'),
     "M35 unreadable kept database accepted": ('            problems.append(f"webview2-profile/{fname} could not be read', '            pass  # problems.append(f"webview2-profile/{fname} could not be read'),
 }
 

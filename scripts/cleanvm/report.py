@@ -464,15 +464,43 @@ def check_webview2_profile(folder: pathlib.Path) -> tuple[dict, list[str]]:
             if head[24:28] == head[92:96] and struct.unpack(">I", head[28:32])[0] * page > size:
                 raise sqlite3.DatabaseError(f"cut-off copy: the header counts {struct.unpack('>I', head[28:32])[0]} pages, the file holds {size // page}")
             rows, missing = count_rows_readonly(p, tables)
+            entries = read_autofill(p) if rows.get("autofill") else []
         except (sqlite3.Error, OSError) as e:
             out[fname] = {"state": "unreadable", "error": f"{type(e).__name__}: {e}"}
             problems.append(f"webview2-profile/{fname} could not be read as SQLite ({type(e).__name__}: {e}): what it keeps is unknown")
             continue
         out[fname] = {"state": "read", "sha256": sha256_file(p), "rows": rows, "missing_tables": missing}
         for t, n in rows.items():
-            if n:
+            if not n:
+                continue
+            if t == "autofill":
+                # WebView2 keeps general autofill on by default: whatever was typed into a form field
+                # is remembered (the Clean VM run found the Publish panel's version, '1.0.0'). That is
+                # form history, kept with the rest of the user data - recorded name by name - and a
+                # failure only when a field looks like it held a secret. Encastra's interface has no
+                # secret or password field; this is the guard for the day it does.
+                out[fname]["autofill"] = [f"{k}={v}" for k, v in entries]
+                for k, v in entries:
+                    if SECRETISH.search(k) or SECRETISH.search(v):
+                        problems.append(f"credential-like data kept after uninstall: autofill field {k!r} (webview2-profile/{fname})")
+            else:
                 problems.append(f"credential-like data kept after uninstall: {t}={n} (webview2-profile/{fname})")
     return out, problems
+
+
+SECRETISH = re.compile(r"(?i)(pass(word|phrase)?|secret|token|api[_-]?key|credential|bearer|private[_-]?key)")
+
+
+def read_autofill(db: pathlib.Path) -> list[tuple[str, str]]:
+    """The autofill table's (name, value) pairs, from a read-only temporary copy (see count_rows_readonly)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = pathlib.Path(tmp) / "copy.sqlite"
+        shutil.copyfile(db, copy)
+        con = sqlite3.connect(copy.as_uri() + "?mode=ro&immutable=1", uri=True)
+        try:
+            return [(str(k), str(v)) for k, v in con.execute("SELECT name, value FROM autofill")]
+        finally:
+            con.close()
 
 
 def judge_scenario(sid: str, rec: dict, serial_a: dict, serial_r: dict, expected: dict, results_dir: pathlib.Path) -> Scenario:

@@ -93,8 +93,10 @@ def make_db(path: pathlib.Path, tables: dict) -> None:
     con = sqlite3.connect(str(path))
     try:
         for t, n in tables.items():
-            con.execute(f'CREATE TABLE "{t}" (id INTEGER PRIMARY KEY, value TEXT)')
-            con.executemany(f'INSERT INTO "{t}" (value) VALUES (?)', [(f"secret-{i}",) for i in range(n)])
+            # autofill keeps (name, value) pairs; n may be a count or the pairs themselves.
+            rows = n if isinstance(n, list) else [(f"field-{i}", f"secret-{i}") for i in range(n)]
+            con.execute(f'CREATE TABLE "{t}" (id INTEGER PRIMARY KEY, name TEXT, value TEXT)')
+            con.executemany(f'INSERT INTO "{t}" (name, value) VALUES (?, ?)', rows)
         con.commit()
     finally:
         con.close()
@@ -453,9 +455,25 @@ class ReportTest(unittest.TestCase):
                     v = self.assertNotPass(f"{table} rows kept after the uninstall")
                     self.assertEqual(v["matrix"][f"{sid}@B"], "FAIL")
                     probs = v["cycles"]["B"]["scenarios"][sid]["problems"]
-                    self.assertTrue(any(f"credential-like data kept after uninstall: {table}=2" in p for p in probs), probs)
+                    want = "credential-like data kept after uninstall: autofill field 'field-0'" if table == "autofill" \
+                        else f"credential-like data kept after uninstall: {table}=2"
+                    self.assertTrue(any(want in p for p in probs), probs)
                 finally:
                     db.unlink()
+
+    def test_ordinary_form_history_in_autofill_is_recorded_not_failed(self):
+        # What the Clean VM run found: WebView2 remembered the Publish panel's version field.
+        make_db(self.A.profile("CLEAN-012") / "Web Data", {"autofill": [("_r_0_-version", "1.0.0")], "credit_cards": 0})
+        v = self.verdict()
+        self.assertEqual(v["CLEAN_VM_ACCEPTANCE"], "PASS", json.dumps(v["cycles"]["A"]["scenarios"]["CLEAN-012"]))
+        self.assertEqual(v["cycles"]["A"]["scenarios"]["CLEAN-012"]["webview2_profile"]["Web Data"]["autofill"], ["_r_0_-version=1.0.0"])
+
+    def test_secret_looking_autofill_field_is_fail(self):
+        for name, value in (("_r_3_-api_token", "abc"), ("_r_1_-note", "Bearer eyJhbGciOi")):
+            with self.subTest(name=name):
+                make_db(self.A.profile("CLEAN-012") / "Web Data", {"autofill": [(name, value)], "credit_cards": 0})
+                v = self.assertNotPass("a form field that looks like it held a secret, remembered by WebView2")
+                self.assertTrue(any(f"autofill field {name!r}" in p for p in v["cycles"]["A"]["scenarios"]["CLEAN-012"]["problems"]))
 
     def test_absent_or_empty_profile_databases_pass(self):
         make_db(self.A.profile("CLEAN-013") / "Login Data", {"logins": 0})
