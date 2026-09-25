@@ -5,6 +5,11 @@
 Each mutant disables one rule of the judge; scripts/tests/test_cleanvm_report.py must fail against
 it. Exit 1 if a non-equivalent mutant survives. M6 is equivalent by construction: judge_scenario
 keeps a second, independent "no assertion was executed" guard.
+
+M21-M35 cover the host-side checks (qemu.cmdline, net.pcap, WebView2 profile databases). The
+tests assert the specific problem text of each rule, so a rule that is disabled cannot hide behind
+another rule that happens to fail the same fixture. The whole-page guard on a kept SQLite copy has
+no mutant: SQLite rejects the same cut-off copies itself, so disabling it is equivalent.
 """
 import pathlib, shutil, subprocess, sys, tempfile
 
@@ -33,6 +38,22 @@ MUTANTS = {
     "M18 recorded result trusted": ('    if rec.get("result") != derived:', '    if False:'),
     "M19 fingerprint ignored": ('            if fa[k] != fb.get(k):', '            if False:'),
     "M20 missing upgrade cycle ok": ('                matrix[key] = "NOT_RUN"; continue', '                matrix[key] = "PASS"; continue'),
+    # Host-side checks: the VM's network and the WebView2 profile kept after uninstall.
+    "M21 restrict=on not required": ('        if not restricts or any(r != "on" for r in restricts):', '        if False:'),
+    "M22 missing command line accepted": ('    if not cmd_text:\n        netdev, network_problems = [], [', '    if False:\n        netdev, network_problems = [], ['),
+    "M23 non-user backend accepted": ('        if kind != "user":\n', '        if False:\n'),
+    "M24 guestfwd accepted": ('        if any(k == "guestfwd" for k, _ in pairs):', '        if False:'),
+    "M25 no restricted -netdev accepted": ('    if not restricted_netdev:', '    if False:'),
+    "M26 missing capture accepted": ('return summary, ["no network capture', 'return summary, [] if True else ["no network capture'),
+    "M27 truncated capture accepted": ('        if start + incl > len(data):', '        if False:'),
+    "M28 encastra DNS names ignored": ('    bad = sorted(n for n in acc["dns"] if "encastra" in n.lower())', '    bad = []'),
+    "M29 encastra match case-sensitive": ('if "encastra" in n.lower())', 'if "encastra" in n)'),
+    "M30 unparsed encastra DNS ignored": ('    if acc["dns_unparsed_encastra"]:', '    if False:'),
+    "M31 IPv6 frames ignored": ('        elif etype == 0x86DD:\n', '        elif False:\n'),
+    "M32 negative cycle network ignored": ('        if c.network_problems:', '        if False:'),
+    "M33 profile not checked": ('    if sid in PROFILE_SCENARIOS:', '    if False:'),
+    "M34 kept credential rows ignored": ('            if n:\n                problems.append(f"credential-like', '            if False:\n                problems.append(f"credential-like'),
+    "M35 unreadable kept database accepted": ('            problems.append(f"webview2-profile/{fname} could not be read', '            pass  # problems.append(f"webview2-profile/{fname} could not be read'),
 }
 
 results = {}

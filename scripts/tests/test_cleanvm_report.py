@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import ipaddress
 import json
 import pathlib
+import sqlite3
+import struct
 import sys
 import tempfile
 import unittest
@@ -35,10 +38,73 @@ def journeys_log(fail_line: bool = False, summary: bool = True, failed: int = 0)
     return "\n".join(lines) + "\n"
 
 
+# What lab.sh records: /proc/PID/cmdline with its NULs turned into spaces.
+QEMU_CMDLINE = ("qemu-system-x86_64 -enable-kvm -machine q35,smm=off -m 8192 "
+                "-netdev user,id=n0,restrict=on -device e1000e,netdev=n0 -serial file:/srv/encastra-vm/cycles/X/serial.log "
+                "-name cleanvm-X -object filter-dump,id=cap0,netdev=n0,file=/srv/encastra-vm/cycles/X/net.pcap ")
+GUEST_MAC = bytes.fromhex("525400123456")
+SLIRP_MAC = bytes.fromhex("52550a000202")
+
+
+def ipv4_frame(src: str, dst: str, proto: int, body: bytes, frag: int = 0) -> bytes:
+    hdr = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + len(body), 1, frag, 128, proto, 0,
+                      bytes(int(x) for x in src.split(".")), bytes(int(x) for x in dst.split(".")))
+    from_guest = src.startswith("10.0.2.") and src not in ("10.0.2.2", "10.0.2.3")
+    macs = SLIRP_MAC + GUEST_MAC if from_guest else GUEST_MAC + SLIRP_MAC
+    return macs + struct.pack(">H", 0x0800) + hdr + body
+
+
+def ipv6_frame(src: str, dst: str, nh: int, body: bytes) -> bytes:
+    hdr = struct.pack(">IHBB", 6 << 28, len(body), nh, 64) + ipaddress.IPv6Address(src).packed + ipaddress.IPv6Address(dst).packed
+    return SLIRP_MAC + GUEST_MAC + struct.pack(">H", 0x86DD) + hdr + body
+
+
+def udp(sport: int, dport: int, payload: bytes) -> bytes:
+    return struct.pack(">HHHH", sport, dport, 8 + len(payload), 0) + payload
+
+
+def tcp(sport: int, dport: int, flags: int) -> bytes:
+    return struct.pack(">HHIIBBHHH", sport, dport, 1, 0, 0x50, flags, 64240, 0, 0)
+
+
+def dns_query(name: str, qid: int = 0x1234, response: bool = False) -> bytes:
+    q = b"".join(bytes([len(l)]) + l.encode() for l in name.split(".")) + b"\x00" + struct.pack(">HH", 1, 1)
+    return struct.pack(">HHHHHH", qid, 0x8180 if response else 0x0100, 1, 0, 0, 0) + q
+
+
+def pcap(frames, big_endian: bool = False, linktype: int = 1) -> bytes:
+    o = ">" if big_endian else "<"
+    out = struct.pack(o + "IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65536, linktype)
+    for i, f in enumerate(frames):
+        out += struct.pack(o + "IIII", 1_700_000_000 + i, 0, len(f), len(f)) + f
+    return out
+
+
+def default_frames():
+    """What an idle clean Windows sends with nowhere to go: a DNS question and a TCP SYN."""
+    return [ipv4_frame("10.0.2.15", "10.0.2.3", 17, udp(50000, 53, dns_query("www.msftconnecttest.com"))),
+            ipv4_frame("10.0.2.15", "13.107.4.52", 6, tcp(50001, 80, 0x02))]
+
+
+def make_db(path: pathlib.Path, tables: dict) -> None:
+    """A Chromium-like SQLite file: table name -> number of rows."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.unlink(missing_ok=True)
+    con = sqlite3.connect(str(path))
+    try:
+        for t, n in tables.items():
+            con.execute(f'CREATE TABLE "{t}" (id INTEGER PRIMARY KEY, value TEXT)')
+            con.executemany(f'INSERT INTO "{t}" (value) VALUES (?)', [(f"secret-{i}",) for i in range(n)])
+        con.commit()
+    finally:
+        con.close()
+
+
 class Fixture:
     """One cycle directory, every scenario PASS, serial log consistent with the records."""
 
-    def __init__(self, root: pathlib.Path, name: str, mode: str = "full", inject=None, base_sha=BASE_SHA):
+    def __init__(self, root: pathlib.Path, name: str, mode: str = "full", inject=None, base_sha=BASE_SHA,
+                 big_endian_capture: bool = False):
         self.dir = root / name
         self.results = self.dir / "results"
         (self.results / "scenarios").mkdir(parents=True)
@@ -56,6 +122,8 @@ class Fixture:
         (self.dir / "base.sha256").write_text(f"{base_sha}  base.qcow2\n")
         (self.dir / "qemu.exit").write_text("0\n")
         (self.dir / "expected.json").write_text(json.dumps(EXPECTED))
+        (self.dir / "qemu.cmdline").write_text(QEMU_CMDLINE.replace("cycles/X", f"cycles/{name}").replace("cleanvm-X", f"cleanvm-{name}"))
+        self.write_capture(default_frames(), big_endian=big_endian_capture)
         self.flush()
         s3 = self.results / "scenarios" / "CLEAN-003"
         if s3.exists():
@@ -86,6 +154,12 @@ class Fixture:
     def write_record(self, sid: str, rec: dict) -> None:
         (self.results / "scenarios" / sid / "result.json").write_text(json.dumps(rec))
 
+    def write_capture(self, frames, big_endian: bool = False) -> None:
+        (self.dir / "net.pcap").write_bytes(pcap(frames, big_endian))
+
+    def profile(self, sid: str) -> pathlib.Path:
+        return self.results / "scenarios" / sid / "webview2-profile"
+
     def flush(self):
         (self.dir / "plan.json").write_text(json.dumps(self.plan))
         (self.dir / "serial.log").write_text("\n".join(self.serial) + "\n")
@@ -96,7 +170,7 @@ class ReportTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.tmp.name)
         self.A = Fixture(self.root, "A")
-        self.B = Fixture(self.root, "B")
+        self.B = Fixture(self.root, "B", big_endian_capture=True)
         self.U = Fixture(self.root, "U", mode="upgrade")
         self.N = Fixture(self.root, "N1", inject=["hidden-fail"])
         rec = self.N.record("CLEAN-001")
@@ -200,6 +274,11 @@ class ReportTest(unittest.TestCase):
         self.U.plan["harness_dirty"] = True; self.U.flush()
         self.assertNotPass("an acceptance cycle run from an uncommitted harness")
 
+    def test_local_dev_build_cannot_be_acceptance(self):
+        self.A.plan["dev_build"] = True; self.A.flush()
+        v = self.assertNotPass("a cycle that tested a local build, not the published artefact")
+        self.assertTrue(any("local dev build" in p for p in v["problems"]))
+
     def test_timed_out_cycle_is_fail(self):
         (self.B.dir / "timed-out").write_text("timeout")
         self.assertNotPass("a cycle whose VM was killed at the time limit")
@@ -243,6 +322,172 @@ class ReportTest(unittest.TestCase):
         v = report.judge(cycles, self.spec)
         self.assertEqual(v["CLEAN_VM_ACCEPTANCE"], "FAIL")
         self.assertEqual(v["matrix"]["CLEAN-011@U"], "NOT_RUN")
+
+    # --- Host-side checks: the VM's network (F12, F2) ---------------------------------------
+
+    def test_network_evidence_is_recorded(self):
+        v = self.verdict()
+        self.assertEqual(v["CLEAN_VM_ACCEPTANCE"], "PASS", json.dumps(v["problems"]))
+        for name in ("A", "B"):  # B's capture is big-endian
+            with self.subTest(cycle=name):
+                cyc = v["cycles"][name]
+                self.assertEqual(cyc["netdev"], ["-netdev user,id=n0,restrict=on"])
+                net = cyc["network"]
+                self.assertEqual(net["state"], "read")
+                self.assertEqual(net["packets"], 2)
+                self.assertEqual(net["guest_destinations"], ["tcp 13.107.4.52:80", "udp 10.0.2.3:53"])
+                self.assertEqual(net["dns_queries"], ["www.msftconnecttest.com"])
+        cycles = [report.load_cycle(f.dir) for f in (self.A, self.B, self.U, self.N)]
+        out = self.root / "out"
+        report.write_summary(v, cycles, out)
+        md = (out / "summary.md").read_text(encoding="utf-8")
+        self.assertIn("## Network (host capture)", md)
+        self.assertIn("www.msftconnecttest.com", md)
+        self.assertEqual(json.loads((out / "verdict.json").read_text(encoding="utf-8"))["cycles"]["A"]["network"]["packets"], 2)
+
+    def test_capture_keeps_only_what_the_guest_tried(self):
+        frames = [
+            ipv4_frame("10.0.2.15", "13.107.4.52", 6, tcp(50010, 443, 0x02)),            # SYN: counted
+            ipv4_frame("10.0.2.15", "192.0.2.10", 6, tcp(50011, 443, 0x12)),             # SYN+ACK: not an attempt
+            ipv4_frame("10.0.2.15", "192.0.2.11", 6, tcp(50012, 80, 0x10)),              # ACK only
+            ipv4_frame("10.0.2.2", "10.0.2.15", 17, udp(67, 68, b"\x02" * 40)),          # from slirp
+            ipv4_frame("10.0.2.3", "10.0.2.15", 17, udp(53, 50013, dns_query("ctldl.windowsupdate.com", response=True))),
+            ipv4_frame("10.0.2.15", "192.0.2.12", 17, udp(50014, 9999, b"x" * 8), frag=100),  # later fragment
+            ipv6_frame("fec0::5054:ff:fe12:3456", "fec0::3", 17, udp(50015, 53, dns_query("login.live.com"))),
+            SLIRP_MAC + GUEST_MAC + struct.pack(">H", 0x0806) + b"\x00" * 28,           # ARP
+        ]
+        self.A.write_capture(frames)
+        v = self.verdict()
+        self.assertEqual(v["CLEAN_VM_ACCEPTANCE"], "PASS", json.dumps(v["problems"]))
+        net = v["cycles"]["A"]["network"]
+        self.assertEqual(net["packets"], 8)
+        self.assertEqual(net["guest_destinations"], ["tcp 13.107.4.52:443", "udp [fec0::3]:53"])
+        self.assertEqual(net["dns_queries"], ["ctldl.windowsupdate.com", "login.live.com"])
+
+    def test_missing_qemu_cmdline_is_fail(self):
+        (self.A.dir / "qemu.cmdline").unlink()
+        v = self.assertNotPass("no record of the command line the VM ran with")
+        self.assertTrue(any("no QEMU command line recorded" in p for p in v["cycles"]["A"]["problems"]), v["cycles"]["A"]["problems"])
+        self.assertEqual(v["matrix"]["CLEAN-001@A"], "FAIL")
+
+    def test_route_out_is_fail(self):
+        good = (self.A.dir / "qemu.cmdline").read_text()
+        variants = {
+            "restrict=off": (good.replace("restrict=on", "restrict=off"), "restrict=on required"),
+            "restrict not set": (good.replace(",restrict=on", ""), "restrict=on required"),
+            "restrict set twice": (good.replace("restrict=on", "restrict=on,restrict=off"), "restrict=on required"),
+            "a second backend": (good + "-netdev tap,id=t1,ifname=tap0 -device e1000e,netdev=t1", "is not restricted user networking"),
+            "guestfwd": (good.replace("restrict=on", "restrict=on,guestfwd=tcp:10.0.2.100:80-tcp:203.0.113.5:80"), "guestfwd"),
+            "no -netdev at all": ("qemu-system-x86_64 -enable-kvm -m 8192 -name cleanvm-A", "no '-netdev user"),
+        }
+        for label, (text, why) in variants.items():
+            with self.subTest(variant=label):
+                (self.A.dir / "qemu.cmdline").write_text(text)
+                v = self.assertNotPass(f"the VM had a route out: {label}")
+                probs = v["cycles"]["A"]["problems"]
+                self.assertTrue(any("the VM had a route out" in p and why in p for p in probs), probs)
+        (self.A.dir / "qemu.cmdline").write_text(good)
+
+    def test_negative_cycle_with_a_route_out_is_not_evidence(self):
+        cmd = self.N.dir / "qemu.cmdline"
+        cmd.write_text(cmd.read_text().replace("restrict=on", "restrict=off"))
+        v = self.assertNotPass("a negative cycle run with a route out")
+        self.assertEqual(v["matrix"]["NEGATIVE"], "FAIL")
+        self.assertIn("_network", v["negative"]["N1"]["observed"])
+
+    def test_missing_capture_is_fail(self):
+        (self.B.dir / "net.pcap").unlink()
+        v = self.assertNotPass("no record of what the NIC carried")
+        self.assertTrue(any("no network capture" in p for p in v["cycles"]["B"]["problems"]), v["cycles"]["B"]["problems"])
+        self.assertEqual(v["cycles"]["B"]["network"]["state"], "missing")
+
+    def test_unreadable_capture_is_fail(self):
+        whole = pcap(default_frames())
+        variants = {
+            "cut in the middle of a record": whole[:-3],
+            "not a pcap file": b"this is not a capture file at all",
+            "empty file": b"",
+            "not Ethernet": pcap(default_frames(), linktype=101),
+        }
+        for label, data in variants.items():
+            with self.subTest(variant=label):
+                (self.A.dir / "net.pcap").write_bytes(data)
+                v = self.assertNotPass(f"a capture that cannot be read: {label}")
+                self.assertTrue(any("network capture unreadable" in p for p in v["cycles"]["A"]["problems"]), v["cycles"]["A"]["problems"])
+
+    def test_dns_query_for_an_encastra_name_is_fail(self):
+        for name in ("telemetry.encastra.app", "Updates.ENCASTRA.example"):
+            with self.subTest(name=name):
+                self.A.write_capture(default_frames() + [ipv4_frame("10.0.2.15", "10.0.2.3", 17, udp(50020, 53, dns_query(name)))])
+                v = self.assertNotPass("something in the VM tried to resolve an Encastra name")
+                self.assertTrue(any(f"DNS query for {name}" in p for p in v["cycles"]["A"]["problems"]), v["cycles"]["A"]["problems"])
+
+    def test_unparseable_dns_message_mentioning_encastra_is_fail(self):
+        # A reserved label type (0x40) stops the parser before the name; the bytes still say it.
+        payload = struct.pack(">HHHHHH", 7, 0x0100, 1, 0, 0, 0) + b"\x48encastra\x03app\x00\x00\x01\x00\x01"
+        self.A.write_capture(default_frames() + [ipv4_frame("10.0.2.15", "10.0.2.3", 17, udp(50021, 53, payload))])
+        v = self.assertNotPass("a DNS message about encastra the parser could not read")
+        self.assertTrue(any("mention encastra but could not be parsed" in p for p in v["cycles"]["A"]["problems"]), v["cycles"]["A"]["problems"])
+
+    # --- Host-side checks: the WebView2 profile kept after uninstall (F3) ---------------------
+
+    def test_cookie_kept_after_uninstall_is_fail(self):
+        db = self.A.profile("CLEAN-012") / "Cookies"
+        make_db(db, {"cookies": 1})
+        before = db.read_bytes()
+        v = self.assertNotPass("a cookie still in the WebView2 profile after the uninstall")
+        self.assertEqual(v["matrix"]["CLEAN-012@A"], "FAIL")
+        sc = v["cycles"]["A"]["scenarios"]["CLEAN-012"]
+        self.assertTrue(any("credential-like data kept after uninstall: cookies=1" in p for p in sc["problems"]), sc["problems"])
+        self.assertEqual(sc["webview2_profile"]["Cookies"]["rows"], {"cookies": 1})
+        self.assertEqual(db.read_bytes(), before, "the evidence file must not be touched")
+        self.assertEqual(sorted(x.name for x in db.parent.iterdir()), ["Cookies"], "nothing may be created beside the evidence")
+
+    def test_credential_rows_in_any_kept_database_are_fail(self):
+        for sid, fname, table in (("CLEAN-012", "Login Data", "logins"), ("CLEAN-013", "Web Data", "autofill"),
+                                  ("CLEAN-013", "Web Data", "credit_cards")):
+            with self.subTest(table=table):
+                db = self.B.profile(sid) / fname
+                make_db(db, {"autofill": 0, "credit_cards": 0, table: 2} if fname == "Web Data" else {table: 2})
+                try:
+                    v = self.assertNotPass(f"{table} rows kept after the uninstall")
+                    self.assertEqual(v["matrix"][f"{sid}@B"], "FAIL")
+                    probs = v["cycles"]["B"]["scenarios"][sid]["problems"]
+                    self.assertTrue(any(f"credential-like data kept after uninstall: {table}=2" in p for p in probs), probs)
+                finally:
+                    db.unlink()
+
+    def test_absent_or_empty_profile_databases_pass(self):
+        make_db(self.A.profile("CLEAN-013") / "Login Data", {"logins": 0})
+        make_db(self.A.profile("CLEAN-012") / "Web Data", {"autofill": 0})  # no credit_cards table at all
+        v = self.verdict()
+        self.assertEqual(v["CLEAN_VM_ACCEPTANCE"], "PASS", json.dumps(v["problems"]) + json.dumps(v["cycles"]["A"]["scenarios"]["CLEAN-012"]))
+        p13 = v["cycles"]["A"]["scenarios"]["CLEAN-013"]["webview2_profile"]
+        self.assertEqual(p13["Login Data"]["rows"], {"logins": 0})
+        self.assertEqual(p13["Cookies"], {"state": "absent"})
+        self.assertEqual(p13["Web Data"], {"state": "absent"})
+        p12 = v["cycles"]["A"]["scenarios"]["CLEAN-012"]["webview2_profile"]
+        self.assertEqual(p12["Web Data"]["rows"], {"autofill": 0, "credit_cards": 0})
+        self.assertEqual(p12["Web Data"]["missing_tables"], ["credit_cards"])
+        # A cycle whose profile kept nothing at all still records that it looked.
+        self.assertEqual(v["cycles"]["B"]["scenarios"]["CLEAN-012"]["webview2_profile"]["Login Data"], {"state": "absent"})
+
+    def test_unreadable_profile_database_is_fail(self):
+        for label, data in (("not SQLite", b"not a database " * 20), ("empty copy", b""),
+                            ("cut-off copy", None)):
+            with self.subTest(variant=label):
+                db = self.A.profile("CLEAN-012") / "Cookies"
+                if data is None:
+                    make_db(db, {"cookies": 0, "filler": 200})
+                    data = db.read_bytes()[:1500]
+                db.parent.mkdir(parents=True, exist_ok=True)
+                db.write_bytes(data)
+                try:
+                    v = self.assertNotPass(f"a kept database that cannot be read: {label}")
+                    probs = v["cycles"]["A"]["scenarios"]["CLEAN-012"]["problems"]
+                    self.assertTrue(any("webview2-profile/Cookies could not be read as SQLite" in p for p in probs), probs)
+                finally:
+                    db.unlink()
 
 
 if __name__ == "__main__":
