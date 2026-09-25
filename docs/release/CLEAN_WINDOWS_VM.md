@@ -5,6 +5,11 @@ parts that a script can do done by a script, and the parts that only a person at
 do named as such. `docs/security/RELEASE_SECURITY.md` §Clean-install verification is the older,
 prose-only version of this; this page is the one to follow.
 
+**Automated:** [`CLEAN_VM_ACCEPTANCE.md`](CLEAN_VM_ACCEPTANCE.md) runs steps 2–10 and much more
+(restart, upgrade, damaged state, filesystem boundaries, a second cycle from the same snapshot,
+runs broken on purpose) on a real Windows 11 client VM, with a judge that re-derives every verdict.
+What stays with a person is step 1 (SmartScreen on a downloaded file) and a look at the machine.
+
 ## What exists that is close to a clean machine, and what it does not cover
 
 `.github/workflows/release.yml` has an `install` job: a fresh `windows-latest` runner downloads

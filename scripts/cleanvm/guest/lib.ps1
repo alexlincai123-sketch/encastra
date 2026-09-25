@@ -57,6 +57,9 @@ function Short($value, [int]$max = 400) {
 # --- state that survives a reboot -----------------------------------------------------------
 
 function Prop($obj, [string]$name) {
+    # A dictionary (Get-Inventory returns an [ordered] one) keeps its entries as KEYS, not as
+    # properties: asking its PSObject would find Count and Keys, never the entry.
+    if ($obj -is [System.Collections.IDictionary]) { if ($obj.Contains($name)) { return $obj[$name] } else { return $null } }
     if ($null -ne $obj -and $obj -isnot [string] -and (@($obj.PSObject.Properties | ForEach-Object { $_.Name }) -contains $name)) { $obj.$name } else { $null }
 }
 
@@ -315,8 +318,12 @@ $script:PersistenceSurfaces = @('run_keys', 'autostart_extra', 'startup_items', 
 
 function Save-Inventory([string]$label, [switch]$NoNameScan) {
     $inv = Get-Inventory -NoNameScan:$NoNameScan
-    Save-Json $inv (Join-Path $script:R "inventory\$label.json")
-    $inv
+    $path = Join-Path $script:R "inventory\$label.json"
+    Save-Json $inv $path
+    # What is compared is what was recorded: the inventory read back from its JSON, exactly as the
+    # baseline it will be compared with was. Comparing a live inventory with a deserialised one made
+    # a key name with unusual characters differ from itself.
+    Load-Json $path
 }
 
 function Diff-List($before, $after) {
