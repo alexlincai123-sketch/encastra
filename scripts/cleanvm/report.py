@@ -633,6 +633,54 @@ def fingerprint(c: Cycle) -> dict:
     return out
 
 
+def _digest_files(base: pathlib.Path, files: list[pathlib.Path]) -> str:
+    """One digest over the named files, by relative path: a change to any byte of any of them, or
+    a file added or removed, changes it."""
+    h = hashlib.sha256()
+    for f in sorted(files, key=lambda x: x.relative_to(base).as_posix()):
+        h.update(f.relative_to(base).as_posix().encode() + b"|" + hashlib.sha256(f.read_bytes()).digest())
+    return h.hexdigest()
+
+
+def judge_identity(negative_spec: dict) -> dict:
+    """Which judge, and which negative spec, produced a verdict. A verdict made by an older or an
+    edited judge names a different file and is not this tree's verdict."""
+    return {"report_py_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
+            "negative_spec_sha256": hashlib.sha256(json.dumps(negative_spec, sort_keys=True).encode()).hexdigest()}
+
+
+def cycle_identity(c: Cycle) -> dict:
+    """What a cycle's evidence is, in a few hashes a verdict can carry."""
+    files = [c.path / n for n in ("plan.json", "expected.json", "serial.log") if (c.path / n).exists()]
+    scen = c.path / "results" / "scenarios"
+    files += sorted(scen.glob("*/result.json")) if scen.exists() else []
+    inst = c.expected.get("installer") or {}
+    return {"mode": c.plan.get("mode"), "installer_sha256": inst.get("sha256"), "evidence_sha256": _digest_files(c.path, files)}
+
+
+INSTALLER_FIELDS = ("file", "sha256", "version", "build_commit", "exe_sha256", "tag", "tag_commit", "signature")
+HEX64 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def discover_cycles(root: pathlib.Path) -> tuple[list[pathlib.Path], list[str]]:
+    """The cycle directories directly under root, and why they cannot all be one acceptance run:
+    two directories claiming one cycle name (a superseded run left beside the real one) is an
+    ambiguity the gate refuses to settle by guessing."""
+    dirs, problems, seen = [], [], {}
+    for d in sorted(p for p in root.iterdir() if p.is_dir() and (p / "plan.json").is_file()):
+        try:
+            name = load_json(d / "plan.json")["cycle"]
+        except (ValueError, KeyError, TypeError):
+            problems.append(f"{d.name}: plan.json is unreadable or names no cycle")
+            continue
+        if name in seen:
+            problems.append(f"cycle {name} is claimed by both {seen[name]} and {d.name}; move the superseded run out of the evidence directory")
+            continue
+        seen[name] = d.name
+        dirs.append(d)
+    return dirs, problems
+
+
 def judge(cycles: list[Cycle], negative_spec: dict) -> dict:
     verdict: dict = {"cycles": {}, "matrix": {}, "negative": {}, "problems": []}
     for c in cycles:
@@ -647,6 +695,32 @@ def judge(cycles: list[Cycle], negative_spec: dict) -> dict:
     full = [c for c in cycles if c.plan.get("mode") == "full" and not c.plan.get("inject") and c.name in ("A", "B")]
     upg = [c for c in cycles if c.plan.get("mode") == "upgrade" and not c.plan.get("inject")]
     matrix = verdict["matrix"]
+
+    # The subject: what this verdict is about, so that it can be tied to one artefact and to the
+    # judge that produced it. The cycles that count as acceptance must all be about the SAME
+    # installer - an A on one build and a B on another proves neither.
+    verdict["subject"] = {"installer": None, "upgrade_from": None, "base_sha256": None,
+                          "judge": judge_identity(negative_spec), "cycles": {c.name: cycle_identity(c) for c in cycles}}
+    if len(upg) > 1:
+        verdict["problems"].append(f"more than one upgrade cycle ({', '.join(c.name for c in upg)}): which one is the evidence is not something to guess")
+    counted = [c for c in (by_name.get("A"), by_name.get("B")) if c is not None] + upg[:1]
+    idents = {tuple((c.expected.get("installer") or {}).get(k) for k in INSTALLER_FIELDS) for c in counted}
+    if len(idents) > 1:
+        verdict["problems"].append("the cycles that count were not run on one installer: " + "; ".join(
+            f"{c.name}={(c.expected.get('installer') or {}).get('sha256')}" for c in counted))
+    elif counted:
+        inst = {k: (counted[0].expected.get("installer") or {}).get(k) for k in INSTALLER_FIELDS}
+        for k in ("sha256", "exe_sha256"):
+            if not HEX64.match(str(inst.get(k))):
+                verdict["problems"].append(f"expected.json installer.{k} is not a SHA-256: {inst.get(k)!r}")
+        for k in ("file", "version", "build_commit"):
+            if not inst.get(k):
+                verdict["problems"].append(f"expected.json installer.{k} is missing")
+        verdict["subject"]["installer"] = inst
+    if upg and upg[0].expected.get("upgrade_from"):
+        verdict["subject"]["upgrade_from"] = {k: upg[0].expected["upgrade_from"].get(k) for k in ("file", "sha256", "version", "tag")}
+    if by_name.get("A"):
+        verdict["subject"]["base_sha256"] = by_name["A"].base_sha
 
     def req(c: Cycle | None, ids: list[str], label: str):
         for sid in ids:

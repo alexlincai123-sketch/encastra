@@ -52,8 +52,8 @@ timestamper afterwards. Anything else (`HashMismatch`, `NotTrusted`) stops the p
 
 Each step says who does it. **SCRIPT** steps are `scripts/verify/*.ps1`; run them from a
 PowerShell prompt in the folder that holds the installer and the scripts (copy `scripts/verify`
-to the VM with the installer). Keep every script's output: those logs are the evidence
-`release_check.py --evidence-vm <log>` reads.
+to the VM with the installer). Keep every script's output with the VM record. They are a person's
+check of one machine; the gate's `clean_vm` is the automated acceptance in `CLEAN_VM_ACCEPTANCE.md`.
 
 1. **PERSON — SmartScreen.** Double-click the installer once, from Explorer, and record exactly
    what Windows shows (screenshot). Cancel it. This is what a user meets first; the release notes
@@ -101,14 +101,13 @@ to the VM with the installer). Keep every script's output: those logs are the ev
 ## Recording the result
 
 Put `install.log`, `chooser.log`, the SmartScreen screenshot, `winver`'s build number and the
-answers to steps 3, 5–8 in `docs/release/vm/<version>/`, and run on the development machine:
+answers to steps 3, 5–8 in `docs/release/vm/<version>/`.
 
-```
-python scripts/release_check.py --evidence-vm docs/release/vm/<version>/install.log
-```
-
-which turns `clean_vm` from `EXTERNAL_REQUIRED` into `PASS` **for that log**. A log proves a run,
-not the machine it ran on; the folder beside it is what proves the machine.
+A log from these steps does **not** turn `clean_vm` PASS: one install proves one install. Since
+0.5.0-rc.6 `release_check.py --evidence-vm` takes the Clean VM acceptance directory (cycles A, B,
+upgrade and the negative cycles), judges it again and ties it to this tree's artefacts
+(`CLEAN_VM_ACCEPTANCE.md`). Handed a log, it says EXTERNAL_REQUIRED if the log passed and FAIL if
+it did not.
 
 ## Status
 

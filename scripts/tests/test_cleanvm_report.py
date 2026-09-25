@@ -23,8 +23,10 @@ import report  # noqa: E402
 BUILD = "1ce8e864da3eba12043684d86f4accf51707e519"
 SETUP = "Encastra_0.5.0-rc.5_x64-setup.exe"
 SHA = "afaec18b217d66171a5c9c9f530d94b6e7e591ca61af18a3101733cb01674f10"
+EXE_SHA = "14dc5d615676830ce34882fe663f64f56be32910047b20f3d20a65fdd1a40402"
 EXPECTED = {"installer": {"file": SETUP, "sha256": SHA, "version": "0.5.0-rc.5", "build_commit": BUILD,
-                          "installed_exe_sha256": "e" * 64}}
+                          "exe_sha256": EXE_SHA, "installed_exe_sha256": "e" * 64, "tag": "v0.5.0-rc.5",
+                          "tag_commit": "182b3d555e838462d71670382d940fb1b0a1cbc3", "signature": "NotSigned"}}
 BASE_SHA = "b" * 64
 
 
@@ -318,6 +320,53 @@ class ReportTest(unittest.TestCase):
         self.spec = {}
         v = self.assertNotPass("no negative testing at all")
         self.assertEqual(v["matrix"]["NEGATIVE"], "NOT_RUN")
+
+    # --- The verdict names its subject, so it can be tied to one artefact ------------------------
+
+    def test_the_verdict_names_the_installer_the_judge_and_each_cycles_evidence(self):
+        v = self.verdict()
+        sub = v["subject"]
+        self.assertEqual((sub["installer"]["file"], sub["installer"]["sha256"], sub["installer"]["exe_sha256"]), (SETUP, SHA, EXE_SHA))
+        self.assertEqual(sub["installer"]["build_commit"], BUILD)
+        self.assertEqual(sub["base_sha256"], BASE_SHA)
+        self.assertEqual(set(sub["judge"]), {"report_py_sha256", "negative_spec_sha256"})
+        self.assertEqual(set(sub["cycles"]), {"A", "B", "U", "N1"})
+        self.assertTrue(all(len(c["evidence_sha256"]) == 64 for c in sub["cycles"].values()))
+
+    def test_a_cycle_evidence_digest_moves_with_any_byte_of_the_records(self):
+        before = self.verdict()["subject"]["cycles"]["A"]["evidence_sha256"]
+        rec = self.A.record("CLEAN-004"); rec["assertions"][0]["observed"] = "edited"; self.A.write_record("CLEAN-004", rec)
+        self.assertNotEqual(before, self.verdict()["subject"]["cycles"]["A"]["evidence_sha256"])
+
+    def test_cycles_that_ran_different_installers_are_not_one_acceptance(self):
+        other = json.loads((self.B.dir / "expected.json").read_text())
+        other["installer"]["sha256"] = "9" * 64
+        (self.B.dir / "expected.json").write_text(json.dumps(other))
+        for sid in report.FULL_REQUIRED:  # the records name the artefact they were told about
+            rec = self.B.record(sid); rec["artifact"]["sha256"] = "9" * 64; self.B.write_record(sid, rec)
+        v = self.assertNotPass("A on one installer and B on another")
+        self.assertTrue(any("one installer" in p for p in v["problems"]), v["problems"])
+
+    def test_an_installer_without_an_executable_hash_is_not_a_subject(self):
+        for fixture in (self.A, self.B, self.U):
+            data = json.loads((fixture.dir / "expected.json").read_text())
+            del data["installer"]["exe_sha256"]
+            (fixture.dir / "expected.json").write_text(json.dumps(data))
+        v = self.assertNotPass("nothing names the executable that was under test")
+        self.assertTrue(any("exe_sha256" in p for p in v["problems"]), v["problems"])
+
+    def test_two_upgrade_cycles_are_ambiguous(self):
+        u2 = Fixture(self.root, "U2", mode="upgrade")
+        cycles = [report.load_cycle(f.dir) for f in (self.A, self.B, self.U, u2, self.N)]
+        v = report.judge(cycles, self.spec)
+        self.assertEqual(v["CLEAN_VM_ACCEPTANCE"], "FAIL")
+        self.assertTrue(any("more than one upgrade cycle" in p for p in v["problems"]), v["problems"])
+
+    def test_two_directories_claiming_one_cycle_name_are_refused(self):
+        import shutil
+        shutil.copytree(self.A.dir, self.root / "A-superseded")
+        _, problems = report.discover_cycles(self.root)
+        self.assertTrue(any("claimed by both" in p for p in problems), problems)
 
     def test_upgrade_cycle_missing_is_not_run(self):
         cycles = [report.load_cycle(f.dir) for f in (self.A, self.B, self.N)]

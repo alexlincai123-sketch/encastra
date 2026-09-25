@@ -285,11 +285,14 @@ candidate built by `candidate.yml` and its own acceptance run.
 * **Outbound connections are prevented, and recorded, but not attributed**: the host's `net.pcap`
   shows every frame the guest sent, but a capture outside the VM cannot say which process sent it.
   The per-process check (CLEAN-004) sees established connections only.
-* **`release_check.py --evidence-vm` does not read this verdict yet.** It takes one
-  `install_check.ps1` log and passes on its PASS lines, so CLEAN-003's `install.log` from a cycle
-  whose acceptance FAILED would still satisfy it. Until it reads `verdict.json`
-  (`CLEAN_VM_ACCEPTANCE`), do not hand it a log from inside a cycle: the Clean VM result is the
-  verdict, not any one scenario's log.
+* **`release_check.py --evidence-vm` takes the evidence directory, not a log or a verdict.** Until
+  0.5.0-rc.6 it took one `install_check.ps1` log and passed on its PASS lines, so CLEAN-003's
+  `install.log` from a cycle whose acceptance FAILED satisfied it. It now takes the directory that
+  holds the cycle directories (A, B, one upgrade cycle, the negative cycles in `negative-spec.json`
+  and nothing else), judges them again with this tree's `report.py`, requires every required result
+  PASS, and requires the installer and executable those cycles ran - name, SHA-256, version, build
+  commit - to be this tree's artefacts. A `verdict.json` beside the cycles must equal the re-derived
+  one. A log, or a verdict on its own, is never PASS (`scripts/tests/test_release_check_vm.py`).
 * **The journeys run with `GITHUB_ACTIONS=true`** (their "unattended desktop" switch), which also
   clears the application's per-user state before each launch they make. Persistence is therefore
   checked by CLEAN-006/007/011 directly, not through the journeys.

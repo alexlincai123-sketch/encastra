@@ -34,6 +34,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HERE = pathlib.Path(__file__).resolve().parent
@@ -139,6 +140,75 @@ def verify_release(tag: str, setup: pathlib.Path, exe: pathlib.Path, sums: pathl
     }
 
 
+def verify_candidate_build(ref: str, setup: pathlib.Path, exe: pathlib.Path, sums: pathlib.Path) -> dict:
+    """A candidate before its tag: the publication commit, pushed, and the candidate run it names.
+
+    A tag is immutable, so the Clean VM acceptance runs BEFORE it, on the bytes the tag will
+    publish. Nothing about the identity is weaker than for a tag - it only comes from a different
+    pair of independent sources:
+
+      * the ref resolves to a commit that is on the remote (a pushed branch contains it), and
+        docs/RELEASE.md at that commit names the installer and the executable, their SHA-256, the
+        build commit and the candidate run; the local files hash to exactly those values;
+      * GitHub is asked about that run again (release_provenance.verify_candidate): candidate.yml,
+        on the build commit, green in every job, each artefact zip equal to the digest GitHub holds,
+        copy B byte-identical to copy A - and copy A's files are these files;
+      * the SHA256SUMS the run wrote agrees, and the executable is stamped with the build commit,
+        an ancestor of the ref.
+
+    release.yml publishes only bytes equal to the manifest, so these are the bytes a release of this
+    ref ships. The acceptance is bound to them by hash (release_check.py --evidence-vm), not by tag.
+    """
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import release_provenance as prov  # noqa: E402 - the release gate's own verification
+
+    evidence: list[str] = []
+    ref_commit = git("rev-parse", f"{ref}^{{commit}}")
+    remote = [b.strip() for b in git("branch", "-r", "--contains", ref_commit).splitlines() if b.strip()]
+    if not remote:
+        raise Refused(f"{ref} ({ref_commit}) is on no remote branch; push the publication commit first")
+    evidence.append(f"{ref} -> {ref_commit}, on {', '.join(remote)}")
+    m = release_manifest(ref)
+    text = git("show", f"{ref_commit}:docs/RELEASE.md")
+    run = prov.RUN_IN_MANIFEST.search(text)
+    if not run:
+        raise Refused(f"docs/RELEASE.md at {ref} names no candidate run")
+    for f in (setup, exe):
+        want, got = m["hashes"].get(f.name), sha256(f)
+        if want != got:
+            raise Refused(f"{f.name}: docs/RELEASE.md at {ref} says {want}, the file hashes to {got}")
+        evidence.append(f"RELEASE.md@{ref_commit[:12]}: {f.name} {got}")
+    repo = prov.repository()
+    if repo is None:
+        raise Refused("origin is not a GitHub repository")
+    with tempfile.TemporaryDirectory() as staging:
+        verified, problems = prov.verify_candidate(repo, run.group(1), m["build_commit"], pathlib.Path(staging), download=True)
+    if problems:
+        raise Refused(f"candidate run {run.group(1)}: {problems[0]}")
+    for f in (setup, exe):
+        if verified["files"].get(f.name) != sha256(f):
+            raise Refused(f"{f.name}: candidate run {run.group(1)} copy A holds {verified['files'].get(f.name)}, the file is {sha256(f)}")
+    evidence.append(f"candidate run {run.group(1)}: candidate.yml on {m['build_commit'][:12]}, green, zips = GitHub digests, copy B identical, copy A = these files")
+    lines = dict(reversed(l.split()) for l in sums.read_text().splitlines() if l.strip())
+    for f in (setup, exe):
+        if lines.get(f.name) != sha256(f):
+            raise Refused(f"{sums.name} says {lines.get(f.name)} for {f.name}")
+    evidence.append(f"{sums.name} (written by the run) agrees")
+    data = exe.read_bytes()
+    stamp = re.search(rb"encastra-build-commit=([0-9a-f]{40})(-dirty)?;", data)
+    if not stamp or stamp.group(2) or stamp.group(1).decode() != m["build_commit"]:
+        raise Refused(f"executable stamp {stamp.group(0) if stamp else None!r} != build commit {m['build_commit']}")
+    if not is_ancestor(m["build_commit"], ref_commit):
+        raise Refused(f"build commit {m['build_commit']} is not an ancestor of {ref_commit}")
+    evidence.append(f"executable stamped {m['build_commit'][:12]}, ancestor of the publication commit")
+    return {
+        "file": setup.name, "sha256": sha256(setup), "version": m["version"], "build_commit": m["build_commit"],
+        "exe_sha256": sha256(exe), "installed_exe_sha256": hashlib.sha256(installed_exe_bytes(data)).hexdigest(),
+        "signature": "Valid" if m["signed"] else "NotSigned", "tag": None, "tag_commit": ref_commit,
+        "candidate_run": int(run.group(1)), "github_release": False, "host_verified": True, "host_evidence": evidence,
+    }
+
+
 def verify_dev_build(setup: pathlib.Path, exe: pathlib.Path) -> dict:
     """A local build of this checkout - evidence that a fix works on a clean machine, never a release.
 
@@ -190,7 +260,7 @@ def build(args: argparse.Namespace) -> int:
         setup = next(rel.glob("Encastra_*_x64-setup.exe"))
         exe = rel / "encastra-desktop.exe"
         sums = rel / "SHA256SUMS"
-        cand = verify_release(args.tag, setup, exe, sums)
+        cand = verify_candidate_build(args.candidate_ref, setup, exe, sums) if args.candidate_ref else verify_release(args.tag, setup, exe, sums)
     cand["sums_file"] = "SHA256SUMS"
     expected = {"installer": cand}
     (out / "artifacts").mkdir(parents=True)
@@ -245,7 +315,8 @@ def main() -> int:
     ap.add_argument("--steps", help="comma-separated steps instead of the mode's plan (negative cycles)")
     ap.add_argument("--critical", help="comma-separated critical steps (default: CLEAN-001,002,003)")
     ap.add_argument("--tag", default="v0.5.0-rc.5")
-    ap.add_argument("--release-dir", help="a `gh release download` of --tag (the artefact under acceptance)")
+    ap.add_argument("--release-dir", help="a `gh release download` of --tag, or copy A of the candidate run (the artefact under acceptance)")
+    ap.add_argument("--candidate-ref", help="instead of --tag: the pushed publication commit of a candidate not yet tagged")
     ap.add_argument("--dev-setup", help="a LOCAL build's installer instead of a release (evidence for a fix; never acceptance)")
     ap.add_argument("--dev-exe", help="the encastra-desktop.exe of that local build")
     ap.add_argument("--upgrade-from-tag", default="v0.5.0-rc.4")
@@ -262,6 +333,8 @@ def main() -> int:
         ap.error("give either --release-dir, or --dev-setup with --dev-exe")
     if args.dev_setup and args.mode == "upgrade":
         ap.error("an upgrade cycle upgrades between published versions only")
+    if args.candidate_ref and not args.release_dir:
+        ap.error("--candidate-ref needs --release-dir (copy A of the candidate run, with its SHA256SUMS)")
     try:
         return build(args)
     except Refused as e:

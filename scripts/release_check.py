@@ -7,7 +7,7 @@ person, a workflow or another program can read without interpreting prose:
     python scripts/release_check.py                    # everything; writes release-readiness.json
     python scripts/release_check.py --skip-gate        # do not re-run the test gate (it is marked NOT_VERIFIED)
     python scripts/release_check.py --compare DIR      # DIR holds a second build of this commit; compare bytes
-    python scripts/release_check.py --evidence-vm LOG  # an install_check.ps1 log from a clean machine
+    python scripts/release_check.py --evidence-vm DIR  # the Clean VM cycle directories; judged again here, tied to these artefacts
     python scripts/release_check.py --evidence-gui LOG # a gui_journeys.ps1 log: the chooser journeys (B5)
     python scripts/release_check.py --no-network       # do not ask GitHub about workflow runs
     python scripts/release_check.py --mode release     # what mode is being claimed (default: from the version)
@@ -420,19 +420,121 @@ def judge_runs(runs: list[dict], remote: str, head: str) -> Check:
     return Check("ci.evidence", PASS, f"{', '.join(by_name)} green for {head[:12]}: " + by_name[REQUIRED_WORKFLOWS[0]].get("url", ""))
 
 
-def check_vm(evidence: pathlib.Path | None) -> Check:
+CLEANVM = HERE / "cleanvm"
+VM_ACTION = "docs/release/CLEAN_VM_ACCEPTANCE.md; then --evidence-vm <the directory holding the cycle directories A, B, U, N1..N5>"
+
+
+def _load_judge():
+    """scripts/cleanvm/report.py under a name of its own: `report` is too generic to import by."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("encastra_cleanvm_report", CLEANVM / "report.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # the dataclasses in it look their module up here
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_vm(evidence: pathlib.Path | None, entries: list[dict] | tuple = (), version: str | None = None, commit: str | None = None) -> Check:
+    """Clean-machine evidence, or nothing that can turn this check green.
+
+    A green clean_vm means: the cycle directories the lab left were judged again HERE, by this
+    tree's judge, and every required scenario passed in A, B and the upgrade, every negative cycle
+    failed where its spec says, and the installer those cycles ran is - by name, SHA-256, version
+    and build commit - the installer of this tree. A single log, or a verdict.json read on its
+    own, is a claim and never enough: a passing install_check log from a cycle that failed
+    elsewhere used to be accepted here, and must not be.
+    """
     if evidence is None:
-        return Check("clean_vm", EXTERNAL, "no clean-machine installation log given", "docs/release/CLEAN_WINDOWS_VM.md; then --evidence-vm <log>")
+        return Check("clean_vm", EXTERNAL, "no Clean VM acceptance evidence given", VM_ACTION)
     if not evidence.exists():
         return Check("clean_vm", FAIL, f"{evidence} does not exist")
-    text = evidence.read_text("utf-8", errors="replace")
-    passes = len(re.findall(r"^PASS", text, re.M))
-    fails = re.findall(r"^FAIL.*$", text, re.M)
-    if fails:
-        return Check("clean_vm", FAIL, f"{len(fails)} failed check(s) in {evidence.name}: {fails[0][:120]}")
-    if passes == 0:
-        return Check("clean_vm", FAIL, f"{evidence.name} contains no PASS lines; is it an install_check.ps1 log?")
-    return Check("clean_vm", PASS, f"{passes} checks passed in {evidence.name} (a log is evidence of a run, not of the machine it ran on — keep the VM record with it)")
+    if evidence.is_file():
+        text = evidence.read_text("utf-8-sig", errors="replace")
+        if text.lstrip().startswith("{"):
+            try:
+                stated = json.loads(text).get("CLEAN_VM_ACCEPTANCE")
+            except (ValueError, AttributeError):
+                stated = None
+            if stated is not None and stated != "PASS":
+                return Check("clean_vm", FAIL, f"{evidence.name} states CLEAN_VM_ACCEPTANCE: {stated}")
+            return Check("clean_vm", EXTERNAL, f"{evidence.name} is a verdict on its own: nothing here can re-derive it from the cycles", VM_ACTION)
+        fails = re.findall(r"^FAIL.*$", text, re.M)
+        if fails:
+            return Check("clean_vm", FAIL, f"{len(fails)} failed check(s) in {evidence.name}: {fails[0][:120]}")
+        return Check("clean_vm", EXTERNAL, f"{evidence.name} is an install_check log: it shows one install, not a Clean VM acceptance (no cycles, no negatives, no artefact binding)", VM_ACTION)
+
+    judge = _load_judge()
+    dirs, problems = judge.discover_cycles(evidence)
+    if problems:
+        return Check("clean_vm", FAIL, problems[0])
+    if not dirs:
+        return Check("clean_vm", FAIL, f"no cycle directory (one holding a plan.json) under {evidence}")
+    try:
+        spec = json.loads((CLEANVM / "negative-spec.json").read_text("utf-8"))
+        cycles = [judge.load_cycle(d) for d in dirs]
+        result = judge.judge(cycles, spec)
+    except Exception as error:  # noqa: BLE001 - evidence that cannot be read is not evidence
+        return Check("clean_vm", FAIL, f"the cycles could not be judged: {type(error).__name__}: {str(error)[:160]}")
+    # One acceptance run, nothing beside it: A, B, one upgrade cycle and the negative cycles. A dev
+    # build or a superseded run left in the directory is not evidence of this candidate.
+    upgrades = [c.name for c in cycles if c.plan.get("mode") == "upgrade" and not c.plan.get("inject")]
+    extra = sorted({c.name for c in cycles} - {"A", "B"} - set(spec) - set(upgrades[:1]))
+    if len(upgrades) != 1 or extra:
+        why = f"{len(upgrades)} upgrade cycles ({', '.join(upgrades) or 'none'})" if len(upgrades) != 1 else f"cycle(s) that belong to no acceptance run: {', '.join(extra)}"
+        return Check("clean_vm", FAIL, f"{evidence} is not one acceptance run: {why}")
+    matrix = result.get("matrix", {})
+    required = [f"{s}@{label}" for label, ids in (("A", judge.FULL_REQUIRED), ("B", judge.FULL_REQUIRED), ("U", judge.UPGRADE_REQUIRED)) for s in ids]
+    required += ["CLEAN-014", "NEGATIVE"]
+    not_pass = [f"{k}: {matrix.get(k, 'NOT_RUN')}" for k in required if matrix.get(k) != "PASS"]
+    if not_pass:
+        return Check("clean_vm", FAIL, f"{len(not_pass)} required result(s) are not PASS, first {not_pass[0]}", VM_ACTION)
+    weak_negative = [n for n in spec if not (result.get("negative", {}).get(n) or {}).get("ok")]
+    if weak_negative:
+        return Check("clean_vm", FAIL, f"negative cycle(s) did not fail where they must: {', '.join(weak_negative)}")
+    if result.get("problems") or result.get("repeatability") or result.get("CLEAN_VM_ACCEPTANCE") != "PASS":
+        first = (result.get("problems") or result.get("repeatability") or ["the judge did not say PASS"])[0]
+        return Check("clean_vm", FAIL, f"the judge does not accept these cycles: {str(first)[:160]}")
+
+    # The cycles are about an installer; it has to be THIS tree's.
+    subject = (result.get("subject") or {}).get("installer") or {}
+    setup = next((e for e in entries if e["name"].endswith("-setup.exe")), None)
+    binary = next((e for e in entries if e["name"] == release_identity.BINARY.name), None)
+    if setup is None or binary is None:
+        return Check("clean_vm", NOT_VERIFIED, "the artefacts of this tree are not on disk, so the cycles cannot be tied to them", "npm run tauri:build, or release_fetch.py")
+    wrong = [
+        f"{what}: cycles ran {got!r}, this tree has {want!r}"
+        for what, got, want in (
+            ("installer", subject.get("file"), setup["name"]),
+            ("installer sha256", subject.get("sha256"), setup["sha256"]),
+            ("executable sha256", subject.get("exe_sha256"), binary["sha256"]),
+            ("version", subject.get("version"), version),
+            ("build commit", subject.get("build_commit"), commit),
+        )
+        if got != want
+    ]
+    if wrong:
+        return Check("clean_vm", FAIL, "the cycles ran another artefact than this tree's - " + "; ".join(wrong))
+
+    # A stored verdict is a copy of what was just derived; one that says otherwise was edited.
+    rederived = json.loads(json.dumps(result))
+    for name in ("verdict.json", "report/verdict.json"):
+        stored = evidence / name
+        if stored.is_file():
+            try:
+                kept = json.loads(stored.read_text("utf-8-sig"))
+            except ValueError:
+                return Check("clean_vm", FAIL, f"{name} is not JSON")
+            if kept != rederived:
+                differs = next((k for k in sorted(set(kept) | set(rederived)) if kept.get(k) != rederived.get(k)), "?")
+                return Check("clean_vm", FAIL, f"{name} differs from the verdict re-derived from the cycles (first difference: {differs})")
+    names = ", ".join(sorted(c.name for c in cycles))
+    return Check(
+        "clean_vm",
+        PASS,
+        f"re-judged here from {len(cycles)} cycles ({names}): {setup['name']} {setup['sha256'][:12]} passed A, B, upgrade and {len(spec)} negative cycles; base image {str((result['subject'] or {}).get('base_sha256'))[:12]} "
+        "(the evidence is of a run on that image, not proof of the machine's state - keep the lab record with it)",
+    )
 
 
 GUI_SUBJECT = re.compile(r"^SUBJECT\b.*?\bstamp=([0-9a-f]{40}(?:-dirty)?|unknown|none)(?=\s|$)", re.M)
@@ -736,7 +838,7 @@ def main() -> int:
     parser.add_argument("--skip-gate", action="store_true")
     parser.add_argument("--skip-deps", action="store_true")
     parser.add_argument("--compare", type=pathlib.Path, help="root of a second build of this commit")
-    parser.add_argument("--evidence-vm", type=pathlib.Path, help="an install_check.ps1 log from a clean machine")
+    parser.add_argument("--evidence-vm", type=pathlib.Path, help="the directory holding the Clean VM cycle directories (A, B, U, N1..N5); they are judged again here")
     parser.add_argument("--evidence-gui", type=pathlib.Path, help="a gui_journeys.ps1 log: the chooser journeys driven through the interface")
     parser.add_argument("--no-network", action="store_true")
     parser.add_argument("--out", type=pathlib.Path, default=ROOT / "release-readiness.json")
@@ -765,7 +867,7 @@ def main() -> int:
     checks.append(check_reproducibility(args.compare, entries, verified))
     checks.append(check_toolchain())
     checks.append(check_ci(args.no_network))
-    checks.append(check_vm(args.evidence_vm))
+    checks.append(check_vm(args.evidence_vm, entries, version, expected_build_commit(version)))
     checks.append(gui_check(args.evidence_gui, verified, expected_build_commit(version), entries))
     checks += check_external(mode)
 
