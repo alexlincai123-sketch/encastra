@@ -151,17 +151,28 @@ def verify_dev_build(setup: pathlib.Path, exe: pathlib.Path) -> dict:
         raise Refused("the tracked tree is dirty; a dev build must be of a commit")
     data = exe.read_bytes()
     stamp = re.search(rb"encastra-build-commit=([0-9a-f]{40})(-dirty)?;", data)
-    if not stamp or stamp.group(2) or stamp.group(1).decode() != head:
-        raise Refused(f"dev executable stamp {stamp.group(0) if stamp else None!r} is not HEAD {head}")
+    if not stamp or stamp.group(2):
+        raise Refused(f"dev executable stamp {stamp.group(0) if stamp else None!r} is not a clean commit")
+    built = stamp.group(1).decode()
+    # Built from HEAD, or from an ancestor of it with not one byte of product source changed since
+    # (only the harness moved on): either way these are the bytes this checkout's product builds.
+    product = ["apps", "crates", "packages", "Cargo.toml", "Cargo.lock", "package.json", "package-lock.json"]
+    if built != head:
+        if not is_ancestor(built, head):
+            raise Refused(f"dev executable stamp {built} is not HEAD {head} nor an ancestor of it")
+        changed = git("diff", "--name-only", built, head, "--", *product)
+        if changed:
+            raise Refused(f"product source changed between the dev build {built[:12]} and HEAD: {changed.splitlines()[:5]}")
     version = json.loads((ROOT / "apps" / "desktop" / "src-tauri" / "tauri.conf.json").read_text())["version"]
     if f"Encastra_{version}_x64-setup.exe" != setup.name:
         raise Refused(f"{setup.name} is not the installer tauri:build writes for version {version}")
     return {
-        "file": setup.name, "sha256": sha256(setup), "version": version, "build_commit": head,
+        "file": setup.name, "sha256": sha256(setup), "version": version, "build_commit": built,
         "exe_sha256": sha256(exe), "installed_exe_sha256": hashlib.sha256(installed_exe_bytes(data)).hexdigest(),
         "signature": "NotSigned", "tag": None, "tag_commit": head, "github_release": False,
         "dev_build": True, "host_verified": True,
-        "host_evidence": [f"LOCAL DEV BUILD of {head} - not a release", "tracked tree clean", f"executable stamped {head[:12]}",
+        "host_evidence": [f"LOCAL DEV BUILD of {built} - not a release", "tracked tree clean", f"executable stamped {built[:12]}",
+                          f"HEAD {head[:12]}; product source identical between them" if built != head else "built from HEAD",
                           f"installer name matches version {version}"],
     }
 
