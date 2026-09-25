@@ -928,30 +928,30 @@ function Scenario-CLEAN013 {
 function Scenario-CLEAN011 {
     Run-Scenario 'CLEAN-011' 'Upgrade: previous published version -> this one, user state carried over, one entry, works' {
         $st = Get-State
-        $A = $script:Expected.upgrade_from; $B = $script:Expected.installer
-        Expect "install $($A.version) ($($A.sha256)), set state, install $($B.version) over it: one HKCU entry, $($B.version) bytes, state kept, journeys pass"
+        $fromArt = $script:Expected.upgrade_from; $toArt = $script:Expected.installer
+        Expect "install $($fromArt.version) ($($fromArt.sha256)), set state, install $($toArt.version) over it: one HKCU entry, $($toArt.version) bytes, state kept, journeys pass"
         $base = Load-Json (Join-Path $script:R 'inventory\baseline.json')
-        Invoke-InstallCheck $st.upgrade_copy $A 'install-A.log' $null | Out-Null
+        Invoke-InstallCheck $st.upgrade_copy $fromArt 'install-A.log' $null | Out-Null
         Stop-App | Out-Null
         $a = Start-ReadyApp -Cdp
-        Check "version A ($($A.version)) reaches ready" $a.ready 'ready' (Short $a.detail)
+        Check "version A ($($fromArt.version)) reaches ready" $a.ready 'ready' (Short $a.detail)
         Observe 'A_welcome' (Dismiss-Welcome)
         Observe 'A_settings_clicks' (Set-LocaleThroughSettings '^Espa.ol$')
         $sa = Get-PersistedState
         Evidence 'state-A.json' $sa | Out-Null
         Check 'state set in version A (language es, welcome seen)' ($sa.locale -eq 'es' -and $sa.welcome_seen -eq $true) 'es, true' "$($sa.locale), $($sa.welcome_seen)"
         Close-AppGracefully | Out-Null; Stop-App | Out-Null
-        $lines = Invoke-InstallCheck $st.installer_copy $B 'install-B-over-A.log' $null
+        $lines = Invoke-InstallCheck $st.installer_copy $toArt 'install-B-over-A.log' $null
         $prev = $lines | Where-Object { $_ -like 'installed before:*' } | Select-Object -First 1
-        Check 'install_check saw version A installed before the upgrade' ($prev -match [regex]::Escape($A.version)) "installed before: $($A.version)" (Short $prev)
+        Check 'install_check saw version A installed before the upgrade' ($prev -match [regex]::Escape($fromArt.version)) "installed before: $($fromArt.version)" (Short $prev)
         $entries = @(Get-EncastraUninstallEntries)
-        Check 'exactly one Encastra uninstall entry, at version B' ($entries.Count -eq 1 -and $entries[0].version -eq $B.version -and $entries[0].hive -like 'HKCU:*') "1 x $($B.version) in HKCU" (Short $entries)
+        Check 'exactly one Encastra uninstall entry, at version B' ($entries.Count -eq 1 -and $entries[0].version -eq $toArt.version -and $entries[0].hive -like 'HKCU:*') "1 x $($toArt.version) in HKCU" (Short $entries)
         $listing = @(Get-InstallListing)
         Evidence 'install-dir-after-upgrade.json' $listing | Out-Null
         Check 'install directory holds only the executable and the uninstaller' (@($listing).Count -eq 2) 2 (Short ($listing | ForEach-Object { $_.path }))
         Stop-App | Out-Null
         $b = Start-ReadyApp -Cdp
-        Check "version B ($($B.version)) reaches ready after the upgrade" $b.ready 'ready' (Short $b.detail)
+        Check "version B ($($toArt.version)) reaches ready after the upgrade" $b.ready 'ready' (Short $b.detail)
         $sb = Get-PersistedState
         Evidence 'state-B.json' $sb | Out-Null
         Check 'language carried over the upgrade' ($sb.locale -eq 'es') 'es' $sb.locale
