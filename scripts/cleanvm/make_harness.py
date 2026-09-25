@@ -62,6 +62,21 @@ def git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
+SUMS_LINE = re.compile(r"^([0-9a-f]{64}) [ *](\S.*)$")
+
+
+def read_sums(path: pathlib.Path) -> dict[str, str]:
+    """A SHA256SUMS file as {file name: digest}, in either of sha256sum's forms: `<sha>  name`
+    (text mode, what release.yml publishes) or `<sha> *name` (binary mode, what candidate.yml
+    writes). A line in neither form names nothing."""
+    out: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        m = SUMS_LINE.match(line.strip())
+        if m:
+            out[m.group(2)] = m.group(1)
+    return out
+
+
 def is_ancestor(a: str, b: str) -> bool:
     return subprocess.run(["git", "merge-base", "--is-ancestor", a, b], cwd=ROOT).returncode == 0
 
@@ -119,7 +134,7 @@ def verify_release(tag: str, setup: pathlib.Path, exe: pathlib.Path, sums: pathl
     else:
         evidence.append(f"no GitHub Release for {tag}: identity rests on docs/RELEASE.md at the tag")
     if sums is not None:
-        lines = dict(reversed(l.split()) for l in sums.read_text().splitlines() if l.strip())
+        lines = read_sums(sums)
         for f in (setup, exe):
             if lines.get(f.name) != sha256(f):
                 raise Refused(f"{sums.name} says {lines.get(f.name)} for {f.name}")
@@ -189,7 +204,7 @@ def verify_candidate_build(ref: str, setup: pathlib.Path, exe: pathlib.Path, sum
         if verified["files"].get(f.name) != sha256(f):
             raise Refused(f"{f.name}: candidate run {run.group(1)} copy A holds {verified['files'].get(f.name)}, the file is {sha256(f)}")
     evidence.append(f"candidate run {run.group(1)}: candidate.yml on {m['build_commit'][:12]}, green, zips = GitHub digests, copy B identical, copy A = these files")
-    lines = dict(reversed(l.split()) for l in sums.read_text().splitlines() if l.strip())
+    lines = read_sums(sums)
     for f in (setup, exe):
         if lines.get(f.name) != sha256(f):
             raise Refused(f"{sums.name} says {lines.get(f.name)} for {f.name}")

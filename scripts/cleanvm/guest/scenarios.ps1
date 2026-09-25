@@ -223,7 +223,7 @@ function Test-Artifact($art, [string]$label) {
     $sums = Join-Path $script:H "artifacts\$($art.sums_file)"
     $line = if (Test-Path -LiteralPath $sums) { Get-Content -LiteralPath $sums | Where-Object { $_ -match [regex]::Escape($art.file) } | Select-Object -First 1 } else { $null }
     Check "$label SHA256SUMS on the disc names this digest for this file" ($null -ne $line -and $line -match "^$($art.sha256)\s") "$($art.sha256)  $($art.file)" (Short $line)
-    $idWhat = if ([bool](Prop $art 'dev_build')) { "LOCAL DEV BUILD's identity (tracked tree clean, stamp = HEAD) - not a release" } else { 'published identity (release digest = SHA256SUMS = RELEASE.md at the tag)' }
+    $idWhat = if ([bool](Prop $art 'dev_build')) { "LOCAL DEV BUILD's identity (tracked tree clean, stamp = HEAD) - not a release" } elseif ($null -ne (Prop $art 'candidate_run')) { 'candidate identity (candidate run digests = SHA256SUMS = RELEASE.md at the publication commit), before its tag' } else { 'published identity (release digest = SHA256SUMS = RELEASE.md at the tag)' }
     Check "$label host verified the $idWhat" ([bool]$art.host_verified) 'true' (Short $art.host_evidence)
     $sig = Get-AuthenticodeSignature -LiteralPath $path
     Check "$label signature state is the documented one ($($art.signature))" ([string]$sig.Status -eq $art.signature) $art.signature $sig.Status
