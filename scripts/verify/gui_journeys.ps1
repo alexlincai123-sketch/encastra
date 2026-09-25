@@ -2526,6 +2526,31 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
             $edit = $h; $editHow = "the descendant Edit window with ctrlId=$id"; break
         }
     }
+    # A dialog that has only just opened may not have created its name edit yet. The first Save As
+    # after a cold restart on a loaded machine (Clean VM cycle A, CLEAN-007) had only the combo's
+    # AppControlHost in focus and no Edit anywhere - "edit windows=[]" - so the path was typed into
+    # nothing, while the next Save As a few seconds later found `class=Edit ctrlId=1001` as usual.
+    # So the edit is waited for, a bounded ten seconds, before falling back to typing.
+    $waitedForEdit = 0
+    while ($edit -eq $NULLPTR -and $waitedForEdit -lt 10000) {
+        Start-Sleep -Milliseconds 500
+        $waitedForEdit += 500
+        if ($field.Element) { try { $field.Element.SetFocus() } catch { } }
+        $focused = FocusedElement
+        $h = $NULLPTR
+        if ($focused) { try { $h = [IntPtr]$focused.Current.NativeWindowHandle } catch { $h = $NULLPTR } }
+        if ($h -ne $NULLPTR -and (HwndClass $h) -eq 'Edit') {
+            $edit = $h; $editHow = "the Edit focus reached after $waitedForEdit ms of waiting for the dialog to create it (#$h ctrlId=$([W32]::GetDlgCtrlID($h)))"
+            break
+        }
+        foreach ($h in @(ChildrenByClass $dh 'Edit' 5)) {
+            $id = [W32]::GetDlgCtrlID($h)
+            if ($id -ne 1148 -and $id -ne 1001) { continue }
+            if (LooksLikeSearch (HwndUiaName $h)) { continue }
+            $edit = $h; $editHow = "the descendant Edit window with ctrlId=$id, found after $waitedForEdit ms of waiting"; break
+        }
+    }
+    if ($waitedForEdit -gt 0) { $script:typeNotes += "$what : the name edit was not there when the dialog came up; waited $waitedForEdit ms, found=$($edit -ne $NULLPTR)" }
 
     # 4. Write, and read back twice from two different places.
     #
