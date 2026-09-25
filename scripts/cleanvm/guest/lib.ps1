@@ -327,11 +327,15 @@ function Save-Inventory([string]$label, [switch]$NoNameScan) {
 }
 
 function Diff-List($before, $after) {
-    $b = @{}; foreach ($x in @($before)) { $b[[string]$x] = $true }
-    $a = @{}; foreach ($x in @($after)) { $a[[string]$x] = $true }
+    # $null is never an entry: a function returning an EMPTY list hands its caller $null (PowerShell
+    # unrolls it), and @($null) is a one-element list - which read as "removed {$null}" once.
+    $before = @(@($before) | Where-Object { $null -ne $_ })
+    $after = @(@($after) | Where-Object { $null -ne $_ })
+    $b = @{}; foreach ($x in $before) { $b[[string]$x] = $true }
+    $a = @{}; foreach ($x in $after) { $a[[string]$x] = $true }
     [ordered]@{
-        added = @(@($after) | Where-Object { -not $b.ContainsKey([string]$_) })
-        removed = @(@($before) | Where-Object { -not $a.ContainsKey([string]$_) })
+        added = @($after | Where-Object { -not $b.ContainsKey([string]$_) })
+        removed = @($before | Where-Object { -not $a.ContainsKey([string]$_) })
     }
 }
 
