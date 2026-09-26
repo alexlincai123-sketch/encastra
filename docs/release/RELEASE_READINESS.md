@@ -73,3 +73,28 @@ No OAuth or app registration is needed: nothing in the product authenticates.
   (`save_project`, `open_project`, …) need a compromised renderer; accepted in `THREAT-MODEL.md`.
 - The Clean VM judge cannot detect a forger who rewrites `serial.log` on the lab host
   (`CLEAN_VM_ACCEPTANCE.md`, *Known limitations*).
+
+## Support
+
+What a customer is likely to hit in the first week, and the honest answer. The customer-facing
+walkthrough is `docs/user/GETTING_STARTED.md`. UI wording in quotes is from
+`apps/desktop/src/i18n/locales/en.ts`.
+
+| Symptom | Cause | What to tell the customer |
+|---|---|---|
+| "Windows protected your PC" / unknown publisher when running the installer | The build is not code-signed (`docs/RELEASE.md`, `docs/SIGNING.md`) | The warning is accurate. Check the installer's SHA-256 against the BUILD block in `docs/RELEASE.md` first. If it matches, choose More info → Run anyway. A hash proves the file was not altered, not who made it. How a downloaded copy looks under SmartScreen is not recorded yet (EXTERNAL above). |
+| "How do I update?" / no update prompt ever appears | No update channel: designed, Not built (`docs/RELEASE.md`, *Updates*) | Download the new installer, verify its hash, run it over the old install. Projects, library and preferences stay. Settings → Updates says the same. |
+| "Is there a Mac / Linux version?" | Windows x64 only; macOS and Linux Not built (`site.ts` `STATUS`) | No. Say "Not built" and give no date. |
+| Looking for sign-in, sync, cloud backup, a subscription | No accounts and no server (`STATUS.accounts`: Not built) | Everything is local. Back up `.encastra` files like any other file. Settings → Account says the same. |
+| "How do I install a component from someone else?" | Third-party components run only in the WebAssembly sandbox, which is designed and Not built (`THREAT-MODEL.md` §6.1) | Not possible in this build. Only the built-in components run. A publication can be imported (Library → "Import…"), but it can only use built-in components. |
+| Save File fails with "This step asked for something it was not allowed to do…" although the folder shows "Allowed" | A file with that name is already in the folder. A run never replaces files (`broker.rs` `save_to`), and the step's error says only that it was refused; the reason ("a file of that name is already there, and a run does not replace files") is on the refused line under "Permissions used" in the Inspector, which the error note points to | Delete or move the existing file, or set a suffix or name on Save File. |
+| "Allow this folder" is disabled, or a typed path is refused | A grant needs a folder picked in the native chooser for that purpose (`THREAT-MODEL.md` §6.4) | Use "Choose…", not a typed path. |
+| "That folder cannot be used (…)" after Choose… | The broker refuses drive roots, Windows/program folders, the profile root and Startup (`THREAT-MODEL.md` §6.4) | Pick a subfolder, for example inside Documents. |
+| Permissions have to be given again after reopening | Grants last while the project is open and are never saved (inspector: "Allowed while this project is open…") | By design. A project someone sends you can do nothing until you allow it yourself. |
+| A workflow needs an API token or password | No keystore: secret storage Not built (`THREAT-MODEL.md` §2) | There is no safe place for secrets in this build. Don't type tokens into step settings; they would be saved in the project file. |
+| HTTP Request fails on a redirect, a plain `http://` address, or a large response | No redirects, https by default, 16 MB response cap, 30 s timeout (`docs/security/LIMITS.md`, *Network*) | Use the final https address, or turn on "Allow plain http" only for an address they trust. |
+| A run stops after an hour; very large files or images are refused | 1-hour run ceiling; 512 MB per file read; 256 MB / 100 MP per image (`LIMITS.md`) | Documented limits. Split the work. There is no per-step timeout, and cancellation is cooperative, so Stop may not end a step that never returns. The way out is to end the application: close it, or use Task Manager if the window won't close (`LIMITS.md`, *The runner*). |
+| "Where is my data?" / "What does uninstall leave behind?" | `docs/RELEASE.md`, *Installing* | Projects: wherever they saved them. Library: `%APPDATA%\dev.encastra.app\library\`. Preferences: `%LOCALAPPDATA%\dev.encastra.app\`. Uninstall keeps both folders unless the delete-data box is ticked (unticked by default; `/S` always keeps them). |
+| "Does it send anything?" | No telemetry, crash reporting or analytics; network only from a step granted a host (PASS row above) | Nothing is collected or sent. Settings → Privacy and the Security screen state it. |
+| Reporting a bug | Only channel: the GitHub issue tracker (`apps/web` contact text) | <https://github.com/alexlincai123-sketch/encastra/issues>, with Settings → Diagnostics → "Copy" pasted in (the report contains no paths or tokens). Replies in days; no support team. |
+| Reporting a security problem | `SECURITY.md` | Private report only: <https://github.com/alexlincai123-sketch/encastra/security/advisories/new>. No security email, no bug bounty. |

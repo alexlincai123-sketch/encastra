@@ -42,7 +42,8 @@ the artefact that actually travels.
 ## Producing a build
 
 Everything runs from the repository root, on a **clean, committed tree**. The binary records the
-commit it was built from (`build.rs` embeds it; Settings → About shows it as the build commit),
+commit it was built from (`build.rs` embeds it as `encastra-build-commit=<hash>;`; Settings shows
+the version, not the commit),
 and the manifest refuses to describe a build whose tree had uncommitted changes.
 
 **Since 0.5.0-rc.5 the published bytes are built by CI, not on a developer machine.** A developer
@@ -119,7 +120,7 @@ therefore has two commits, one apart:
 
 | | What it is | Where it is named |
 |---|---|---|
-| **Build commit** | The tree that produced the bytes | Inside `encastra-desktop.exe` (`encastra-build-commit=<hash>;`), Settings → About, the block above, `site.ts` |
+| **Build commit** | The tree that produced the bytes | Inside `encastra-desktop.exe` (`encastra-build-commit=<hash>;`), the block above, `site.ts` |
 | **Publication commit** | Build commit + `docs/RELEASE.md` + `site.ts` | The `v<version>` tag |
 
 `release_manifest.py --verify` is the check that the two are one publication apart and nothing
