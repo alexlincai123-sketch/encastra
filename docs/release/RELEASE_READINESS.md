@@ -1,5 +1,7 @@
 # Release readiness — 0.5.0-rc.6
 
+> **2026-09-26: distribution is free.** Encastra is distributed free from GitHub under the PolyForm Noncommercial License 1.0.0 (`LICENSE`), with nothing for sale. The sections of this document about selling (owner decisions, payments, seller of record, pricing) describe a plan that is not being pursued; the engineering criteria and the Clean VM evidence stand. Free distribution: `docs/release/FREE_DISTRIBUTION.md`.
+
 What stands between this repository and a product a stranger can install, use and pay for — each
 line is **PASS** (with the evidence that makes it so), **PENDING** (what closes it, inside the
 repository) or **EXTERNAL** (what the owner has to do, exactly). Nothing here is PASS because it

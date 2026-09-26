@@ -1,5 +1,7 @@
 # Legal and commercial preparation — what is drafted, and what only a lawyer can decide
 
+> **2026-09-26: superseded for distribution.** Encastra is distributed free under the PolyForm Noncommercial License 1.0.0 (`LICENSE`). The EULA, refund and sale drafts below were written for a paid product and are not in use; the privacy text and the trademark checklist still apply. A lawyer has reviewed none of this.
+
 **Nothing in this directory is legal advice, a licence in force, or a cleared name.** These are
 drafts written so that the people who can decide have something concrete to decide on, and so
 that the release tooling can point at a missing signature rather than at a missing document.
