@@ -31,8 +31,13 @@
     "targets": ["nsis"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
     "shortDescription": "Build software from parts that fit.",
-    "longDescription": "Encastra runs a typed graph of sandboxed components on your machine.",
-    "copyright": "Copyright (c) 2026 the Encastra author. All rights reserved. See LICENSE.",
+    "longDescription": "Encastra runs a typed graph of components on your machine, each limited to the folders and hosts you grant it.",
+    "copyright": "Copyright (c) 2026 the Encastra author. All rights reserved. See LICENSE.txt.",
+    "resources": {
+      "../../../LICENSE": "LICENSE.txt",
+      "../../../NOTICE": "NOTICE.txt",
+      "../../../docs/THIRD-PARTY.md": "THIRD-PARTY.md"
+    },
     "windows": {
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",
