@@ -71,7 +71,8 @@ const es: Messages = {
       licencePrefix:
         'Encastra se descarga gratis. Es código disponible, gratis para uso personal, educativo y no comercial bajo la',
       licenceLinkText: 'PolyForm Noncommercial License 1.0.0',
-      licenceMiddle: '; el uso comercial requiere una licencia aparte — pídela a través del',
+      licenceMiddle: '; el uso comercial requiere una licencia aparte — escribe a',
+      emailOr: 'o pídela a través del',
       repoLinkText: 'repositorio de GitHub',
       draftsPrefix: 'Los documentos legales de este sitio son',
       draftsLinkText: 'borradores sin revisar',
@@ -401,7 +402,7 @@ const es: Messages = {
       title: 'Reportar una vulnerabilidad',
       lead: 'Por favor, no abras un issue público para un problema de seguridad. Un reporte público pone en marcha un reloj que quienes pueden arreglarlo quizá no logren ganar.',
       noAddress:
-        'Repórtalo en privado mediante el reporte privado de vulnerabilidades de GitHub en el repositorio (hace falta una cuenta de GitHub). No hay dirección de correo de seguridad — el dominio en los identificadores de este proyecto no está registrado, así que cualquier dirección que puedas deducir de este sitio no lleva a ningún sitio. El borrador de divulgación coordinada dice qué incluir.',
+        'Repórtalo en privado mediante el reporte privado de vulnerabilidades de GitHub en el repositorio (hace falta una cuenta de GitHub). No hay dirección de correo de seguridad — el dominio en los identificadores de este proyecto no está registrado, así que cualquier dirección en ese dominio no lleva a ningún sitio, y el correo de /contact es para licencias comerciales, no para reportes de vulnerabilidades. El borrador de divulgación coordinada dice qué incluir.',
       reportPrivately: 'Reportar en privado en GitHub',
       readDisclosure: 'Leer el borrador de divulgación',
     },
@@ -1009,34 +1010,33 @@ const es: Messages = {
   contact: {
     meta: {
       description:
-        'Cómo contactar con el proyecto hoy. Todavía no hay correo público, ni cuentas, ni mesa de soporte — esta página dice exactamente qué existe y qué no.',
+        'Cómo contactar con el proyecto: un correo para licencias comerciales y consultas de negocio, el reporte privado de GitHub para problemas de seguridad y los issues del repositorio para bugs. Sin cuentas y sin mesa de soporte.',
     },
     hero: {
       eyebrow: 'Contacto',
       title: 'Cómo contactar con el proyecto',
-      lead: 'Con honestidad: todavía no hay mucho aquí. Sin cuenta, sin mesa de soporte, y sin ninguna dirección general publicada — porque nada de eso existe. Esta página nombra el único canal que sí existe.',
+      lead: 'Tres canales, cada uno para una cosa. No hay cuenta ni mesa de soporte.',
     },
-    noAddress: {
-      title: 'Todavía sin dirección de contacto general',
-      bodyPrefix: 'El dominio en los propios identificadores de este proyecto,',
-      bodyMiddle: 'no está registrado (mira',
+    email: {
+      title: 'Licencias comerciales y consultas de negocio',
+      bodyPrefix:
+        'Usar Encastra con fines comerciales requiere una licencia aparte. Para eso, y para otras consultas de negocio, escribe a',
       bodySuffix:
-        '), así que cualquier dirección que alguien pudiera adivinar en este sitio no llevaría a ningún sitio. Establecer una es un requisito previo al lanzamiento, no algo que se salte por accidente.',
+        '. Por favor, no envíes ahí reportes de vulnerabilidades ni de bugs — tienen sus propios canales más abajo.',
     },
     security: {
       eyebrow: 'Seguridad',
       title: '¿Encontraste una vulnerabilidad?',
-      body: 'Este es el único canal especificado hoy. Por favor, no abras un issue público — repórtalo en privado mediante el reporte privado de vulnerabilidades de GitHub en el repositorio. Mira el borrador de divulgación para ver exactamente qué incluir y qué esperar.',
+      body: 'Este es el canal para problemas de seguridad. Por favor, no abras un issue público ni lo envíes por correo — repórtalo en privado mediante el reporte privado de vulnerabilidades de GitHub en el repositorio. Mira el borrador de divulgación para ver exactamente qué incluir y qué esperar.',
       reportCta: 'Reportar en privado en GitHub',
       cta: 'Leer la política de divulgación',
     },
     everythingElse: {
       eyebrow: 'Todo lo demás',
       title: 'Bugs, preguntas y feedback',
-      bodyPrefix:
-        'Todavía no hay mesa de soporte ni un canal de feedback dedicado. El repositorio es público en',
+      bodyPrefix: 'No hay mesa de soporte. El repositorio es público en',
       bodySuffix:
-        '— su rastreador de issues es lo más parecido a un canal para bugs, preguntas y feedback que tiene este proyecto ahora mismo. No para problemas de seguridad: esos van por el reporte privado de arriba.',
+        '— su rastreador de issues es el canal para bugs, preguntas y feedback. No para problemas de seguridad: esos van por el reporte privado de arriba.',
     },
   },
 

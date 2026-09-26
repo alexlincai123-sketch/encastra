@@ -70,7 +70,8 @@ const en: Messages = {
       licencePrefix:
         'Encastra is free to download. It is source-available, free for personal, educational and other noncommercial use under the',
       licenceLinkText: 'PolyForm Noncommercial License 1.0.0',
-      licenceMiddle: '; commercial use needs a separate licence — ask through',
+      licenceMiddle: '; commercial use needs a separate licence — write to',
+      emailOr: 'or ask through',
       repoLinkText: 'the GitHub repository',
       draftsPrefix: 'The legal documents on this site are',
       draftsLinkText: 'unreviewed drafts',
@@ -419,7 +420,7 @@ const en: Messages = {
       title: 'Reporting a vulnerability',
       lead: 'Please do not open a public issue for a security problem. A public report starts a clock that the people who can fix it may not be able to beat.',
       noAddress:
-        'Report privately through GitHub’s private vulnerability reporting on the repository (a GitHub account is needed). There is no security email address — the domain in this project’s identifiers is not registered, so any address you might infer from this site goes nowhere. The coordinated-disclosure draft says what to include.',
+        'Report privately through GitHub’s private vulnerability reporting on the repository (a GitHub account is needed). There is no security email address — the domain in this project’s identifiers is not registered, so any address at that domain goes nowhere, and the email address on /contact is for commercial licences, not for vulnerability reports. The coordinated-disclosure draft says what to include.',
       reportPrivately: 'Report privately on GitHub',
       readDisclosure: 'Read the disclosure draft',
     },
@@ -1019,34 +1020,33 @@ const en: Messages = {
   contact: {
     meta: {
       description:
-        'How to reach the project today. There is no public email yet, no accounts, and no support desk — this page says exactly what does and does not exist.',
+        'How to reach the project: an email address for commercial licences and business enquiries, private reporting on GitHub for security problems, and the repository’s issues for bugs. No accounts and no support desk.',
     },
     hero: {
       eyebrow: 'Contact',
       title: 'How to reach the project',
-      lead: 'Honestly: there is not much here yet. No account, no support desk, and no published general-purpose address — because none of those exist. This page names the one channel that does.',
+      lead: 'Three channels, each for one thing. There is no account and no support desk.',
     },
-    noAddress: {
-      title: 'No general contact address yet',
-      bodyPrefix: 'The domain in this project’s own identifiers,',
-      bodyMiddle: 'is not registered (see',
+    email: {
+      title: 'Commercial licences and business enquiries',
+      bodyPrefix:
+        'Using Encastra commercially needs a separate licence. For that, and for other business enquiries, write to',
       bodySuffix:
-        '), so an address anybody might guess from this site would go nowhere. Establishing one is a launch prerequisite, not something skipped by accident.',
+        '. Please do not send vulnerability reports or bug reports there — they have their own channels below.',
     },
     security: {
       eyebrow: 'Security',
       title: 'Found a vulnerability?',
-      body: 'This is the one channel that is specified today. Please do not open a public issue — report privately through GitHub’s private vulnerability reporting on the repository. See the disclosure draft for exactly what to include and what to expect.',
+      body: 'This is the channel for security problems. Please do not open a public issue, and do not send it by email — report privately through GitHub’s private vulnerability reporting on the repository. See the disclosure draft for exactly what to include and what to expect.',
       reportCta: 'Report privately on GitHub',
       cta: 'Read the disclosure policy',
     },
     everythingElse: {
       eyebrow: 'Everything else',
       title: 'Bugs, questions, and feedback',
-      bodyPrefix:
-        'There is no support desk and no dedicated feedback channel yet. The repository is public at',
+      bodyPrefix: 'There is no support desk. The repository is public at',
       bodySuffix:
-        '— its issue tracker is the closest thing to a channel for bugs, questions and feedback this project currently has. Not for security problems: those go through the private reporting above.',
+        '— its issue tracker is the channel for bugs, questions and feedback. Not for security problems: those go through the private reporting above.',
     },
   },
 

@@ -177,7 +177,8 @@ language, the rule belongs in the data file instead.
 
 Source-available and **free for personal, educational and other noncommercial use** under the
 [PolyForm Noncommercial License 1.0.0](LICENSE). It is not open source in the OSI sense: commercial
-use is not licensed by those terms and needs a separate licence — ask through this repository.
+use is not licensed by those terms and needs a separate licence. Commercial licences and business
+enquiries: [alexcaioficial123@gmail.com](mailto:alexcaioficial123@gmail.com).
 Third-party dependencies keep their own licences, listed in [THIRD-PARTY](docs/THIRD-PARTY.md) with
 the attribution they require in [NOTICE](NOTICE). How the choice was reached is in
 [LICENSING](docs/LICENSING.md).

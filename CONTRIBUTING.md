@@ -29,5 +29,6 @@ Rules that are not negotiable here: no AI in the runtime; connection rules live 
 `packages/protocol/data/type-graph.json` (never regenerate the conformance matrix to make a test
 pass); never commit secrets; never claim something the code does not do.
 
-Encastra is distributed under the [PolyForm Noncommercial License 1.0.0](LICENSE). Before a
+Encastra is distributed under the [PolyForm Noncommercial License 1.0.0](LICENSE). For a commercial
+licence or any business enquiry, write to alexcaioficial123@gmail.com. Before a
 contribution is merged, the maintainer may ask you to confirm the terms under which you offer it.

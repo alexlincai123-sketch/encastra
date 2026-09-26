@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { FOOTER_NAV } from '@/config/nav';
-import { LICENSE_URL, SITE, VERSION } from '@/config/site';
+import { CONTACT_EMAIL, LICENSE_URL, SITE, VERSION } from '@/config/site';
 import type { Locale } from '@/lib/i18n/locale';
 import { t } from '@/lib/i18n/translate';
 
@@ -49,6 +49,8 @@ export function Footer({ locale }: { locale: Locale }): ReactNode {
           {t(locale, 'footer.legal.licencePrefix')}{' '}
           <a href={LICENSE_URL}>{t(locale, 'footer.legal.licenceLinkText')}</a>
           {t(locale, 'footer.legal.licenceMiddle')}{' '}
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>{' '}
+          {t(locale, 'footer.legal.emailOr')}{' '}
           <a href={SITE.repository}>{t(locale, 'footer.legal.repoLinkText')}</a>.{' '}
           {t(locale, 'footer.legal.draftsPrefix')}{' '}
           <Link href="/legal">{t(locale, 'footer.legal.draftsLinkText')}</Link>.

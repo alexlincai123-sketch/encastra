@@ -26,8 +26,9 @@ export const SITE = {
   url: 'https://encastra.dev',
   /**
    * The public repository. The source is available under the PolyForm Noncommercial License
-   * 1.0.0 (`LICENSE`); builds are published on its Releases page. It is also the one contact
-   * channel that exists: see `SECURITY_REPORT_URL`.
+   * 1.0.0 (`LICENSE`); builds are published on its Releases page. Its issue tracker is the
+   * channel for bugs, and its private vulnerability reporting the channel for security problems
+   * (`SECURITY_REPORT_URL`). Commercial licences and business enquiries go to `CONTACT_EMAIL`.
    */
   repository: 'https://github.com/alexlincai123-sketch/encastra',
 } as const;
@@ -42,6 +43,12 @@ export const RELEASES_URL = `${SITE.repository}/releases`;
 
 /** The licence text itself, in the repository. The site describes it; this file is what binds. */
 export const LICENSE_URL = `${SITE.repository}/blob/main/LICENSE`;
+
+/**
+ * The project's one email address: for commercial licences and business enquiries. Not for
+ * security reports (see `SECURITY_REPORT_URL`) and not for bugs (the repository's issues).
+ */
+export const CONTACT_EMAIL = 'alexcaioficial123@gmail.com';
 
 /**
  * Where a vulnerability is reported privately: GitHub's private vulnerability reporting on the

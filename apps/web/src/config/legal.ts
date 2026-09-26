@@ -57,9 +57,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       },
       {
         heading: 'Contact',
-        body: [
-          'There is no dedicated privacy contact address published yet. See /contact for what channels currently exist.',
-        ],
+        body: ['There is no dedicated privacy address. See /contact for the channels that exist.'],
       },
     ],
   },
@@ -97,7 +95,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'Source code licence',
         body: [
-          'Encastra is source-available, free for personal, educational and other noncommercial use under the PolyForm Noncommercial License 1.0.0. The licence text is the LICENSE file at the root of the repository: https://github.com/alexlincai123-sketch/encastra/blob/main/LICENSE — that file, not this summary, is what applies. Commercial use needs a separate licence — ask through the GitHub repository: https://github.com/alexlincai123-sketch/encastra. Third-party dependencies keep their own licences.',
+          'Encastra is source-available, free for personal, educational and other noncommercial use under the PolyForm Noncommercial License 1.0.0. The licence text is the LICENSE file at the root of the repository: https://github.com/alexlincai123-sketch/encastra/blob/main/LICENSE — that file, not this summary, is what applies. Commercial use needs a separate licence — write to alexcaioficial123@gmail.com, or ask through the GitHub repository: https://github.com/alexlincai123-sketch/encastra. Third-party dependencies keep their own licences.',
         ],
       },
       {
@@ -138,7 +136,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
     slug: 'security-disclosure',
     title: 'Security Disclosure Policy',
     summary:
-      'How to report a vulnerability privately. There is no bug bounty and no public address yet.',
+      'How to report a vulnerability privately. There is no bug bounty and no security email address.',
     sections: [
       {
         heading: 'Please do not open a public issue',
@@ -150,7 +148,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
         heading: 'Where to report',
         body: [
           'Report through GitHub’s private vulnerability reporting on the repository: https://github.com/alexlincai123-sketch/encastra/security/advisories/new (a GitHub account is needed). Only the maintainer and you can see the report.',
-          'A published security@ address does not exist — the domain in this project’s identifiers is not registered, so any address inferred from this site goes nowhere. Do not send a report to one.',
+          'A security@ address does not exist — the domain in this project’s identifiers is not registered, so any such address inferred from this site goes nowhere. The email address on /contact is for commercial licences and business enquiries; please do not send vulnerability reports there.',
         ],
       },
       {

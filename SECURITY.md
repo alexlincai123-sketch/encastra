@@ -4,7 +4,9 @@
 reporting on this repository:
 <https://github.com/alexlincai123-sketch/encastra/security/advisories/new> (a GitHub account is
 needed; only you and the maintainer see the report). There is no security email address: the
-domain in the project's identifiers is not registered, so an address inferred from it goes nowhere.
+contact address in the README is for commercial licences and business enquiries, not for
+vulnerability reports, and the domain in the project's identifiers (`encastra.dev`) is not
+registered, so an address built from it goes nowhere.
 
 Include what you would want if you were on the other end: what you did, what happened, what you
 expected, and the smallest thing that reproduces it. A `.encastra` file that demonstrates the

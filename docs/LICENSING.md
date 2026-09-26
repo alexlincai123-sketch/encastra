@@ -4,8 +4,8 @@
 Noncommercial License 1.0.0.** `LICENSE` at the root is the operative document (the official text,
 unmodified, with the Required Notice line); `Cargo.toml` and `package.json` carry the SPDX
 identifier `PolyForm-Noncommercial-1.0.0`. Personal, educational and other noncommercial use is
-licensed; commercial use is not, and needs a separate licence asked for through the GitHub
-repository. It is not open source in the OSI sense, and nothing here should call it that.
+licensed; commercial use is not, and needs a separate licence - write to
+alexcaioficial123@gmail.com (commercial licences and business enquiries). It is not open source in the OSI sense, and nothing here should call it that.
 
 Third-party components keep their own licences (docs/THIRD-PARTY.md, NOTICE); the one copyleft
 family among them, MPL-2.0, obliges per file and is compatible with distributing the combined

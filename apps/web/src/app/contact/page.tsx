@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import { ButtonRow, Callout, Card, CTA, PageHeader, SectionHeading } from '@/components/ui/Ui';
-import { SECURITY_REPORT_URL, SITE } from '@/config/site';
+import { CONTACT_EMAIL, SECURITY_REPORT_URL, SITE } from '@/config/site';
 import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,10 +26,10 @@ export default async function ContactPage(): Promise<ReactNode> {
         lead={t(locale, 'contact.hero.lead')}
       />
 
-      <Callout tone="note" title={t(locale, 'contact.noAddress.title')}>
-        {t(locale, 'contact.noAddress.bodyPrefix')} <code>encastra.dev</code>,{' '}
-        {t(locale, 'contact.noAddress.bodyMiddle')} <a href="/about#name">/about</a>
-        {t(locale, 'contact.noAddress.bodySuffix')}
+      <Callout tone="note" title={t(locale, 'contact.email.title')}>
+        {t(locale, 'contact.email.bodyPrefix')}{' '}
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        {t(locale, 'contact.email.bodySuffix')}
       </Callout>
 
       <section className="section">
