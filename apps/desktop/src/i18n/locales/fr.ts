@@ -874,6 +874,7 @@ const fr: Messages = {
       in: 'entrée {port}',
       out: 'sortie {port}',
       permissionsUsed: 'Permissions utilisées',
+      seeRefusalReason: 'La raison du refus figure plus bas, sous Permissions utilisées.',
       refused: ' · {count} refusées',
       logs: 'Journaux',
     },

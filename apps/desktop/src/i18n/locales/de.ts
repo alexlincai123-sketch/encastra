@@ -877,6 +877,8 @@ const de: Messages = {
       in: 'ein {port}',
       out: 'aus {port}',
       permissionsUsed: 'Verwendete Berechtigungen',
+      seeRefusalReason:
+        'Den Grund für die Ablehnung finden Sie unten unter Verwendete Berechtigungen.',
       refused: ' · {count} abgelehnt',
       logs: 'Protokoll',
     },

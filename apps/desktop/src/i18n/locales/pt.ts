@@ -868,6 +868,7 @@ const pt: Messages = {
       in: 'entra {port}',
       out: 'sai {port}',
       permissionsUsed: 'Permissões usadas',
+      seeRefusalReason: 'O motivo da recusa está mais abaixo, em Permissões usadas.',
       refused: ' · {count} recusadas',
       logs: 'Registos',
     },

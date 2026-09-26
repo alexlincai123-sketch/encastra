@@ -911,6 +911,7 @@ const en: Messages = {
       in: 'in {port}',
       out: 'out {port}',
       permissionsUsed: 'Permissions used',
+      seeRefusalReason: 'The reason it was refused is under Permissions used, below.',
       refused: ' · {count} refused',
       logs: 'Logs',
     },

@@ -872,6 +872,7 @@ const es: Messages = {
       in: 'entra {port}',
       out: 'sale {port}',
       permissionsUsed: 'Permisos usados',
+      seeRefusalReason: 'El motivo del rechazo está más abajo, en Permisos usados.',
       refused: ' · {count} rechazados',
       logs: 'Registro',
     },

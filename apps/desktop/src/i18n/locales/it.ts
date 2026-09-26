@@ -869,6 +869,7 @@ const it: Messages = {
       in: 'in {port}',
       out: 'fuori {port}',
       permissionsUsed: 'Permessi usati',
+      seeRefusalReason: 'Il motivo del rifiuto è più in basso, in Permessi usati.',
       refused: ' · {count} rifiutati',
       logs: 'Registro',
     },
