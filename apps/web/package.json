@@ -1,6 +1,6 @@
 {
   "name": "@encastra/web",
-  "version": "0.5.0-rc.6",
+  "version": "0.5.0-rc.7",
   "private": true,
   "description": "Encastra marketing and documentation website.",
   "type": "module",
