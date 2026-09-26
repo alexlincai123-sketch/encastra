@@ -286,8 +286,8 @@ follow the language you pick. Any text not yet translated falls back to English.
 There is **no automatic update** and no update check. Updates as a mechanism: Not built. To move
 to a newer version, download its installer, verify its hash the same way as in §3, and run it
 over the existing installation. The installer does not remove your projects, library or
-preferences. For this candidate, the clean-machine upgrade test from 0.5.0-rc.5 is still pending
-(`docs/release/RELEASE_READINESS.md`).
+preferences. For this candidate that was checked on a clean Windows 11 machine: an upgrade from
+0.5.0-rc.5 kept the language and the preferences (`docs/release/evidence/clean-vm-2026-09-26/rc6-summary.md`).
 
 To see which version you are running, go to **Settings → About → This build**. It also shows
 **Signing: Not signed**.

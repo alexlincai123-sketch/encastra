@@ -5,7 +5,7 @@ line is **PASS** (with the evidence that makes it so), **PENDING** (what closes 
 repository) or **EXTERNAL** (what the owner has to do, exactly). Nothing here is PASS because it
 ought to be; NOT_TESTED is never PASS.
 
-Last updated: 2026-09-26. Candidate: see `docs/RELEASE.md` (the BUILD block is generated).
+Last updated: 2026-09-26. Candidate: build `627c293`, publication `1eed5bb`, verified at `ed516af` — `release_check.py` verdict **BETA_READY** (externals: pentest, legal).
 
 ## The product
 
@@ -15,7 +15,7 @@ Last updated: 2026-09-26. Candidate: see `docs/RELEASE.md` (the BUILD block is g
 | Test gate green | PASS | `ci.yml` 5/5 on the candidate's commits; local gate 11/11 (lint, typecheck, vitest, fmt, clippy, cargo test, generated artefacts, script tests, version, web build). |
 | Type graph TS ↔ Rust in agreement (anti-drift) | PASS | conformity tests in vitest and cargo test, both in the gate; the matrix is never regenerated to make them pass. |
 | Chooser journeys driven through the real installer | PASS | the candidate run's `Drive the choosers through copy A's installer` (repeat 3) and the standalone `Chooser journeys` workflow. |
-| Clean Windows 11 acceptance (install, first run, restart, upgrade from 0.5.0-rc.5, uninstall/reinstall, contamination, network, WebView2 state) | PENDING | the Clean VM battery A, B, U, N1–N5 on this candidate's installer, judged by `scripts/cleanvm/report.py` and bound to the artefacts by `release_check.py --evidence-vm` (`docs/release/CLEAN_VM_ACCEPTANCE.md`). 0.5.0-rc.5 FAILED it (CLEAN-009, fixed in this candidate). |
+| Clean Windows 11 acceptance (install, first run, restart, upgrade from 0.5.0-rc.5, uninstall/reinstall, contamination, network, WebView2 state) | PASS | `CLEAN_VM_ACCEPTANCE: PASS` on this candidate's installer: A 13/13, B 13/13, upgrade U2 4/4, CLEAN-014 A≡B, N1–N5 each failing where the spec says; re-judged and bound to the artefacts by `release_check.py --evidence-vm` (`docs/release/evidence/clean-vm-2026-09-26/`). 0.5.0-rc.5 FAILED it (CLEAN-009); that scenario passes here. |
 | Security review of the shipped code | PASS (internal) | defensive review of the Tauri surface, path handling, import/publish, network, secrets and installer for rc.6: no blocker; the startup-folder write gap it found is fixed and tested. An internal review is not a pentest — see EXTERNAL. |
 | No telemetry, no network by default | PASS | no updater/telemetry in the dependency tree; the HTTP step needs a per-host grant; the Clean VM cycles record every frame the guest sends (no DNS name containing "encastra"). |
 | Errors, languages and accessibility | PASS | six desktop locales at key parity; built-in components, categories and React Flow controls translated; typed `AppError` vocabulary identical in Rust and TS; focus kept in confirmations; tests for each. |
@@ -36,7 +36,7 @@ Costs are orders of magnitude to plan with, not quotes.
 
 | Item | Exact step |
 |---|---|
-| Decide the tag | `git tag -a v0.5.0-rc.6 <publication commit> -m "Encastra 0.5.0-rc.6"` and push it — tags `v*` are immutable here, so this is the owner's call, after `release_check.py` says BETA_READY with `clean_vm` PASS. |
+| Decide the tag | `git tag -a v0.5.0-rc.6 ed516aff806b4dfd9343a471e843fe9e6d452605 -m "Encastra 0.5.0-rc.6"` then `git push origin v0.5.0-rc.6` — the commit `release_check.py` judged **BETA_READY** (2026-09-26, every executable check PASS, clean_vm included; `docs/release/evidence/clean-vm-2026-09-26/rc6-release-readiness.json`). Tags `v*` are immutable here, so this is the owner's call. |
 | Publish | `gh workflow run release.yml --ref v0.5.0-rc.6 -f allow_unsigned=true -f publish=true` (`docs/RELEASE.md` step 7): rebuilds at the tag, requires the published bytes, uploads them. |
 | Merge | PR #20 `rc/rc6-closure → main` (merge commit, no squash, so the tagged commits stay on main). |
 | SmartScreen on a downloaded file | run the downloaded installer once on a clean machine and record what Windows shows (`docs/release/CLEAN_WINDOWS_VM.md`); the offline VM cannot exercise Mark of the Web. |

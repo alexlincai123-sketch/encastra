@@ -1,0 +1,190 @@
+{
+  "generated": "2026-09-26T10:11:30+00:00",
+  "version": "0.5.0-rc.6",
+  "commit": "ed516aff806b4dfd9343a471e843fe9e6d452605",
+  "root": "C:\\Users\\alexl\\encastra-rc6",
+  "mode": "beta",
+  "verdict": "BETA_READY",
+  "reason": "every executable check passed; external: pentest, legal",
+  "artefacts": [
+    {
+      "name": "Encastra_0.5.0-rc.6_x64-setup.exe",
+      "size": 3654696,
+      "sha256": "59a00802f15803d6092ddbe9160f7d697ea83f096146a38a29a78e6649825b50",
+      "product_versions": [
+        "0.5.0-rc.6"
+      ],
+      "build_stamp": null,
+      "signature": {
+        "status": "unsigned",
+        "signer": null,
+        "timestamped": false,
+        "raw": "NotSigned"
+      }
+    },
+    {
+      "name": "encastra-desktop.exe",
+      "size": 9901568,
+      "sha256": "23203bcadde9a7585422141517038b55cf1707ae6e449e827018447a0a8c265c",
+      "product_versions": [
+        "0.5.0-rc.6"
+      ],
+      "build_stamp": "627c293af312b892b1b94ce184227784216f0cde",
+      "signature": {
+        "status": "unsigned",
+        "signer": null,
+        "timestamped": false,
+        "raw": "NotSigned"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "git.state",
+      "status": "PASS",
+      "evidence": "HEAD ed516aff806b on rc/rc6-closure; tree clean"
+    },
+    {
+      "id": "mode",
+      "status": "PASS",
+      "evidence": "beta (version 0.5.0-rc.6)"
+    },
+    {
+      "id": "version.consistent",
+      "status": "PASS",
+      "evidence": "0.5.0-rc.6 declared identically everywhere"
+    },
+    {
+      "id": "version.unique",
+      "status": "PASS",
+      "evidence": "0.5.0-rc.6 is published from 627c293af312, and this tree is that build or its publication"
+    },
+    {
+      "id": "gate.scripts",
+      "status": "PASS",
+      "evidence": "exit 0; 252 tests"
+    },
+    {
+      "id": "gate.fmt",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.clippy",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.cargo_test",
+      "status": "PASS",
+      "evidence": "exit 0; 384 Rust tests"
+    },
+    {
+      "id": "gate.lint",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.typecheck",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.vitest",
+      "status": "PASS",
+      "evidence": "exit 0; 742 tests"
+    },
+    {
+      "id": "gate.web_build",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "gate.generated",
+      "status": "PASS",
+      "evidence": "exit 0"
+    },
+    {
+      "id": "deps.cargo_deny",
+      "status": "PASS",
+      "evidence": "advisories ok, bans ok, licenses ok, sources ok"
+    },
+    {
+      "id": "deps.npm_audit",
+      "status": "PASS",
+      "evidence": "found 0 vulnerabilities"
+    },
+    {
+      "id": "deps.third_party_notices",
+      "status": "PASS",
+      "evidence": "docs\\THIRD-PARTY.md matches the tree.",
+      "action": "python scripts/third_party.py"
+    },
+    {
+      "id": "deps.lockfiles",
+      "status": "PASS",
+      "evidence": "Cargo.lock and package-lock.json committed"
+    },
+    {
+      "id": "artefacts.identity",
+      "status": "PASS",
+      "evidence": "0.5.0-rc.6 @ 627c293af312: Encastra_0.5.0-rc.6_x64-setup.exe 3654696 B 59a00802f158, encastra-desktop.exe 9901568 B 23203bcadde9"
+    },
+    {
+      "id": "artefacts.provenance",
+      "status": "PASS",
+      "evidence": "copy A of Candidate build run 36210428063 on 627c293af312, read from zips matching GitHub's digests; every job green on the first attempt: https://github.com/alexlincai123-sketch/encastra/actions/runs/36210428063"
+    },
+    {
+      "id": "manifest.verify",
+      "status": "PASS",
+      "evidence": "docs/RELEASE.md and site.ts describe 0.5.0-rc.6 at 627c293af312 and match the artefacts"
+    },
+    {
+      "id": "signing",
+      "status": "PASS",
+      "evidence": "unsigned (Encastra_0.5.0-rc.6_x64-setup.exe, encastra-desktop.exe); accepted for a beta build and stated in the manifest"
+    },
+    {
+      "id": "reproducibility",
+      "status": "PASS",
+      "evidence": "copy B of run 36210428063 (another hosted runner) is byte-identical: Encastra_0.5.0-rc.6_x64-setup.exe, encastra-desktop.exe"
+    },
+    {
+      "id": "toolchain.msvc",
+      "status": "PASS",
+      "evidence": "MSVC 14.44.35207, node 24.15.0, rustc 1.98.1"
+    },
+    {
+      "id": "ci.evidence",
+      "status": "PASS",
+      "evidence": "CI green for ed516aff806b: https://github.com/alexlincai123-sketch/encastra/actions/runs/36211906621"
+    },
+    {
+      "id": "clean_vm",
+      "status": "PASS",
+      "evidence": "re-judged here from 8 cycles (A, B, N1-tampered, N2-missing, N3-contaminated, N4-wrong-version, N5-runtime, U2): Encastra_0.5.0-rc.6_x64-setup.exe 59a00802f158 passed A, B, upgrade and 5 negative cycles; base image bbc062866d5a (the evidence is of a run on that image, not proof of the machine's state - keep the lab record with it)"
+    },
+    {
+      "id": "gui.journeys",
+      "status": "PASS",
+      "evidence": "348 checks passed in gui-journeys.verified.log over repeat=3 runs of the suite, against build 627c293af312, the commit this release expects, on the executable built here as its installer leaves it (bundle marker rewritten)"
+    },
+    {
+      "id": "pentest",
+      "status": "EXTERNAL_REQUIRED",
+      "evidence": "no external test has been performed (not required for a beta; recorded); docs/security/PENTEST_HANDOFF.md is the hand-off",
+      "action": "engage a provider (a person, money)"
+    },
+    {
+      "id": "legal",
+      "status": "EXTERNAL_REQUIRED",
+      "evidence": "drafts present: EULA_DRAFT.md, LICENSE_DECISION.md, PRIVACY_POLICY_DRAFT.md, README.md, TERMS_DRAFT.md, TRADEMARK_CHECKLIST.md; LICENSE present, proprietary, drafted in-house and unreviewed; the name is not cleared (not required for a beta; recorded)",
+      "action": "a lawyer signs off the licence, the terms, the privacy statement and the mark (docs/legal/)"
+    }
+  ],
+  "statuses": [
+    "EXTERNAL_REQUIRED",
+    "PASS"
+  ]
+}
