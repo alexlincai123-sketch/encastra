@@ -40,6 +40,17 @@ function Get-IntegrityLevel {
     if ($label) { $label.'Group Name' } else { 'unknown' }
 }
 
+# What the installer puts in the install directory, and nothing else: the program, its uninstaller,
+# and - since 0.5.0-rc.6 - the licence, the notices and the third-party inventory
+# (tauri.conf.json bundle.resources). A file beyond these after an install or an upgrade is one this
+# version did not ship: something left over from version A, or written by something else.
+$script:ExpectedInstallFiles = @('encastra-desktop.exe', 'uninstall.exe', 'LICENSE.txt', 'NOTICE.txt', 'THIRD-PARTY.md')
+function Test-InstallListingExact($listing) {
+    $have = @($listing | ForEach-Object { $_.path } | Sort-Object)
+    $want = @($script:ExpectedInstallFiles | Sort-Object)
+    return (($have -join '|') -eq ($want -join '|'))
+}
+
 function Get-InstallListing {
     if (-not (Test-Path -LiteralPath $script:InstallDir)) { return @() }
     @(Get-ChildItem -LiteralPath $script:InstallDir -Recurse -File -Force | ForEach-Object {
@@ -312,7 +323,7 @@ function Scenario-CLEAN003 {
         $listing = @(Get-InstallListing)
         Evidence 'install-dir.json' $listing | Out-Null
         Observe 'installed_files' @($listing | ForEach-Object { $_.path })
-        Check 'install directory holds the executable and the uninstaller' (@($listing | Where-Object { $_.path -in 'encastra-desktop.exe', 'uninstall.exe' }).Count -eq 2) 'encastra-desktop.exe, uninstall.exe' (Short ($listing | ForEach-Object { $_.path }))
+        Check 'install directory holds the executable and the uninstaller, and exactly what this version ships' (Test-InstallListingExact $listing) ($script:ExpectedInstallFiles -join ', ') (Short ($listing | ForEach-Object { $_.path }))
         # What really keeps HKLM, services and machine-wide state out of reach is that nothing runs
         # elevated: both the installer and the uninstaller it leaves must ask for no more than the
         # caller has (requestedExecutionLevel asInvoker in their embedded manifests).
@@ -948,7 +959,7 @@ function Scenario-CLEAN011 {
         Check 'exactly one Encastra uninstall entry, at version B' ($entries.Count -eq 1 -and $entries[0].version -eq $toArt.version -and $entries[0].hive -like 'HKCU:*') "1 x $($toArt.version) in HKCU" (Short $entries)
         $listing = @(Get-InstallListing)
         Evidence 'install-dir-after-upgrade.json' $listing | Out-Null
-        Check 'install directory holds only the executable and the uninstaller' (@($listing).Count -eq 2) 2 (Short ($listing | ForEach-Object { $_.path }))
+        Check 'install directory holds exactly what version B ships, nothing left from version A' (Test-InstallListingExact $listing) ($script:ExpectedInstallFiles -join ', ') (Short ($listing | ForEach-Object { $_.path }))
         Stop-App | Out-Null
         $b = Start-ReadyApp -Cdp
         Check "version B ($($toArt.version)) reaches ready after the upgrade" $b.ready 'ready' (Short $b.detail)
