@@ -1570,6 +1570,15 @@ mod tests {
         }
         let target = startup.join(format!("encastra-test-write-{}", std::process::id()));
         std::fs::create_dir_all(&target).expect("a scratch folder inside the startup folder");
+        // Removed however the test ends, a panic included: nothing of this test may stay in a
+        // folder the machine reads at logon.
+        struct RemoveOnDrop(PathBuf);
+        impl Drop for RemoveOnDrop {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = RemoveOnDrop(target.clone());
 
         let dir = tempdir::TempDir::new();
         let node = NodeId("n".into());
@@ -1589,7 +1598,6 @@ mod tests {
 
         let result = broker.save_to(&node, out, &target, "evil.cmd");
         let written = target.join("evil.cmd").exists();
-        let _ = std::fs::remove_dir_all(&target);
         let err = result.expect_err("a write into the startup folder must be refused");
         assert_eq!(err.code, "denied");
         assert!(err.message.contains("decides what runs"), "{}", err.message);
