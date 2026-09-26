@@ -33,9 +33,39 @@ through the same capability broker that would gate a stranger's. See
 
 ---
 
+## Download and install (free)
+
+Encastra is free to download and free to use for personal, educational and other noncommercial
+purposes (see [Licence](#licence)). There is no account, no sign-up and no payment.
+
+1. Download `Encastra_<version>_x64-setup.exe` from the
+   [Releases page](https://github.com/alexlincai123-sketch/encastra/releases) on GitHub (the newest entry; release candidates are marked *Pre-release*).
+2. Check it before running it: the release notes and [RELEASE](docs/RELEASE.md) list its SHA-256.
+   In PowerShell: `Get-FileHash .\Encastra_<version>_x64-setup.exe -Algorithm SHA256`.
+3. Run it. It installs for your user only and asks for no administrator rights.
+
+**The installer is not code-signed**, so Windows SmartScreen shows "Windows protected your PC".
+That warning is accurate: nothing proves who built the file — the published hash is what you have
+instead. If the hash matches, choose *More info* → *Run anyway*. Requirements: Windows 11 x64
+(Windows 10 has not been tested); WebView2, which Windows 11 includes.
+Updates are manual: install the newer version over the old one. Your projects, library and
+settings stay.
+
+A first project, step by step: [docs/user/GETTING_STARTED.md](docs/user/GETTING_STARTED.md).
+
+## Reporting a problem
+
+- A bug: open an [issue](https://github.com/alexlincai123-sketch/encastra/issues) — what you did,
+  what happened, what you expected, and the version from Settings.
+- A security problem: **do not open a public issue**; report it privately through
+  [GitHub's private vulnerability reporting](https://github.com/alexlincai123-sketch/encastra/security/advisories/new)
+  ([SECURITY](SECURITY.md)).
+
+---
+
 ## Status
 
-**Beta.** The exact build, its hash and how to verify it are in [RELEASE](docs/RELEASE.md); the
+**Release candidate.** The exact build, its hash and how to verify it are in [RELEASE](docs/RELEASE.md); the
 version is set in one place (`Cargo.toml`, `[workspace.package]`) and copied everywhere else by
 `scripts/version.py`. A desktop application that builds and runs workflows on this machine,
 explains itself while you do it, and can hand a project to somebody else as a publication that
@@ -92,7 +122,7 @@ That refusal is the product working, not failing: a first-party component asked 
 somewhere nobody had allowed, and the broker said no. Add `--allow-write write=./out` and the
 file appears.
 
-## Getting started
+## Building from source
 
 Requires **Node ≥ 22** and the **Rust toolchain** pinned in `rust-toolchain.toml`. On Windows,
 Rust needs the MSVC linker — the Visual Studio Build Tools "Desktop development with C++"
@@ -145,9 +175,9 @@ language, the rule belongs in the data file instead.
 
 ## Licence
 
-Proprietary. See [LICENSE](LICENSE). This repository is public so the source can be read and its
-checks can run in the open — **that is not an open-source licence and not an offer of terms**. No
-general right to copy, modify, redistribute or build derived works is granted; anything wider has
-to be granted in writing. Third-party dependencies keep their own licences, listed in
-[THIRD-PARTY](docs/THIRD-PARTY.md) with the attribution they require in [NOTICE](NOTICE). How the
-choice was reached is in [LICENSING](docs/LICENSING.md).
+Source-available and **free for personal, educational and other noncommercial use** under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). It is not open source in the OSI sense: commercial
+use is not licensed by those terms and needs a separate licence — ask through this repository.
+Third-party dependencies keep their own licences, listed in [THIRD-PARTY](docs/THIRD-PARTY.md) with
+the attribution they require in [NOTICE](NOTICE). How the choice was reached is in
+[LICENSING](docs/LICENSING.md).
