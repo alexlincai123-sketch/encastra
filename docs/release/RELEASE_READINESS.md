@@ -98,3 +98,22 @@ walkthrough is `docs/user/GETTING_STARTED.md`. UI wording in quotes is from
 | "Does it send anything?" | No telemetry, crash reporting or analytics; network only from a step granted a host (PASS row above) | Nothing is collected or sent. Settings → Privacy and the Security screen state it. |
 | Reporting a bug | Only channel: the GitHub issue tracker (`apps/web` contact text) | <https://github.com/alexlincai123-sketch/encastra/issues>, with Settings → Diagnostics → "Copy" pasted in (the report contains no paths or tokens). Replies in days; no support team. |
 | Reporting a security problem | `SECURITY.md` | Private report only: <https://github.com/alexlincai123-sketch/encastra/security/advisories/new>. No security email, no bug bounty. |
+
+## After 0.5.0-rc.6 — what rc.7 and 1.0 need
+
+Sizes are rough: S = hours, M = a day or two, L = a week or more. Nothing here is promised a date.
+
+| For | Item | Size | Why |
+|---|---|---|---|
+| rc.7 | Merge `fix/manifest-signature-probe` (the manifest's own Authenticode probe under PowerShell 7) | S | a manifest must never state a signing state nobody read |
+| rc.7 | Judge hardening left NON-BLOCKING: journeys repeat read from the log, not only the plan; base image and harness commit on the serial line | S | closes the two forgeries that need several host-side files edited |
+| rc.7 | Settings shows the build commit, or stop saying it can | S | `docs/RELEASE.md` now says it shows the version only |
+| rc.7 | The WASM loader must force `kind = wasm` before third-party components exist (component-text translates only `core`) | S | a third-party component must not borrow a built-in's translated name |
+| rc.7 | Commands that accept a `.encastra` path without a chooser record (accepted risk) — decide whether to require one | M | defence in depth against a compromised renderer |
+| 1.0 | Code signing (certificate: EXTERNAL) and the signed path through `release.yml` (`--require-signature`) | M | a production version is signed or it does not happen |
+| 1.0 | Licence enforcement, if the owner decides one (offline signed key keeps the no-network promise) | L | nothing in the product enforces a licence today |
+| 1.0 | Update channel (designed, not built) | L | today an update is "install the new version over the old one" |
+| 1.0 | Third-party components (WASI 0.2 + wasmtime sandbox; not built) | L | the product's extension story |
+| 1.0 | Legal texts reviewed and translated for the markets chosen (EXTERNAL review) | M | binding texts are English drafts |
+| 1.0 | Independent pentest findings addressed (EXTERNAL test) | M | an internal review is not a pentest |
+
