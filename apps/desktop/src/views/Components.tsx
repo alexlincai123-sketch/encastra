@@ -219,10 +219,13 @@ export function Components() {
         <h1>{t('components.header.title')}</h1>
         <p>
           {triggerCount > 0
-            ? // Chosen by the trigger count: that is the number the verb agrees with ("1 of them
-              // starts", "2 of them start").
+            ? // Two counts, two agreements: the installed phrase agrees with the total ("1
+              // instalado", "3 instalados"), the sentence around it with the triggers ("1 inicia",
+              // "2 inician"). One plural choice could only get one of them right.
               t(`components.header.summaryWithTriggers.${selectPlural(locale, triggerCount)}`, {
-                count: all.length,
+                installed: t(`components.header.installed.${selectPlural(locale, all.length)}`, {
+                  count: all.length,
+                }),
                 triggerCount,
               })
             : t(`components.header.summary.${selectPlural(locale, all.length)}`, {

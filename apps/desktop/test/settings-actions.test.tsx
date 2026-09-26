@@ -58,15 +58,17 @@ describe('Restore defaults', () => {
     render(<Settings />);
     open('developer');
 
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: english('settings.developer.reset.restoreDefaults.button'),
-      }),
-    );
+    const opener = screen.getByRole('button', {
+      name: english('settings.developer.reset.restoreDefaults.button'),
+    });
+    opener.focus();
+    fireEvent.click(opener);
     expect(resetAll).not.toHaveBeenCalled();
-    expect(
-      screen.getByText(english('settings.developer.reset.restoreDefaults.confirm.question')),
-    ).toBeDefined();
+    const question = screen.getByText(
+      english('settings.developer.reset.restoreDefaults.confirm.question'),
+    );
+    // The button that had focus is gone; focus is on the question, not dropped on <body>.
+    expect(document.activeElement).toBe(question);
 
     fireEvent.click(
       screen.getByRole('button', {
@@ -74,9 +76,15 @@ describe('Restore defaults', () => {
       }),
     );
     expect(resetAll).toHaveBeenCalledTimes(1);
+    // And back on the button that opened it, which is on screen again.
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', {
+        name: english('settings.developer.reset.restoreDefaults.button'),
+      }),
+    );
   });
 
-  it('changes nothing when the person thinks better of it', () => {
+  it('changes nothing when the person thinks better of it, and gives focus back', () => {
     const resetAll = vi.fn();
     usePreferences.setState({ resetAll });
     render(<Settings />);
@@ -93,31 +101,32 @@ describe('Restore defaults', () => {
       }),
     );
     expect(resetAll).not.toHaveBeenCalled();
-    // And the first button is back, ready to be pressed again.
-    expect(
-      screen.getByRole('button', {
-        name: english('settings.developer.reset.restoreDefaults.button'),
-      }),
-    ).toBeDefined();
+    const again = screen.getByRole('button', {
+      name: english('settings.developer.reset.restoreDefaults.button'),
+    });
+    expect(document.activeElement).toBe(again);
+    expect(document.activeElement).not.toBe(document.body);
   });
 
   it('asks in the reader’s language', () => {
+    // Looked up first and required to exist: `lookup` returning undefined would make
+    // `getByRole({ name: undefined })` match any button and pass for the wrong reason.
+    const spanish = (key: string): string => {
+      const found = lookup(es, key);
+      expect(found, key).toBeTypeOf('string');
+      return found as string;
+    };
+    const developer = spanish('settings.categories.developer.label');
+    const button = spanish('settings.developer.reset.restoreDefaults.button');
+    const question = spanish('settings.developer.reset.restoreDefaults.confirm.question');
+    expect(question).not.toBe(english('settings.developer.reset.restoreDefaults.confirm.question'));
+
     useI18n.setState({ locale: 'es', messages: { en, es } });
     usePreferences.setState({ resetAll: vi.fn() });
     render(<Settings />);
-    fireEvent.click(
-      screen.getByRole('button', { name: lookup(es, 'settings.categories.developer.label') }),
-    );
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: lookup(es, 'settings.developer.reset.restoreDefaults.button'),
-      }),
-    );
-    expect(
-      screen.getByText(
-        lookup(es, 'settings.developer.reset.restoreDefaults.confirm.question') ?? '',
-      ),
-    ).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: developer }));
+    fireEvent.click(screen.getByRole('button', { name: button }));
+    expect(screen.getByText(question)).toBeDefined();
   });
 });
 

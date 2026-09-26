@@ -720,10 +720,16 @@ const de: Messages = {
         one: '{count} installiert.',
         other: '{count} installiert.',
       },
+      // The installed count on its own, agreeing with {count}, for `summaryWithTriggers` to
+      // place where the sentence wants it; that sentence then agrees with {triggerCount}.
+      installed: {
+        one: '{count} installiert',
+        other: '{count} installiert',
+      },
       summaryWithTriggers: {
-        one: '{count} installiert — {triggerCount} davon startet selbst einen Workflow; der Rest läuft als Schritt innerhalb eines Workflows.',
+        one: '{installed} — {triggerCount} startet selbst einen Workflow; der Rest läuft als Schritt innerhalb eines Workflows.',
         other:
-          '{count} installiert — {triggerCount} davon starten selbst einen Workflow; der Rest läuft als Schritt innerhalb eines Workflows.',
+          '{installed} — {triggerCount} davon starten selbst einen Workflow; der Rest läuft als Schritt innerhalb eines Workflows.',
       },
       note: 'Alles hier ist Teil der Anwendung; um andere zu installieren, wird die Sandbox für Drittanbieter-Code benötigt, die noch nicht gebaut ist.',
     },

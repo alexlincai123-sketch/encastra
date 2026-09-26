@@ -714,10 +714,16 @@ const pt: Messages = {
         one: '{count} instalado.',
         other: '{count} instalados.',
       },
+      // The installed count on its own, agreeing with {count}, for `summaryWithTriggers` to
+      // place where the sentence wants it; that sentence then agrees with {triggerCount}.
+      installed: {
+        one: '{count} instalado',
+        other: '{count} instalados',
+      },
       summaryWithTriggers: {
-        one: '{count} instalados — {triggerCount} deles inicia um fluxo de trabalho por conta própria; o resto executa-se como um passo dentro de um.',
+        one: '{installed} — {triggerCount} inicia um fluxo de trabalho por conta própria; o resto executa-se como um passo dentro de um.',
         other:
-          '{count} instalados — {triggerCount} deles iniciam um fluxo de trabalho por conta própria; o resto executa-se como um passo dentro de um.',
+          '{installed} — {triggerCount} deles iniciam um fluxo de trabalho por conta própria; o resto executa-se como um passo dentro de um.',
       },
       note: 'Tudo isto vem incluído com a aplicação; instalar outros precisa da sandbox para código de terceiros, que ainda não está construída.',
     },

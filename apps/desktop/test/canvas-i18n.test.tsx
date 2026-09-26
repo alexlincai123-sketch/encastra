@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
 
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Canvas } from '../src/canvas/Canvas';
+import { RefusalToast } from '../src/canvas/RefusalToast';
 import fixture from '../src/fixtures/components.json';
 import { lookup, useI18n } from '../src/i18n';
 import en from '../src/i18n/locales/en';
@@ -20,9 +18,9 @@ import type { ComponentManifest } from '../src/types';
  *
  * React Flow names its own controls — "Zoom In", "Fit View", "Mini Map", "Control Panel" — in
  * English unless it is handed other words, and the node on the canvas used to carry its English
- * manifest name. Both are asserted against what React Flow actually drew. The refusal toast's
- * accessible name is checked in the source, because producing a refusal needs a pointer drag
- * jsdom cannot perform.
+ * manifest name. Both are asserted against what React Flow actually drew. The refusal toast is
+ * rendered on its own: producing a refusal needs a pointer drag jsdom cannot perform, but the
+ * toast is the same component the canvas renders.
  *
  * The layout stubs are the ones `canvas-selection.test.tsx` explains: jsdom has no layout, and
  * React Flow culls what measures 0×0.
@@ -159,16 +157,22 @@ describe('a built-in step on the canvas', () => {
 });
 
 describe('the refusal toast’s close button', () => {
-  it('is named by the word it shows, with no aria-label saying something else', () => {
-    // Resolved with `node:path`, not `new URL(...)`: under jsdom `URL` is jsdom's, and its
-    // `file:` URLs are not ones `fileURLToPath` accepts.
-    const here = dirname(fileURLToPath(import.meta.url));
-    const source = readFileSync(join(here, '../src/canvas/Canvas.tsx'), 'utf8');
-    const start = source.indexOf('className="refusal"');
-    const end = source.indexOf('</button>', start);
-    expect(start).toBeGreaterThan(0);
-    const toast = source.slice(start, end);
-    expect(toast).toContain("t('common.close')");
-    expect(toast).not.toMatch(/aria-label=/);
+  it('is named by the word it shows, not by a different aria-label', () => {
+    const closed: string[] = [];
+    render(
+      <RefusalToast
+        refusal={{ ok: false, headline: 'Nope.', detail: 'Because.' }}
+        onClose={() => closed.push('closed')}
+      />,
+    );
+
+    const visible = spanish('common.close');
+    const button = screen.getByRole('button', { name: visible });
+    expect(button.textContent).toBe(visible);
+    expect(button.hasAttribute('aria-label')).toBe(false);
+    expect(screen.queryByRole('button', { name: spanish('common.dismiss') })).toBeNull();
+
+    button.click();
+    expect(closed).toEqual(['closed']);
   });
 });

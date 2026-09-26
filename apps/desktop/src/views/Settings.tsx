@@ -17,6 +17,7 @@
 
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { useConfirmFocus } from '../a11y/focus';
 import { chooseFolderOrExplain } from '../chooser';
 import { componentName } from '../component-text';
 import {
@@ -801,6 +802,7 @@ function DeveloperSection() {
   // the same second row of buttons in place of the first that Library uses for Remove, not a
   // `window.confirm` from the browser.
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const resetFocus = useConfirmFocus(confirmingReset);
   const preferences = usePreferences((s) => s);
   const manifests = useEditor((s) => s.manifests);
 
@@ -856,7 +858,7 @@ function DeveloperSection() {
           {confirmingReset ? (
             // Library's own confirmation classes, so the two "are you sure" rows look alike.
             <div className="library__confirm">
-              <p className="library__confirm-question">
+              <p className="library__confirm-question" tabIndex={-1} ref={resetFocus.question}>
                 {t('settings.developer.reset.restoreDefaults.confirm.question')}
               </p>
               <div className="library__actions">
@@ -874,7 +876,7 @@ function DeveloperSection() {
               </div>
             </div>
           ) : (
-            <DangerButton onClick={() => setConfirmingReset(true)}>
+            <DangerButton onClick={() => setConfirmingReset(true)} ref={resetFocus.opener}>
               {t('settings.developer.reset.restoreDefaults.button')}
             </DangerButton>
           )}

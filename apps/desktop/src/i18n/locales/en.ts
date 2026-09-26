@@ -753,10 +753,16 @@ const en: Messages = {
         one: '{count} installed.',
         other: '{count} installed.',
       },
+      // The installed count on its own, agreeing with {count}, for `summaryWithTriggers` to
+      // place where the sentence wants it; that sentence then agrees with {triggerCount}.
+      installed: {
+        one: '{count} installed',
+        other: '{count} installed',
+      },
       summaryWithTriggers: {
-        one: '{count} installed — {triggerCount} of them starts a workflow on its own; the rest run as a step inside one.',
+        one: '{installed} — {triggerCount} starts a workflow on its own; the rest run as a step inside one.',
         other:
-          '{count} installed — {triggerCount} of them start a workflow on their own; the rest run as a step inside one.',
+          '{installed} — {triggerCount} of them start a workflow on their own; the rest run as a step inside one.',
       },
       note: 'Everything here ships with the application; installing others needs the sandbox for third-party code, which is not built yet.',
     },

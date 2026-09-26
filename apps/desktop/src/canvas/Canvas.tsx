@@ -28,7 +28,7 @@ import {
 } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useComponentText } from '../component-text';
-import { selectPlural, splitOnPlaceholder, translate, useI18n, useTranslation } from '../i18n';
+import { selectPlural, translate, useI18n, useTranslation } from '../i18n';
 import { usePreferences } from '../preferences';
 import { type EditorNode, useEditor } from '../store';
 import { ComponentNode } from './ComponentNode';
@@ -46,6 +46,7 @@ import {
 } from './connect-mode';
 import { incidentEdges, stepIncident } from './edge-focus';
 import { canvasMenuIds, selectionToggleKey, stepToggleKey } from './menu';
+import { RefusalToast } from './RefusalToast';
 import { explainConnection, type RefusalNo } from './refusal';
 import { Wire } from './Wire';
 import { indexOf, step, walkOrder } from './walk';
@@ -766,14 +767,6 @@ export function Canvas() {
     [locale, messages],
   );
 
-  // Rendered once as `{bridge}` intact — see `splitOnPlaceholder` — so the `<code>` element can
-  // be dropped in wherever the translated sentence actually puts the placeholder, rather than
-  // the two halves being separately-translated fragments whose order silently assumes English.
-  const bridge = refusal?.bridge ?? null;
-  const [bridgeBefore, bridgeAfter] = bridge
-    ? splitOnPlaceholder(t('canvas.refusal.bridge'), 'bridge')
-    : ['', ''];
-
   const selectionSentence = (() => {
     if (!selectedNodeId) return '';
     const at = indexOf(ordered, selectedNodeId);
@@ -892,27 +885,7 @@ export function Canvas() {
         </div>
       ) : null}
 
-      {refusal ? (
-        <div className="refusal" role="status" aria-live="polite">
-          <div className="refusal__body">
-            <strong className="refusal__headline">{refusal.headline}</strong>
-            <span className="refusal__detail">{refusal.detail}</span>
-            {bridge ? (
-              <span className="refusal__bridge">
-                {bridgeBefore}
-                <code>{bridge}</code>
-                {bridgeAfter}
-              </span>
-            ) : null}
-          </div>
-          {/* No `aria-label`: the visible word is the accessible name. A label that differed from
-              it ("Dismiss" on a button reading "Close") breaks speech control, where somebody says
-              the word they can see. */}
-          <button type="button" className="btn" onClick={() => setRefusal(null)}>
-            {t('common.close')}
-          </button>
-        </div>
-      ) : null}
+      {refusal ? <RefusalToast refusal={refusal} onClose={() => setRefusal(null)} /> : null}
 
       {/* Named by aria-describedby, so the keys are announced on entering the canvas rather
           than having to be discovered. Visible to screen readers only. */}

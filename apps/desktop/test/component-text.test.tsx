@@ -157,21 +157,30 @@ describe('the Components view in Spanish', () => {
     expect(screen.queryByText(/1 instalados/)).toBeNull();
   });
 
-  it('agrees the verb with the number of triggers: one "inicia", two "inician"', () => {
+  it('agrees both counts: the installed total and the triggers, each with its own number', () => {
     inSpanish();
-    seed([builtIn('encastra.file.watch'), builtIn('encastra.flow.delay')]);
+    // count 1, triggerCount 1: the one installed component is the trigger.
+    seed([builtIn('encastra.file.watch')]);
     render(<Components />);
-    expect(screen.getByText(/1 de ellos inicia un flujo/)).toBeDefined();
-    expect(screen.queryByText(/1 de ellos inician/)).toBeNull();
+    expect(screen.getByText(/^1 instalado — 1 inicia un flujo/)).toBeDefined();
+    expect(screen.queryByText(/1 instalados/)).toBeNull();
     cleanup();
 
+    // count 2, triggerCount 1.
+    seed([builtIn('encastra.file.watch'), builtIn('encastra.flow.delay')]);
+    render(<Components />);
+    expect(screen.getByText(/^2 instalados — 1 inicia un flujo/)).toBeDefined();
+    expect(screen.queryByText(/inician/)).toBeNull();
+    cleanup();
+
+    // count 3, triggerCount 2.
     seed([
       builtIn('encastra.file.watch'),
       builtIn('encastra.system.timer'),
       builtIn('encastra.flow.delay'),
     ]);
     render(<Components />);
-    expect(screen.getByText(/2 de ellos inician un flujo/)).toBeDefined();
+    expect(screen.getByText(/^3 instalados — 2 de ellos inician un flujo/)).toBeDefined();
   });
 
   it('shows a built-in under its Spanish name and description', () => {
