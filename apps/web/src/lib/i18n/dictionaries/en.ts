@@ -40,7 +40,6 @@ const en: Messages = {
         components: 'Components',
         templates: 'Templates',
         download: 'Download',
-        pricing: 'Pricing',
         tutorials: 'Tutorials',
         docs: 'Documentation',
         security: 'Security',
@@ -62,15 +61,19 @@ const en: Messages = {
     versionLine: 'Release candidate {version} · Windows only · builds are not code-signed',
     legal: {
       // Split into a prefix and the link's own text, rather than one sentence with a `{link}`
-      // placeholder — `Footer.tsx` wraps `nameLinkText`/`licenceLinkText` in a real `<Link>`, and
+      // placeholder — `Footer.tsx` wraps each `*LinkText` in a real link, and
       // two whole, separately-translated fragments read correctly in any word order a
       // translation needs, where flattening a `<Link>` into an interpolated string would not.
       namePrefix:
         'Encastra is a working name. The trademark registers have not been searched, so nothing here claims the name is legally clear —',
       nameLinkText: 'why that is written down',
       licencePrefix:
-        'The source is proprietary: the repository is public to be read, not to be copied. The legal documents on this site are',
-      licenceLinkText: 'unreviewed drafts',
+        'Encastra is free to download. It is source-available, free for personal, educational and other noncommercial use under the',
+      licenceLinkText: 'PolyForm Noncommercial License 1.0.0',
+      licenceMiddle: '; commercial use needs a separate licence — ask through',
+      repoLinkText: 'the GitHub repository',
+      draftsPrefix: 'The legal documents on this site are',
+      draftsLinkText: 'unreviewed drafts',
     },
   },
 
@@ -221,12 +224,12 @@ const en: Messages = {
   download: {
     meta: {
       description:
-        'The Windows installer for Encastra {version} — size, SHA-256, and what to check before you run it. macOS and Linux are not built yet.',
+        'The Windows installer for Encastra {version}, free from GitHub Releases — size, SHA-256, and what to check before you run it. macOS and Linux are not built yet.',
     },
     hero: {
       eyebrow: 'Download',
       title: 'Get the release candidate',
-      lead: 'One installer, for Windows, not code-signed. Nothing else exists yet — no macOS build, no Linux build, no auto-update.',
+      lead: 'One installer, for Windows, free to download from the project’s GitHub Releases, not code-signed. Nothing else exists yet — no macOS build, no Linux build, no auto-update.',
     },
     target: {
       windowsTitle: 'This looks like Windows',
@@ -247,21 +250,19 @@ const en: Messages = {
       windowsTitle: 'Windows 10 / 11, x64',
       windowsBody:
         'NSIS installer, per user, no administrator required. This is the one artefact that actually exists.',
-      noHostYet: 'No public download host yet',
+      downloadCta: 'Download from GitHub Releases',
       macosTitle: 'macOS',
       macosBody:
         'Components declare macOS support and the engine is written to be platform-independent, but nothing has actually been built or packaged for it.',
       linuxTitle: 'Linux',
       linuxBody: 'Same story as macOS: declared support, no build, nothing to download.',
     },
-    noHostCallout: {
-      part1:
-        'There is no public download host for this build yet — the repository is public to read, but this build is not published as a release there, and',
-      part2: 'is not registered (see',
-      part3:
-        '). What follows is the real record of the build that exists: its exact filename, size and SHA-256, taken from',
-      part4:
-        ', so that whoever hosts it — or hands you a copy directly — can be checked against it.',
+    releasesCallout: {
+      part1: 'Builds are published, free, on the public repository’s',
+      linkText: 'GitHub Releases page',
+      part2:
+        '. Take the newest entry; release candidates are marked Pre-release there. What follows is the record of this build: its exact filename, size and SHA-256, taken from',
+      part3: ', so the file you download can be checked against it before you run it.',
     },
     thisBuild: {
       eyebrow: 'This build',
@@ -293,7 +294,7 @@ const en: Messages = {
       eyebrow: 'After installing',
       title: 'What is not there yet',
       bodyPrefix:
-        'Nothing updates itself — a new version means downloading a new installer and running it, once one is published somewhere. Uninstalling removes the application only; it does not touch any',
+        'Nothing updates itself — a new version means downloading a new installer from GitHub Releases and running it. Uninstalling removes the application only; it does not touch any',
       bodySuffix: 'files, which live wherever you saved them.',
     },
   },
@@ -648,7 +649,7 @@ const en: Messages = {
     hero: {
       eyebrow: 'Documentation',
       title: 'What is written down',
-      lead: 'The reference material lives in the repository as docs/*.md, next to the code it describes. The repository is public to read — the source is proprietary, so reading it is not a licence to copy it — and each entry below links to the current version of its document on the main branch, which can be ahead of the build on /download.',
+      lead: 'The reference material lives in the repository as docs/*.md, next to the code it describes. The repository is public — the source is available under the PolyForm Noncommercial License 1.0.0, whose terms are in LICENSE there — and each entry below links to the current version of its document on the main branch, which can be ahead of the build on /download.',
     },
     forAnyone: { eyebrow: 'For anyone', title: 'Written for somebody who is not an engineer' },
     forEngineers: { eyebrow: 'For engineers', title: 'Reference material' },
@@ -913,38 +914,6 @@ const en: Messages = {
     },
   },
 
-  pricing: {
-    meta: {
-      description:
-        'What it costs today: nothing. There are no paid plans, no accounts, and no payment system in this build.',
-    },
-    hero: {
-      eyebrow: 'Pricing',
-      title: 'What it costs today',
-      lead: 'Nothing. There is no payment system, no account, and no plan to choose between — so there is one real price on this page and a stated absence rather than a pricing table with invented numbers on it.',
-    },
-    free: {
-      badge: 'Free — release candidate',
-      title: 'Download and run it',
-      body: 'The Windows installer costs nothing and needs no account. Everything documented on this site — the runtime, the capability broker, all nineteen components — is available in the release candidate today, with the limitations stated on /security.',
-      cta: 'Download the release candidate',
-    },
-    notYet: {
-      eyebrow: 'Not yet',
-      title: 'What would eventually cost money',
-      lead: 'Real payments are explicitly out of scope for the current milestone, and the roadmap places them after a marketplace listing model exists — a listing is not the same as money moving through it.',
-    },
-    payments: {
-      title: 'No paid plans, no marketplace purchases, no subscriptions',
-      blockedBy: {
-        item1: 'A backend with accounts and billing',
-        item2: 'A marketplace listing model (built without payments first)',
-        item3: 'Real payments, kept sandboxed until that is deliberately turned off',
-      },
-      body: 'When any of this exists, it will replace this page’s claim of “nothing to pay” with real numbers — not the other way around.',
-    },
-  },
-
   about: {
     meta: {
       description:
@@ -1014,7 +983,7 @@ const en: Messages = {
       },
       everythingElse: {
         title: 'Everything else',
-        body: 'Third-party components, a registry, a marketplace, accounts and payments are designed and not built. /security and /marketplace say so specifically, not just here.',
+        body: 'Third-party components, a registry, a marketplace and accounts are designed and not built. /security and /marketplace say so specifically, not just here.',
       },
     },
     closing: {
@@ -1157,7 +1126,7 @@ const en: Messages = {
     },
     order: {
       eyebrow: 'The order',
-      title: 'Seven things, in this sequence',
+      title: 'Six things, in this sequence',
       lead: 'This order is not a preference. Each step is what makes the next one mean anything.',
       steps: {
         review: 'An external security review of the capability broker.',
@@ -1165,20 +1134,12 @@ const en: Messages = {
           'The sandbox for third-party code, with its time, memory and fuel limits actually enforced.',
         signing: 'Signing, for both the application and anything published.',
         licence:
-          'Counsel signing off the licence. The source is proprietary and its terms are written down; no lawyer has read them.',
+          'A legal review of how the licence applies — the source is under the PolyForm Noncommercial License 1.0.0, in LICENSE.',
         registry:
           'The registry, with immutable versions and permissions disclosed before installing.',
         legal: 'A legal review of the terms a marketplace and its creators would be agreeing to.',
-        money: 'Money, last.',
       },
-      why: 'Reaching the last one sooner by skipping either of the first two would make every claim this product makes about security false at once.',
-    },
-    money: {
-      eyebrow: 'Money',
-      title: 'Modelled, and not moving',
-      lead: 'There is no payment provider, no account to charge and no balance to pay out.',
-      body: 'What exists is the arithmetic and the states: whole minor units with no floating point anywhere near them, a split whose two shares add up to what was paid at every amount, purchases that cannot come back to life after a refund, and entitlements a client is never allowed to assert about itself. No commission rate is written down, because nobody has decided one and a number in a source file has a way of becoming a promise.',
-      rule: 'One rule holds whatever happens next: money buys distribution, not permissions. A paid publication is checked by exactly the code that checks a free one, and the permission prompt looks identical whether something was free or expensive.',
+      why: 'Reaching a registry sooner by skipping either of the first two would make every claim this product makes about security false at once.',
     },
     cta: {
       download: 'Download Encastra',
@@ -1199,14 +1160,12 @@ const en: Messages = {
         item1: 'The WebAssembly sandbox third-party components would run in',
         item2: 'Signing and a revocation list, so an installed component can be verified',
         item3: 'A registry: publish, verify, install, revoke',
-        item4: 'A listing model — money movement is explicitly out of scope even after that',
+        item4: 'A listing model: how a published component is described and found',
       },
       body1Prefix:
         'Every component you can use is in the box — nineteen, plus two triggers, all first-party and compiled into the application. See',
       body1LinkText: 'the full catalogue',
       body1Suffix: 'for exactly what that set can do.',
-      body2:
-        'When this exists, listings will come before any money moves through it — the roadmap treats a marketplace listing model and real payments as separate milestones, in that order.',
     },
     cta: 'See what you actually have today',
   },
@@ -1215,7 +1174,7 @@ const en: Messages = {
     index: {
       meta: {
         description:
-          'The nine legal documents this project has drafted. All nine are drafts pending review by qualified legal counsel and are not legal advice.',
+          'The seven legal documents this project has drafted. All seven are drafts pending review by qualified legal counsel and are not legal advice.',
       },
       hero: {
         eyebrow: 'Legal',

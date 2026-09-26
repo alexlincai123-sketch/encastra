@@ -45,7 +45,6 @@ const es: Messages = {
         components: 'Componentes',
         templates: 'Plantillas',
         download: 'Descargar',
-        pricing: 'Precios',
         tutorials: 'Tutoriales',
         docs: 'Documentación',
         security: 'Seguridad',
@@ -70,8 +69,12 @@ const es: Messages = {
         'Encastra es un nombre provisional. No se han revisado los registros de marcas, así que nada aquí afirma que el nombre esté legalmente libre —',
       nameLinkText: 'por qué queda escrito aquí',
       licencePrefix:
-        'El código fuente es propietario: el repositorio es público para leerlo, no para copiarlo. Los documentos legales de este sitio son',
-      licenceLinkText: 'borradores sin revisar',
+        'Encastra se descarga gratis. Es código disponible, gratis para uso personal, educativo y no comercial bajo la',
+      licenceLinkText: 'PolyForm Noncommercial License 1.0.0',
+      licenceMiddle: '; el uso comercial requiere una licencia aparte — pídela a través del',
+      repoLinkText: 'repositorio de GitHub',
+      draftsPrefix: 'Los documentos legales de este sitio son',
+      draftsLinkText: 'borradores sin revisar',
     },
   },
 
@@ -203,12 +206,12 @@ const es: Messages = {
   download: {
     meta: {
       description:
-        'El instalador de Windows para Encastra {version} — tamaño, SHA-256 y qué comprobar antes de ejecutarlo. macOS y Linux todavía no están construidos.',
+        'El instalador de Windows para Encastra {version}, gratis desde GitHub Releases — tamaño, SHA-256 y qué comprobar antes de ejecutarlo. macOS y Linux todavía no están construidos.',
     },
     hero: {
       eyebrow: 'Descarga',
       title: 'Consigue la versión candidata',
-      lead: 'Un instalador, para Windows, sin firmar. Todavía no existe nada más — sin build de macOS, sin build de Linux, sin actualización automática.',
+      lead: 'Un instalador, para Windows, de descarga gratuita desde las GitHub Releases del proyecto, sin firmar. Todavía no existe nada más — sin build de macOS, sin build de Linux, sin actualización automática.',
     },
     target: {
       windowsTitle: 'Esto parece Windows',
@@ -229,21 +232,19 @@ const es: Messages = {
       windowsTitle: 'Windows 10 / 11, x64',
       windowsBody:
         'Instalador NSIS, por usuario, sin necesidad de administrador. Este es el único artefacto que existe de verdad.',
-      noHostYet: 'Todavía sin servidor público de descarga',
+      downloadCta: 'Descargar desde GitHub Releases',
       macosTitle: 'macOS',
       macosBody:
         'Los componentes declaran soporte para macOS y el motor está escrito para ser independiente de la plataforma, pero no se ha construido ni empaquetado nada de verdad para esta plataforma.',
       linuxTitle: 'Linux',
       linuxBody: 'La misma historia que macOS: soporte declarado, sin build, nada que descargar.',
     },
-    noHostCallout: {
-      part1:
-        'Todavía no hay ningún servidor público de descarga para esta build — el repositorio es público para leerlo, pero esta build no está publicada allí como release, y',
-      part2: 'no está registrado (mira',
-      part3:
-        '). Lo que sigue es el registro real de la build que existe: su nombre de archivo exacto, tamaño y SHA-256, tomados de',
-      part4:
-        ', para que quien la aloje — o te pase una copia directamente — pueda verificarla contra esto.',
+    releasesCallout: {
+      part1: 'Las builds se publican, gratis, en la',
+      linkText: 'página de GitHub Releases',
+      part2:
+        ' del repositorio público. Toma la entrada más reciente; las versiones candidatas aparecen marcadas como Pre-release. Lo que sigue es el registro de esta build: su nombre de archivo exacto, tamaño y SHA-256, tomados de',
+      part3: ', para que puedas verificar el archivo que descargues antes de ejecutarlo.',
     },
     thisBuild: {
       eyebrow: 'Esta build',
@@ -275,7 +276,7 @@ const es: Messages = {
       eyebrow: 'Después de instalar',
       title: 'Lo que todavía no hay',
       bodyPrefix:
-        'Nada se actualiza solo — una versión nueva significa descargar un instalador nuevo y ejecutarlo, una vez que se publique en algún sitio. Desinstalar quita solo la aplicación; no toca ningún archivo',
+        'Nada se actualiza solo — una versión nueva significa descargar un instalador nuevo desde GitHub Releases y ejecutarlo. Desinstalar quita solo la aplicación; no toca ningún archivo',
       bodySuffix: 'que vive donde lo hayas guardado.',
     },
   },
@@ -633,7 +634,7 @@ const es: Messages = {
     hero: {
       eyebrow: 'Documentación',
       title: 'Lo que está escrito',
-      lead: 'El material de referencia vive en el repositorio como docs/*.md, junto al código que describe. El repositorio es público para leerlo — el código es propietario, así que leerlo no es una licencia para copiarlo — y cada entrada de abajo enlaza la versión actual de su documento en la rama main, que puede ir por delante de la build de /download.',
+      lead: 'El material de referencia vive en el repositorio como docs/*.md, junto al código que describe. El repositorio es público — el código está disponible bajo la PolyForm Noncommercial License 1.0.0, cuyos términos están allí en LICENSE — y cada entrada de abajo enlaza la versión actual de su documento en la rama main, que puede ir por delante de la build de /download.',
     },
     forAnyone: { eyebrow: 'Para cualquiera', title: 'Escrito para alguien que no es ingeniero' },
     forEngineers: { eyebrow: 'Para ingenieros', title: 'Material de referencia' },
@@ -903,38 +904,6 @@ const es: Messages = {
     },
   },
 
-  pricing: {
-    meta: {
-      description:
-        'Lo que cuesta hoy: nada. No hay planes de pago, ni cuentas, ni sistema de pago en esta build.',
-    },
-    hero: {
-      eyebrow: 'Precios',
-      title: 'Lo que cuesta hoy',
-      lead: 'Nada. No hay sistema de pago, ni cuenta, ni plan entre el que elegir — así que en esta página hay un único precio real y una ausencia declarada, en vez de una tabla de precios con números inventados.',
-    },
-    free: {
-      badge: 'Gratis — versión candidata',
-      title: 'Descárgalo y ejecútalo',
-      body: 'El instalador de Windows no cuesta nada y no necesita cuenta. Todo lo documentado en este sitio — el runtime, el broker de permisos, los diecinueve componentes — está disponible hoy en la versión candidata, con las limitaciones indicadas en /security.',
-      cta: 'Descarga la versión candidata',
-    },
-    notYet: {
-      eyebrow: 'Todavía no',
-      title: 'Lo que eventualmente costaría dinero',
-      lead: 'Los pagos reales quedan explícitamente fuera de alcance para el hito actual, y el roadmap los sitúa después de que exista un modelo de listado de marketplace — un listado no es lo mismo que el dinero moviéndose a través de él.',
-    },
-    payments: {
-      title: 'Sin planes de pago, sin compras en el marketplace, sin suscripciones',
-      blockedBy: {
-        item1: 'Un backend con cuentas y facturación',
-        item2: 'Un modelo de listado de marketplace (construido primero sin pagos)',
-        item3: 'Pagos reales, mantenidos en sandbox hasta que eso se desactive deliberadamente',
-      },
-      body: 'Cuando exista algo de esto, sustituirá la afirmación de esta página de «nada que pagar» por números reales — no al revés.',
-    },
-  },
-
   about: {
     meta: {
       description:
@@ -1004,7 +973,7 @@ const es: Messages = {
       },
       everythingElse: {
         title: 'Todo lo demás',
-        body: 'Los componentes de terceros, un registro, un marketplace, las cuentas y los pagos están diseñados y no construidos. /security y /marketplace lo dicen específicamente, no solo aquí.',
+        body: 'Los componentes de terceros, un registro, un marketplace y las cuentas están diseñados y no construidos. /security y /marketplace lo dicen específicamente, no solo aquí.',
       },
     },
     closing: {
@@ -1147,7 +1116,7 @@ const es: Messages = {
     },
     order: {
       eyebrow: 'El orden',
-      title: 'Siete cosas, en esta secuencia',
+      title: 'Seis cosas, en esta secuencia',
       lead: 'Este orden no es una preferencia. Cada paso es lo que hace que el siguiente signifique algo.',
       steps: {
         review: 'Una revisión de seguridad externa del broker de capacidades.',
@@ -1155,19 +1124,11 @@ const es: Messages = {
           'El sandbox para código de terceros, con sus límites de tiempo, memoria y combustible realmente aplicados.',
         signing: 'Firma, tanto de la aplicación como de lo que se publique.',
         licence:
-          'Que un abogado firme la licencia. El código fuente es propietario y sus términos están escritos; ningún abogado los ha leído.',
+          'Una revisión legal de cómo se aplica la licencia — el código está bajo la PolyForm Noncommercial License 1.0.0, en LICENSE.',
         registry: 'El registro, con versiones inmutables y permisos declarados antes de instalar.',
         legal: 'Una revisión legal de los términos que aceptarían un marketplace y sus creadores.',
-        money: 'El dinero, al final.',
       },
-      why: 'Llegar antes al último saltándose cualquiera de los dos primeros haría falsas, de golpe, todas las afirmaciones de seguridad de este producto.',
-    },
-    money: {
-      eyebrow: 'Dinero',
-      title: 'Modelado, y sin moverse',
-      lead: 'No hay proveedor de pagos, ni cuenta a la que cobrar, ni saldo que liquidar.',
-      body: 'Lo que existe es la aritmética y los estados: unidades menores enteras sin ningún decimal en coma flotante cerca, un reparto cuyas dos partes suman lo pagado en cualquier importe, compras que no resucitan tras un reembolso, y derechos de uso que un cliente nunca puede afirmar sobre sí mismo. No hay ninguna comisión escrita, porque nadie ha decidido una y un número en un archivo de código tiende a convertirse en una promesa.',
-      rule: 'Una regla se mantiene pase lo que pase: el dinero compra distribución, no permisos. Una publicación de pago la revisa exactamente el mismo código que revisa una gratuita, y la petición de permiso se ve igual tanto si algo fue gratis como si fue caro.',
+      why: 'Llegar antes a un registro saltándose cualquiera de los dos primeros haría falsas, de golpe, todas las afirmaciones de seguridad de este producto.',
     },
     cta: {
       download: 'Descargar Encastra',
@@ -1189,15 +1150,12 @@ const es: Messages = {
         item2:
           'Firma y una lista de revocación, para que un componente instalado pueda verificarse',
         item3: 'Un registro: publicar, verificar, instalar, revocar',
-        item4:
-          'Un modelo de listado — el movimiento de dinero queda explícitamente fuera de alcance incluso después de eso',
+        item4: 'Un modelo de listado: cómo se describe y se encuentra un componente publicado',
       },
       body1Prefix:
         'Cada componente que puedes usar está en la caja — diecinueve, más dos disparadores, todos de origen propio y compilados en la aplicación. Mira',
       body1LinkText: 'el catálogo completo',
       body1Suffix: 'para ver exactamente qué puede hacer ese conjunto.',
-      body2:
-        'Cuando esto exista, los listados llegarán antes de que se mueva ningún dinero por ellos — el roadmap trata el modelo de listado del marketplace y los pagos reales como hitos separados, en ese orden.',
     },
     cta: 'Ver lo que de verdad tienes hoy',
   },
@@ -1206,7 +1164,7 @@ const es: Messages = {
     index: {
       meta: {
         description:
-          'Los nueve documentos legales que ha redactado este proyecto. Los nueve son borradores pendientes de revisión por un asesor legal cualificado y no son asesoramiento legal.',
+          'Los siete documentos legales que ha redactado este proyecto. Los siete son borradores pendientes de revisión por un asesor legal cualificado y no son asesoramiento legal.',
       },
       hero: {
         eyebrow: 'Legal',

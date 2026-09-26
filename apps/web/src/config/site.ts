@@ -25,11 +25,23 @@ export const SITE = {
    */
   url: 'https://encastra.dev',
   /**
-   * The public repository. Public to be read, not to be copied — the source is proprietary under
-   * `LICENSE`. It is also the one contact channel that exists: see `SECURITY_REPORT_URL`.
+   * The public repository. The source is available under the PolyForm Noncommercial License
+   * 1.0.0 (`LICENSE`); builds are published on its Releases page. It is also the one contact
+   * channel that exists: see `SECURITY_REPORT_URL`.
    */
   repository: 'https://github.com/alexlincai123-sketch/encastra',
 } as const;
+
+/**
+ * Where builds are published, free to download: GitHub Releases on the repository above.
+ *
+ * The list, not `/releases/latest`: release candidates are published as GitHub pre-releases, and
+ * `/latest` skips pre-releases, so while only candidates exist it would lead nowhere.
+ */
+export const RELEASES_URL = `${SITE.repository}/releases`;
+
+/** The licence text itself, in the repository. The site describes it; this file is what binds. */
+export const LICENSE_URL = `${SITE.repository}/blob/main/LICENSE`;
 
 /**
  * Where a vulnerability is reported privately: GitHub's private vulnerability reporting on the
@@ -87,7 +99,6 @@ export const STATUS = {
   marketplace: 'planned',
   community: 'planned',
   accounts: 'planned',
-  payments: 'planned',
 } as const satisfies Record<string, BuildState>;
 
 /**

@@ -170,8 +170,8 @@ export function SectionHeading({
 /**
  * A reference to a file in the repository.
  *
- * The repository is public to read (the source is proprietary: reading it is not a licence to
- * copy it). With `linked`, the path becomes a link to the file on the default branch of
+ * The repository is public (the source is available under the PolyForm Noncommercial License
+ * 1.0.0, see `LICENSE`). With `linked`, the path becomes a link to the file on the default branch of
  * `SITE.repository`. Off by default: the default branch can move ahead of the build this site
  * documents, so a caller links only where "the current version of this file" is what is meant.
  */

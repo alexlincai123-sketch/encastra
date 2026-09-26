@@ -89,8 +89,12 @@ export const FOOTER_NAV: readonly NavGroup[] = [
         label: 'Templates',
         summary: 'Workflows that ship with the app.',
       },
-      { href: '/download', id: 'download', label: 'Download', summary: 'Get the beta.' },
-      { href: '/pricing', id: 'pricing', label: 'Pricing', summary: 'What it costs today.' },
+      {
+        href: '/download',
+        id: 'download',
+        label: 'Download',
+        summary: 'Free, from GitHub Releases.',
+      },
     ],
   },
   {
@@ -178,8 +182,8 @@ export const FOOTER_NAV: readonly NavGroup[] = [
  *
  * - **Anchors** (`/about#name` and the like). A fragment is a position on a page that is already
  *   in the list, not a page of its own, and a sitemap that lists one is listing a duplicate.
- * - **`/legal/<slug>` documents.** The footer links three of the ten; `config/legal.ts` holds
- *   all ten and is the only honest source for them, so `sitemap.ts` takes them from there
+ * - **`/legal/<slug>` documents.** The footer links three of the seven; `config/legal.ts` holds
+ *   all seven and is the only honest source for them, so `sitemap.ts` takes them from there
  *   instead. `/legal` itself — the index — is a real page and stays.
  *
  * The home page is not in any navigation (the logo goes there) so it is prepended by hand; it is

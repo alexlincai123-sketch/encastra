@@ -1,5 +1,5 @@
 /**
- * The nine legal documents this site publishes.
+ * The seven legal documents this site publishes.
  *
  * Every one of them is a draft. None has been reviewed by a lawyer, and `/legal` says so above
  * every single document rather than once in a footer — the same discipline `docs/BRANDING.md`
@@ -7,8 +7,8 @@
  * finished policy; it exists so a reader can see what the project currently intends to promise,
  * and so a future review has a concrete draft to correct rather than a blank page.
  *
- * Facts asserted in these drafts (no accounts, no payments, no analytics, the source proprietary
- * under `LICENSE`, builds not signed) are drawn from `docs/SECURITY.md`, `docs/PROJECT-FORMAT.md`,
+ * Facts asserted in these drafts (no accounts, nothing sold, no analytics, the source under the
+ * PolyForm Noncommercial License 1.0.0 in `LICENSE`, builds not signed) are drawn from `docs/SECURITY.md`, `docs/PROJECT-FORMAT.md`,
  * `docs/PRODUCT-ROADMAP.md`, `docs/BRANDING.md`, `docs/RELEASE.md` and `lib/security.ts`, and
  * should stay in step with them.
  */
@@ -50,9 +50,9 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
         ],
       },
       {
-        heading: 'Accounts and payments',
+        heading: 'Accounts',
         body: [
-          'There are no user accounts, no sign-in, and no payments in this build. When those exist, this document will describe exactly what they collect and why, before they collect anything.',
+          'There are no user accounts and no sign-in in this build, and nothing is sold: the application is free to download. If accounts ever exist, this document will describe exactly what they collect and why, before they collect anything.',
         ],
       },
       {
@@ -67,12 +67,12 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
     slug: 'terms-of-service',
     title: 'Terms of Service',
     summary:
-      'Pre-release software (a release candidate), provided as is, with no accounts and no payments to speak of yet.',
+      'Pre-release software (a release candidate), free to download, provided as is, with no accounts.',
     sections: [
       {
         heading: 'What this covers',
         body: [
-          'These draft terms cover your use of this website and of the Encastra desktop application release candidate. They are not the source code licence: that is a separate document, `LICENSE` in the repository, and it is proprietary — see the note below.',
+          'These draft terms cover your use of this website and of the Encastra desktop application release candidate. They are not the source code licence: that is a separate document, `LICENSE` in the repository — see the note below.',
         ],
       },
       {
@@ -89,59 +89,21 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
         ],
       },
       {
-        heading: 'No accounts, no payments, no marketplace',
+        heading: 'No accounts, no marketplace, nothing sold',
         body: [
-          'None of these exist today. This document will be extended, not silently reinterpreted, when they do.',
+          'Neither accounts nor a marketplace exist today, and nothing is sold: the application is distributed free from the public GitHub repository. This document will be extended, not silently reinterpreted, if that changes.',
         ],
       },
       {
         heading: 'Source code licence',
         body: [
-          'Encastra is proprietary. The repository is public so the source can be read and its checks can run in the open, and the terms are in the LICENSE file at its root. That is not an open-source licence: no general right to copy, modify, redistribute or build works derived from it is granted, and anything wider has to be granted in writing. Third-party dependencies keep their own licences.',
+          'Encastra is source-available, free for personal, educational and other noncommercial use under the PolyForm Noncommercial License 1.0.0. The licence text is the LICENSE file at the root of the repository: https://github.com/alexlincai123-sketch/encastra/blob/main/LICENSE — that file, not this summary, is what applies. Commercial use needs a separate licence — ask through the GitHub repository: https://github.com/alexlincai123-sketch/encastra. Third-party dependencies keep their own licences.',
         ],
       },
       {
         heading: 'Changes',
         body: [
           'Because this entire document is a draft pending legal review, expect it to change materially, not just incrementally, before it is finalised.',
-        ],
-      },
-    ],
-  },
-  {
-    slug: 'eula',
-    title: 'End User License Agreement',
-    summary:
-      'Draft terms under which the application would be licensed to run. Not in force: the installer shows no licence page.',
-    sections: [
-      {
-        heading: 'Grant',
-        body: [
-          'Subject to these terms, you are granted a limited, personal, non-exclusive, non-transferable licence to install and run the Encastra desktop application for your own use.',
-        ],
-      },
-      {
-        heading: 'What you may not do',
-        body: [
-          'You may not redistribute the installer or binary as your own product, remove or alter any notices it displays, or use it in a way that violates applicable law.',
-        ],
-      },
-      {
-        heading: 'No warranty, no support commitment',
-        body: [
-          'The application is provided as is, without warranty, and without any commitment to provide support, bug fixes, or updates on any schedule. There is currently no update mechanism at all — see /download for exactly what that means today.',
-        ],
-      },
-      {
-        heading: 'Not code-signed',
-        body: [
-          'This build is not code-signed. Installing it means trusting a binary that Windows itself flags as coming from an unrecognised publisher. See /download and /security for what verification is possible today (a published SHA-256) and what it does and does not prove.',
-        ],
-      },
-      {
-        heading: 'Termination',
-        body: [
-          'This licence ends automatically if you breach these terms. Uninstalling the application ends it without any breach implied.',
         ],
       },
     ],
@@ -272,7 +234,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'Source and content',
         body: [
-          'The source code is proprietary and its terms are in the repository’s LICENSE file — see /legal/terms-of-service. This notice covers naming and branding only, and is not a grant of rights to any code.',
+          'The source code is available under the PolyForm Noncommercial License 1.0.0, whose terms are in the repository’s LICENSE file — see /legal/terms-of-service. This notice covers naming and branding only, and is not a grant of rights to any code.',
         ],
       },
     ],
@@ -292,33 +254,13 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'What the inventory is and is not',
         body: [
-          'It is an inventory. It lists each package’s licence identifier and where its source, and therefore its full licence text, lives. It does not reproduce every licence text inline, and it is not a legal opinion about what each licence obliges; a review of those obligations by counsel is among the steps before a non-beta release, alongside code signing. Encastra’s own licence is settled: it is proprietary, and its terms are in the repository’s LICENSE file.',
+          'It is an inventory. It lists each package’s licence identifier and where its source, and therefore its full licence text, lives. It does not reproduce every licence text inline, and it is not a legal opinion about what each licence obliges; a review of those obligations by counsel is among the steps before a non-beta release, alongside code signing. Encastra’s own licence is the PolyForm Noncommercial License 1.0.0, and its terms are in the repository’s LICENSE file.',
         ],
       },
       {
         heading: 'Requesting the list',
         body: [
           'The generated file ships with the source tree. If you need it for compliance purposes and do not have the repository, ask through /contact and it will be sent as generated for the release you name.',
-        ],
-      },
-    ],
-  },
-  {
-    slug: 'refunds',
-    title: 'Refund & Cancellation Policy',
-    summary:
-      'Nothing is sold today, so there is nothing to refund. This exists for when that changes.',
-    sections: [
-      {
-        heading: 'Nothing is sold',
-        body: [
-          'There are no payments, no subscriptions, and no paid plans anywhere in this build. The download is free, and there is no purchase to cancel or refund.',
-        ],
-      },
-      {
-        heading: 'When payments exist',
-        body: [
-          'The product roadmap treats payments as a sandboxed, later-stage capability, arriving well after a working marketplace listing model — real money movement is explicitly out of scope for the current milestone. This document will be rewritten with real terms before that capability ships, not adapted retroactively after it does.',
         ],
       },
     ],
