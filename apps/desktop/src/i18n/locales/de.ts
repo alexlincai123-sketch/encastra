@@ -13,6 +13,7 @@ const de: Messages = {
     choose: 'Auswählen…',
     itCannot: 'Sie kann nicht',
     recordingBadge: 'Aufzeichnung',
+    projectFileType: 'Encastra-Projekt',
   },
 
   sidebar: {
@@ -84,6 +85,13 @@ const de: Messages = {
   },
 
   canvas: {
+    controls: {
+      panel: 'Steuerung der Workflow-Fläche',
+      zoomIn: 'Vergrößern',
+      zoomOut: 'Verkleinern',
+      fitView: 'An Ansicht anpassen',
+      minimap: 'Übersichtskarte',
+    },
     ariaLabel: 'Workflow-Fläche',
     refusal: {
       selfCycle: {
@@ -591,11 +599,132 @@ const de: Messages = {
   },
 
   components: {
+    categories: {
+      all: 'Alle',
+      other: 'Sonstige',
+      data: 'Daten',
+      file: 'Dateien',
+      flow: 'Ablauf',
+      media: 'Medien',
+      network: 'Netzwerk',
+      system: 'System',
+    },
+    core: {
+      encastra: {
+        data: {
+          csv: {
+            read: {
+              name: 'CSV lesen',
+              description: 'Wandelt kommagetrennten Text in eine Liste von Zeilen um.',
+            },
+            write: {
+              name: 'CSV schreiben',
+              description: 'Wandelt eine Liste von Zeilen in kommagetrennten Text um.',
+            },
+          },
+          json: {
+            name: 'JSON einlesen',
+            description: 'Wandelt Text in strukturierte Daten um.',
+            write: {
+              name: 'JSON schreiben',
+              description: 'Wandelt strukturierte Daten wieder in Text um.',
+            },
+          },
+        },
+        file: {
+          move: {
+            name: 'Datei verschieben',
+            description:
+              'Verschiebt eine Datei in einen anderen Ordner. Das Original wird entfernt.',
+          },
+          read: {
+            name: 'Datei lesen',
+            description: 'Liest den Textinhalt der verbundenen Datei.',
+          },
+          rename: {
+            name: 'Datei umbenennen',
+            description: 'Gibt einer Datei einen neuen Namen und lässt sie, wo sie ist.',
+          },
+          save: {
+            name: 'Datei speichern',
+            description:
+              'Legt eine Datei in einem Ordner Ihrer Wahl ab. Behält den ursprünglichen Namen, sofern Sie keinen anderen angeben.',
+          },
+          watch: {
+            name: 'Ordner überwachen',
+            description: 'Startet den Workflow, sobald eine Datei in einem Ordner erscheint.',
+          },
+          write: {
+            name: 'Datei schreiben',
+            description: 'Speichert Text in einer Datei in einem Ordner Ihrer Wahl.',
+          },
+        },
+        flow: {
+          delay: {
+            name: 'Verzögerung',
+            description: 'Wartet und gibt den Wert dann unverändert weiter.',
+          },
+          if: {
+            name: 'Wenn',
+            description: 'Schickt den Wert je nach Bedingung in die eine oder die andere Richtung.',
+          },
+          switch: {
+            name: 'Weiche',
+            description: 'Schickt den Wert je nach Wort auf einen von mehreren Wegen.',
+          },
+        },
+        image: {
+          convert: {
+            name: 'Bild konvertieren',
+            description: 'Schreibt ein Bild in einem anderen Format.',
+          },
+          info: {
+            name: 'Bildinfo',
+            description: 'Meldet Größe und Format eines Bildes, ohne es zu verändern.',
+          },
+          resize: {
+            name: 'Bildgröße ändern',
+            description:
+              'Ändert die Größe eines Bildes. Lassen Sie eine Seite leer, um die Proportionen zu behalten.',
+          },
+          thumbnail: {
+            name: 'Vorschaubild',
+            description: 'Erstellt eine kleine quadratische Vorschau eines Bildes.',
+          },
+        },
+        net: {
+          http: {
+            name: 'HTTP-Anfrage',
+            description: 'Ruft eine Webadresse ab oder sendet Daten an sie.',
+          },
+        },
+        system: {
+          clipboard: {
+            name: 'In die Zwischenablage kopieren',
+            description: 'Legt Text in die Zwischenablage, bereit zum Einfügen.',
+          },
+          notify: {
+            name: 'Benachrichtigen',
+            description: 'Zeigt eine Nachricht an, wenn dieser Schritt läuft.',
+          },
+          timer: {
+            name: 'Timer',
+            description: 'Startet den Workflow immer wieder, nach einem Zeitplan.',
+          },
+        },
+      },
+    },
     header: {
       title: 'Komponenten',
-      summary: '{count} installiert.',
-      summaryWithTriggers:
-        '{count} installiert — {triggerCount} davon starten selbst einen Workflow; der Rest läuft als Schritt innerhalb eines Workflows.',
+      summary: {
+        one: '{count} installiert.',
+        other: '{count} installiert.',
+      },
+      summaryWithTriggers: {
+        one: '{count} installiert — {triggerCount} davon startet selbst einen Workflow; der Rest läuft als Schritt innerhalb eines Workflows.',
+        other:
+          '{count} installiert — {triggerCount} davon starten selbst einen Workflow; der Rest läuft als Schritt innerhalb eines Workflows.',
+      },
       note: 'Alles hier ist Teil der Anwendung; um andere zu installieren, wird die Sandbox für Drittanbieter-Code benötigt, die noch nicht gebaut ist.',
     },
     search: {
@@ -1595,6 +1724,12 @@ const de: Messages = {
           label: 'Standardwerte wiederherstellen',
           hint: 'Setzt jede Einstellung auf diesem Bildschirm auf den Zustand beim ersten Start zurück. Betrifft nicht Ihre Projekte, erteilten Berechtigungen oder installierten Komponenten.',
           button: 'Alle Einstellungen zurücksetzen',
+          confirm: {
+            question:
+              'Alle Einstellungen auf diesem Bildschirm zurücksetzen? Ihre Projekte, erteilten Berechtigungen und installierten Komponenten bleiben unberührt.',
+            confirm: 'Ja, zurücksetzen',
+            cancel: 'Abbrechen',
+          },
         },
       },
     },
@@ -1630,6 +1765,8 @@ const de: Messages = {
           label: 'Exportieren',
           hint: 'Speichert denselben Bericht als Textdatei.',
           button: 'Exportieren…',
+          failed:
+            'Der Bericht konnte nicht gespeichert werden. Verwenden Sie stattdessen Kopieren.',
         },
         note: 'Nichts hier enthält einen Projektpfad, einen Einstellungswert oder ein Token — es ist so gedacht, dass es gefahrlos irgendwo öffentlich eingefügt werden kann. Der Bericht wird auf Englisch kopiert und exportiert, damit ihn alle im Projekt lesen können.',
       },

@@ -12,6 +12,7 @@ const it: Messages = {
     choose: 'Scegli…',
     itCannot: 'Non può',
     recordingBadge: 'registrazione',
+    projectFileType: 'Progetto Encastra',
   },
 
   sidebar: {
@@ -83,6 +84,13 @@ const it: Messages = {
   },
 
   canvas: {
+    controls: {
+      panel: 'Controlli della tela',
+      zoomIn: 'Ingrandisci',
+      zoomOut: 'Riduci',
+      fitView: 'Adatta alla vista',
+      minimap: 'Minimappa',
+    },
     ariaLabel: 'Tela del flusso di lavoro',
     refusal: {
       selfCycle: {
@@ -587,11 +595,132 @@ const it: Messages = {
   },
 
   components: {
+    categories: {
+      all: 'Tutti',
+      other: 'Altro',
+      data: 'Dati',
+      file: 'File',
+      flow: 'Flusso',
+      media: 'Media',
+      network: 'Rete',
+      system: 'Sistema',
+    },
+    core: {
+      encastra: {
+        data: {
+          csv: {
+            read: {
+              name: 'Leggi CSV',
+              description: 'Trasforma un testo separato da virgole in un elenco di righe.',
+            },
+            write: {
+              name: 'Scrivi CSV',
+              description: 'Trasforma un elenco di righe in testo separato da virgole.',
+            },
+          },
+          json: {
+            name: 'Analizza JSON',
+            description: 'Trasforma il testo in dati strutturati.',
+            write: {
+              name: 'Scrivi JSON',
+              description: 'Ritrasforma i dati strutturati in testo.',
+            },
+          },
+        },
+        file: {
+          move: {
+            name: 'Sposta file',
+            description: 'Sposta un file in un’altra cartella. L’originale viene rimosso.',
+          },
+          read: {
+            name: 'Leggi file',
+            description: 'Legge il contenuto testuale del file collegato.',
+          },
+          rename: {
+            name: 'Rinomina file',
+            description: 'Dà un nuovo nome a un file, lasciandolo dov’è.',
+          },
+          save: {
+            name: 'Salva file',
+            description:
+              'Mette un file in una cartella a tua scelta. Mantiene il nome originale, a meno che tu non ne indichi un altro.',
+          },
+          watch: {
+            name: 'Osserva cartella',
+            description:
+              'Avvia il flusso di lavoro ogni volta che un file compare in una cartella.',
+          },
+          write: {
+            name: 'Scrivi file',
+            description: 'Salva del testo in un file, in una cartella a tua scelta.',
+          },
+        },
+        flow: {
+          delay: {
+            name: 'Ritardo',
+            description: 'Attende, poi passa il valore senza modificarlo.',
+          },
+          if: {
+            name: 'Se',
+            description: 'Invia il valore da una parte o dall’altra in base a una condizione.',
+          },
+          switch: {
+            name: 'Smistamento',
+            description: 'Invia il valore lungo uno di diversi percorsi in base a una parola.',
+          },
+        },
+        image: {
+          convert: {
+            name: 'Converti immagine',
+            description: 'Scrive un’immagine in un formato diverso.',
+          },
+          info: {
+            name: 'Info immagine',
+            description: 'Riporta dimensioni e formato di un’immagine senza modificarla.',
+          },
+          resize: {
+            name: 'Ridimensiona immagine',
+            description:
+              'Cambia le dimensioni di un’immagine. Lascia vuoto un lato per mantenere le proporzioni.',
+          },
+          thumbnail: {
+            name: 'Miniatura',
+            description: 'Crea una piccola anteprima quadrata di un’immagine.',
+          },
+        },
+        net: {
+          http: {
+            name: 'Richiesta HTTP',
+            description: 'Recupera un indirizzo web, o gli invia dei dati.',
+          },
+        },
+        system: {
+          clipboard: {
+            name: 'Copia negli appunti',
+            description: 'Mette il testo negli appunti, pronto da incollare.',
+          },
+          notify: {
+            name: 'Notifica',
+            description: 'Mostra un messaggio quando questo passaggio viene eseguito.',
+          },
+          timer: {
+            name: 'Timer',
+            description: 'Avvia il flusso di lavoro più e più volte, secondo una pianificazione.',
+          },
+        },
+      },
+    },
     header: {
       title: 'Componenti',
-      summary: '{count} installati.',
-      summaryWithTriggers:
-        '{count} installati — {triggerCount} di essi avviano un flusso di lavoro per conto proprio; il resto viene eseguito come passaggio all’interno di uno.',
+      summary: {
+        one: '{count} installato.',
+        other: '{count} installati.',
+      },
+      summaryWithTriggers: {
+        one: '{count} installati — {triggerCount} di essi avvia un flusso di lavoro per conto proprio; il resto viene eseguito come passaggio all’interno di uno.',
+        other:
+          '{count} installati — {triggerCount} di essi avviano un flusso di lavoro per conto proprio; il resto viene eseguito come passaggio all’interno di uno.',
+      },
       note: 'Tutto questo è incluso con l’applicazione; installarne altri richiede la sandbox per il codice di terze parti, che non è ancora costruita.',
     },
     search: {
@@ -1574,6 +1703,12 @@ const it: Messages = {
           label: 'Ripristina i valori predefiniti',
           hint: 'Riporta ogni impostazione di questa schermata a come era al primo avvio. Non tocca i tuoi progetti, i permessi concessi o i componenti installati.',
           button: 'Ripristina tutte le impostazioni',
+          confirm: {
+            question:
+              'Ripristinare tutte le impostazioni di questa schermata? I tuoi progetti, i permessi concessi e i componenti installati non vengono toccati.',
+            confirm: 'Sì, ripristina',
+            cancel: 'Annulla',
+          },
         },
       },
     },
@@ -1609,6 +1744,7 @@ const it: Messages = {
           label: 'Esporta',
           hint: 'Salva lo stesso report come file di testo.',
           button: 'Esporta…',
+          failed: 'Impossibile salvare il rapporto. Usa Copia al suo posto.',
         },
         note: 'Nulla qui include un percorso di progetto, un valore di preferenza, o un token — è pensato per poter essere incollato senza rischi in un posto pubblico. Il rapporto viene copiato ed esportato in inglese, così chiunque nel progetto può leggerlo.',
       },

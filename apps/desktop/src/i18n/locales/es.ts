@@ -12,6 +12,7 @@ const es: Messages = {
     choose: 'Elegir…',
     itCannot: 'No puede',
     recordingBadge: 'grabación',
+    projectFileType: 'Proyecto de Encastra',
   },
 
   sidebar: {
@@ -83,6 +84,13 @@ const es: Messages = {
   },
 
   canvas: {
+    controls: {
+      panel: 'Controles del lienzo',
+      zoomIn: 'Acercar',
+      zoomOut: 'Alejar',
+      fitView: 'Ajustar a la vista',
+      minimap: 'Minimapa',
+    },
     ariaLabel: 'Lienzo del flujo de trabajo',
     refusal: {
       selfCycle: {
@@ -589,11 +597,132 @@ const es: Messages = {
   },
 
   components: {
+    categories: {
+      all: 'Todos',
+      other: 'Otros',
+      data: 'Datos',
+      file: 'Archivos',
+      flow: 'Flujo',
+      media: 'Multimedia',
+      network: 'Red',
+      system: 'Sistema',
+    },
+    core: {
+      encastra: {
+        data: {
+          csv: {
+            read: {
+              name: 'Leer CSV',
+              description: 'Convierte texto separado por comas en una lista de filas.',
+            },
+            write: {
+              name: 'Escribir CSV',
+              description: 'Convierte una lista de filas en texto separado por comas.',
+            },
+          },
+          json: {
+            name: 'Analizar JSON',
+            description: 'Convierte texto en datos estructurados.',
+            write: {
+              name: 'Escribir JSON',
+              description: 'Vuelve a convertir datos estructurados en texto.',
+            },
+          },
+        },
+        file: {
+          move: {
+            name: 'Mover archivo',
+            description: 'Mueve un archivo a otra carpeta. El original se elimina.',
+          },
+          read: {
+            name: 'Leer archivo',
+            description: 'Lee el contenido de texto del archivo conectado.',
+          },
+          rename: {
+            name: 'Renombrar archivo',
+            description: 'Da un nombre nuevo a un archivo, sin moverlo de donde está.',
+          },
+          save: {
+            name: 'Guardar archivo',
+            description:
+              'Pone un archivo en una carpeta que eliges. Mantiene el nombre original salvo que le des otro.',
+          },
+          watch: {
+            name: 'Vigilar carpeta',
+            description:
+              'Inicia el flujo de trabajo cada vez que aparece un archivo en una carpeta.',
+          },
+          write: {
+            name: 'Escribir archivo',
+            description: 'Guarda texto en un archivo de una carpeta que eliges.',
+          },
+        },
+        flow: {
+          delay: {
+            name: 'Retraso',
+            description: 'Espera y luego pasa el valor sin cambios.',
+          },
+          if: {
+            name: 'Si',
+            description: 'Envía el valor por un camino u otro según una condición.',
+          },
+          switch: {
+            name: 'Conmutador',
+            description: 'Envía el valor por una de varias rutas según una palabra.',
+          },
+        },
+        image: {
+          convert: {
+            name: 'Convertir imagen',
+            description: 'Escribe una imagen en otro formato.',
+          },
+          info: {
+            name: 'Información de imagen',
+            description: 'Informa del tamaño y el formato de una imagen sin cambiarla.',
+          },
+          resize: {
+            name: 'Redimensionar imagen',
+            description:
+              'Cambia el tamaño de una imagen. Deja un lado vacío para mantener las proporciones.',
+          },
+          thumbnail: {
+            name: 'Miniatura',
+            description: 'Crea una vista previa pequeña y cuadrada de una imagen.',
+          },
+        },
+        net: {
+          http: {
+            name: 'Petición HTTP',
+            description: 'Obtiene una dirección web o le envía datos.',
+          },
+        },
+        system: {
+          clipboard: {
+            name: 'Copiar al portapapeles',
+            description: 'Pone texto en el portapapeles, listo para pegar.',
+          },
+          notify: {
+            name: 'Notificar',
+            description: 'Muestra un mensaje cuando se ejecuta este paso.',
+          },
+          timer: {
+            name: 'Temporizador',
+            description: 'Inicia el flujo de trabajo una y otra vez, según una programación.',
+          },
+        },
+      },
+    },
     header: {
       title: 'Componentes',
-      summary: '{count} instalados.',
-      summaryWithTriggers:
-        '{count} instalados — {triggerCount} de ellos inician un flujo de trabajo por su cuenta; el resto se ejecuta como un paso dentro de uno.',
+      summary: {
+        one: '{count} instalado.',
+        other: '{count} instalados.',
+      },
+      summaryWithTriggers: {
+        one: '{count} instalados — {triggerCount} de ellos inicia un flujo de trabajo por su cuenta; el resto se ejecuta como un paso dentro de uno.',
+        other:
+          '{count} instalados — {triggerCount} de ellos inician un flujo de trabajo por su cuenta; el resto se ejecuta como un paso dentro de uno.',
+      },
       note: 'Todo esto viene incluido con la aplicación; instalar otros necesita el entorno aislado para código de terceros, que todavía no está construido.',
     },
     search: {
@@ -1566,6 +1695,12 @@ const es: Messages = {
           label: 'Restaurar valores por defecto',
           hint: 'Devuelve cada ajuste de esta pantalla a como estaba en el primer uso. No toca tus proyectos, permisos concedidos ni componentes instalados.',
           button: 'Restablecer todos los ajustes',
+          confirm: {
+            question:
+              '¿Restablecer todos los ajustes de esta pantalla? Tus proyectos, permisos concedidos y componentes instalados no se tocan.',
+            confirm: 'Sí, restablecer',
+            cancel: 'Cancelar',
+          },
         },
       },
     },
@@ -1601,6 +1736,7 @@ const es: Messages = {
           label: 'Exportar',
           hint: 'Guarda el mismo reporte como archivo de texto.',
           button: 'Exportar…',
+          failed: 'No se pudo guardar el informe. Usa Copiar en su lugar.',
         },
         note: 'Nada aquí incluye una ruta de proyecto, un valor de preferencia, ni un token — está pensado para poder pegarse en algún sitio público sin problema. El informe se copia y se exporta en inglés, para que cualquiera del proyecto pueda leerlo.',
       },

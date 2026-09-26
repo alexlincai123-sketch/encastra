@@ -12,7 +12,8 @@
 import { namedTypesIn, tryParseType, typeDef } from '@encastra/protocol';
 import { useMemo, useState } from 'react';
 import '../components-view.css';
-import { useTranslation } from '../i18n';
+import { useComponentText } from '../component-text';
+import { selectPlural, useTranslation } from '../i18n';
 import { useEditor } from '../store';
 import type { Capability, ComponentManifest } from '../types';
 
@@ -128,6 +129,7 @@ function Card({ manifest }: { manifest: ComponentManifest }) {
   const addNode = useEditor((s) => s.addNode);
   const setView = useEditor((s) => s.setView);
   const { t } = useTranslation();
+  const text = useComponentText();
   const reference = `${manifest.id}@${manifest.version}`;
   const inputs = Object.entries(manifest.ports.inputs);
   const outputs = Object.entries(manifest.ports.outputs);
@@ -135,7 +137,7 @@ function Card({ manifest }: { manifest: ComponentManifest }) {
   return (
     <article className="catalogue__card">
       <header className="catalogue__card-header">
-        <h2 className="catalogue__name">{manifest.name}</h2>
+        <h2 className="catalogue__name">{text.name(manifest)}</h2>
         <span className="catalogue__version">{manifest.version}</span>
       </header>
 
@@ -147,7 +149,7 @@ function Card({ manifest }: { manifest: ComponentManifest }) {
       ) : null}
 
       <p className="catalogue__description">
-        {manifest.description ?? t('components.card.noDescription')}
+        {text.description(manifest) ?? t('components.card.noDescription')}
       </p>
 
       {inputs.length > 0 || outputs.length > 0 ? (
@@ -180,7 +182,8 @@ export function Components() {
   const manifests = useEditor((s) => s.manifests);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('all');
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  const text = useComponentText();
 
   const all = useMemo(() => Object.values(manifests), [manifests]);
   // Derived from what is actually installed, never stated as a fixed number: the count is a
@@ -199,12 +202,16 @@ export function Components() {
       .filter(
         (m) =>
           !needle ||
+          // Both the words on the card and the manifest's own: somebody reading Spanish searches
+          // for what they see, and somebody following an English guide for what it says.
+          text.name(m).toLowerCase().includes(needle) ||
           m.name.toLowerCase().includes(needle) ||
           m.id.toLowerCase().includes(needle) ||
+          (text.description(m) ?? '').toLowerCase().includes(needle) ||
           (m.description ?? '').toLowerCase().includes(needle),
       )
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [all, category, query]);
+      .sort((a, b) => text.name(a).localeCompare(text.name(b), locale));
+  }, [all, category, query, text, locale]);
 
   return (
     <main className="view view--library">
@@ -212,8 +219,15 @@ export function Components() {
         <h1>{t('components.header.title')}</h1>
         <p>
           {triggerCount > 0
-            ? t('components.header.summaryWithTriggers', { count: all.length, triggerCount })
-            : t('components.header.summary', { count: all.length })}{' '}
+            ? // Chosen by the trigger count: that is the number the verb agrees with ("1 of them
+              // starts", "2 of them start").
+              t(`components.header.summaryWithTriggers.${selectPlural(locale, triggerCount)}`, {
+                count: all.length,
+                triggerCount,
+              })
+            : t(`components.header.summary.${selectPlural(locale, all.length)}`, {
+                count: all.length,
+              })}{' '}
           {t('components.header.note')}
         </p>
       </header>
@@ -237,7 +251,7 @@ export function Components() {
               aria-pressed={category === name}
               onClick={() => setCategory(name)}
             >
-              {name}
+              {text.category(name)}
             </button>
           ))}
         </fieldset>

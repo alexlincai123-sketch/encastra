@@ -8,6 +8,7 @@
  */
 
 import { Fragment } from 'react';
+import { componentDescription, componentName } from '../component-text';
 import { describeNodeError, isKnownNodeError } from '../errors';
 import { splitOnPlaceholder, useTranslation } from '../i18n';
 import { ipc } from '../ipc';
@@ -544,14 +545,16 @@ export function Inspector() {
 
   return (
     <aside className="panel panel--inspector">
-      <h2 className="panel__title">{manifest.name}</h2>
+      <h2 className="panel__title">{componentName(manifest)}</h2>
 
       <div className="panel__section">
         <dl className="kv">
           <dt>{t('inspector.component')}</dt>
           <dd>{node.data.componentRef}</dd>
         </dl>
-        {manifest.description ? <p className="field__doc">{manifest.description}</p> : null}
+        {componentDescription(manifest) ? (
+          <p className="field__doc">{componentDescription(manifest)}</p>
+        ) : null}
         <button
           type="button"
           className="btn"

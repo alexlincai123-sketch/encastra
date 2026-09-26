@@ -18,6 +18,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { chooseFolderOrExplain } from '../chooser';
+import { componentName } from '../component-text';
 import {
   formatDate,
   formatNumber,
@@ -553,7 +554,7 @@ function ComponentsSection({ onOpenSecurity }: { onOpenSecurity: () => void }) {
               return (
                 <tr key={`${manifest.id}@${manifest.version}`}>
                   <td>
-                    <strong>{manifest.name}</strong>
+                    <strong>{componentName(manifest)}</strong>
                     <br />
                     <code className="table__id">{manifest.id}</code>
                   </td>
@@ -796,6 +797,10 @@ function DeveloperSection() {
   const developerMode = usePreferences((p) => p.developerMode);
   const set = usePreferences((p) => p.set);
   const resetAll = usePreferences((p) => p.resetAll);
+  // Resetting every setting is one click from nowhere and cannot be undone, so it asks first —
+  // the same second row of buttons in place of the first that Library uses for Remove, not a
+  // `window.confirm` from the browser.
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const preferences = usePreferences((s) => s);
   const manifests = useEditor((s) => s.manifests);
 
@@ -848,9 +853,31 @@ function DeveloperSection() {
           label={t('settings.developer.reset.restoreDefaults.label')}
           hint={t('settings.developer.reset.restoreDefaults.hint')}
         >
-          <DangerButton onClick={resetAll}>
-            {t('settings.developer.reset.restoreDefaults.button')}
-          </DangerButton>
+          {confirmingReset ? (
+            // Library's own confirmation classes, so the two "are you sure" rows look alike.
+            <div className="library__confirm">
+              <p className="library__confirm-question">
+                {t('settings.developer.reset.restoreDefaults.confirm.question')}
+              </p>
+              <div className="library__actions">
+                <Button onClick={() => setConfirmingReset(false)}>
+                  {t('settings.developer.reset.restoreDefaults.confirm.cancel')}
+                </Button>
+                <DangerButton
+                  onClick={() => {
+                    setConfirmingReset(false);
+                    resetAll();
+                  }}
+                >
+                  {t('settings.developer.reset.restoreDefaults.confirm.confirm')}
+                </DangerButton>
+              </div>
+            </div>
+          ) : (
+            <DangerButton onClick={() => setConfirmingReset(true)}>
+              {t('settings.developer.reset.restoreDefaults.button')}
+            </DangerButton>
+          )}
         </SettingRow>
       </SettingCard>
     </>
@@ -863,6 +890,7 @@ function DiagnosticsSection() {
   const manifests = useEditor((s) => s.manifests);
   const [gpu] = useState<string | null>(() => detectGpuRenderer());
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [exportFailed, setExportFailed] = useState(false);
 
   useEffect(() => {
     if (copyState === 'idle') return;
@@ -914,9 +942,14 @@ function DiagnosticsSection() {
       anchor.href = url;
       anchor.download = 'encastra-diagnostics.txt';
       anchor.click();
-      URL.revokeObjectURL(url);
+      // Revoked after a tick, not straight away: the download the click starts reads the URL
+      // asynchronously, and revoking it in the same turn can leave that read with nothing.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setExportFailed(false);
     } catch {
-      // Best effort: nothing to recover to if the WebView refuses a synthetic download.
+      // Said, not swallowed: a button that silently did nothing reads as a button that is broken,
+      // and Copy is right next to it as the way round.
+      setExportFailed(true);
     }
   };
 
@@ -951,6 +984,9 @@ function DiagnosticsSection() {
           hint={t('settings.diagnostics.share.export.hint')}
         >
           <Button onClick={onExport}>{t('settings.diagnostics.share.export.button')}</Button>
+          {exportFailed ? (
+            <StatusPill tone="warn">{t('settings.diagnostics.share.export.failed')}</StatusPill>
+          ) : null}
         </SettingRow>
         <p className="s-note">{t('settings.diagnostics.share.note')}</p>
       </SettingCard>

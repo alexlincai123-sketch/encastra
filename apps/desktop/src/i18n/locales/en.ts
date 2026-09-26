@@ -18,6 +18,7 @@ const en: Messages = {
     // The word on the small badge marking a journal as a recording rather than a live result —
     // the status bar and the run panel both show it, and it must read the same in both places.
     recordingBadge: 'recording',
+    projectFileType: 'Encastra project',
   },
 
   sidebar: {
@@ -89,6 +90,13 @@ const en: Messages = {
   },
 
   canvas: {
+    controls: {
+      panel: 'Canvas controls',
+      zoomIn: 'Zoom in',
+      zoomOut: 'Zoom out',
+      fitView: 'Fit the workflow in view',
+      minimap: 'Minimap',
+    },
     ariaLabel: 'Workflow canvas',
     refusal: {
       selfCycle: {
@@ -626,11 +634,130 @@ const en: Messages = {
   // The component library (`views/Components.tsx`) — not to be confused with
   // `settings.components`, the Settings category that lists the same build in summary.
   components: {
+    categories: {
+      all: 'All',
+      other: 'Other',
+      data: 'Data',
+      file: 'Files',
+      flow: 'Flow',
+      media: 'Media',
+      network: 'Network',
+      system: 'System',
+    },
+    core: {
+      encastra: {
+        data: {
+          csv: {
+            read: {
+              name: 'Read CSV',
+              description: 'Turns comma-separated text into a list of rows.',
+            },
+            write: {
+              name: 'Write CSV',
+              description: 'Turns a list of rows into comma-separated text.',
+            },
+          },
+          json: {
+            name: 'Parse JSON',
+            description: 'Turns text into structured data.',
+            write: {
+              name: 'Write JSON',
+              description: 'Turns structured data back into text.',
+            },
+          },
+        },
+        file: {
+          move: {
+            name: 'Move File',
+            description: 'Moves a file into another folder. The original is removed.',
+          },
+          read: {
+            name: 'Read File',
+            description: 'Reads the text content of the file connected to it.',
+          },
+          rename: {
+            name: 'Rename File',
+            description: 'Gives a file a new name, leaving it where it is.',
+          },
+          save: {
+            name: 'Save File',
+            description:
+              'Puts a file into a folder you choose. Keeps the original name unless you give one.',
+          },
+          watch: {
+            name: 'Watch Folder',
+            description: 'Starts the workflow whenever a file appears in a folder.',
+          },
+          write: {
+            name: 'Write File',
+            description: 'Saves text into a file in a folder you choose.',
+          },
+        },
+        flow: {
+          delay: {
+            name: 'Delay',
+            description: 'Waits, then passes the value on unchanged.',
+          },
+          if: {
+            name: 'If',
+            description: 'Sends the value one way or the other depending on a condition.',
+          },
+          switch: {
+            name: 'Switch',
+            description: 'Sends the value down one of several routes depending on a word.',
+          },
+        },
+        image: {
+          convert: {
+            name: 'Convert Image',
+            description: 'Writes an image in a different format.',
+          },
+          info: {
+            name: 'Image Info',
+            description: "Reports an image's size and format without changing it.",
+          },
+          resize: {
+            name: 'Resize Image',
+            description: "Changes an image's size. Leave one side empty to keep the proportions.",
+          },
+          thumbnail: {
+            name: 'Thumbnail',
+            description: 'Makes a small square preview of an image.',
+          },
+        },
+        net: {
+          http: {
+            name: 'HTTP Request',
+            description: 'Fetches a web address, or sends data to one.',
+          },
+        },
+        system: {
+          clipboard: {
+            name: 'Copy to Clipboard',
+            description: 'Puts text on the clipboard, ready to paste.',
+          },
+          notify: {
+            name: 'Notify',
+            description: 'Shows a message when this step runs.',
+          },
+          timer: {
+            name: 'Timer',
+            description: 'Starts the workflow again and again, on a schedule.',
+          },
+        },
+      },
+    },
     header: {
       title: 'Components',
-      summary: '{count} installed.',
-      summaryWithTriggers:
-        '{count} installed — {triggerCount} of them start a workflow on their own; the rest run as a step inside one.',
+      summary: {
+        one: '{count} installed.',
+        other: '{count} installed.',
+      },
+      summaryWithTriggers: {
+        one: '{count} installed — {triggerCount} of them starts a workflow on its own; the rest run as a step inside one.',
+        other:
+          '{count} installed — {triggerCount} of them start a workflow on their own; the rest run as a step inside one.',
+      },
       note: 'Everything here ships with the application; installing others needs the sandbox for third-party code, which is not built yet.',
     },
     search: {
@@ -1635,6 +1762,12 @@ const en: Messages = {
           label: 'Restore defaults',
           hint: 'Puts every setting on this screen back to how it was on first run. Does not touch your projects, grants, or installed components.',
           button: 'Reset all settings',
+          confirm: {
+            question:
+              'Reset every setting on this screen? Your projects, grants and installed components are not touched.',
+            confirm: 'Yes, reset them',
+            cancel: 'Cancel',
+          },
         },
       },
     },
@@ -1670,6 +1803,7 @@ const en: Messages = {
           label: 'Export',
           hint: 'Saves the same report as a text file.',
           button: 'Export…',
+          failed: 'The report could not be saved. Use Copy instead.',
         },
         note: 'Nothing here includes a project path, a preference value, or a token — it is meant to be safe to paste somewhere public. The report itself is copied and exported in English, so anyone on the project can read it.',
       },

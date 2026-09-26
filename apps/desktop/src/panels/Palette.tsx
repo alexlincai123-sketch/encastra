@@ -6,6 +6,7 @@
  * mid-run is how people learn to click through dialogs.
  */
 
+import { useComponentText } from '../component-text';
 import { useTranslation } from '../i18n';
 import { useEditor } from '../store';
 import type { ComponentManifest } from '../types';
@@ -31,8 +32,10 @@ function asks(manifest: ComponentManifest, t: (key: string) => string): string[]
 function PaletteItem({ manifest }: { manifest: ComponentManifest }) {
   const addNode = useEditor((s) => s.addNode);
   const { t } = useTranslation();
+  const text = useComponentText();
   const reference = `${manifest.id}@${manifest.version}`;
   const wants = asks(manifest, t);
+  const description = text.description(manifest);
 
   return (
     <button
@@ -50,12 +53,10 @@ function PaletteItem({ manifest }: { manifest: ComponentManifest }) {
       // apps/desktop/test/palette.test.tsx, which renders this component into a document and
       // presses it all three ways.
       onClick={() => addNode(reference, { x: 220, y: 140 })}
-      title={`${reference}\n${manifest.description ?? ''}`}
+      title={`${reference}\n${description ?? ''}`}
     >
-      <span className="palette-item__name">{manifest.name}</span>
-      {manifest.description ? (
-        <span className="palette-item__desc">{manifest.description}</span>
-      ) : null}
+      <span className="palette-item__name">{text.name(manifest)}</span>
+      {description ? <span className="palette-item__desc">{description}</span> : null}
       {wants.length > 0 ? (
         <span className="palette-item__needs">
           {t('palette.asksTo', { list: wants.join(', ') })}
@@ -68,6 +69,7 @@ function PaletteItem({ manifest }: { manifest: ComponentManifest }) {
 export function Palette() {
   const manifests = useEditor((s) => s.manifests);
   const { t } = useTranslation();
+  const text = useComponentText();
   const entries = Object.values(manifests);
 
   if (entries.length === 0) {
@@ -95,9 +97,9 @@ export function Palette() {
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([category, group]) => (
             <section key={category}>
-              <h3 className="panel__group-label">{category}</h3>
+              <h3 className="panel__group-label">{text.category(category)}</h3>
               {group
-                .sort((a, b) => a.name.localeCompare(b.name))
+                .sort((a, b) => text.name(a).localeCompare(text.name(b)))
                 .map((manifest) => (
                   <PaletteItem key={`${manifest.id}@${manifest.version}`} manifest={manifest} />
                 ))}

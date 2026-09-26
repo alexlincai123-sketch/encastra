@@ -13,6 +13,7 @@ const pt: Messages = {
     choose: 'Escolher…',
     itCannot: 'Não consegue',
     recordingBadge: 'gravação',
+    projectFileType: 'Projecto Encastra',
   },
 
   sidebar: {
@@ -84,6 +85,13 @@ const pt: Messages = {
   },
 
   canvas: {
+    controls: {
+      panel: 'Controlos da tela',
+      zoomIn: 'Aproximar',
+      zoomOut: 'Afastar',
+      fitView: 'Ajustar à vista',
+      minimap: 'Minimapa',
+    },
     ariaLabel: 'Tela do fluxo de trabalho',
     refusal: {
       selfCycle: {
@@ -586,11 +594,131 @@ const pt: Messages = {
   },
 
   components: {
+    categories: {
+      all: 'Todos',
+      other: 'Outros',
+      data: 'Dados',
+      file: 'Ficheiros',
+      flow: 'Fluxo',
+      media: 'Multimédia',
+      network: 'Rede',
+      system: 'Sistema',
+    },
+    core: {
+      encastra: {
+        data: {
+          csv: {
+            read: {
+              name: 'Ler CSV',
+              description: 'Transforma texto separado por vírgulas numa lista de linhas.',
+            },
+            write: {
+              name: 'Escrever CSV',
+              description: 'Transforma uma lista de linhas em texto separado por vírgulas.',
+            },
+          },
+          json: {
+            name: 'Analisar JSON',
+            description: 'Transforma texto em dados estruturados.',
+            write: {
+              name: 'Escrever JSON',
+              description: 'Volta a transformar dados estruturados em texto.',
+            },
+          },
+        },
+        file: {
+          move: {
+            name: 'Mover ficheiro',
+            description: 'Move um ficheiro para outra pasta. O original é removido.',
+          },
+          read: {
+            name: 'Ler ficheiro',
+            description: 'Lê o conteúdo de texto do ficheiro ligado a ele.',
+          },
+          rename: {
+            name: 'Mudar o nome do ficheiro',
+            description: 'Dá um novo nome a um ficheiro, deixando-o onde está.',
+          },
+          save: {
+            name: 'Guardar ficheiro',
+            description:
+              'Coloca um ficheiro numa pasta à sua escolha. Mantém o nome original, a não ser que indique outro.',
+          },
+          watch: {
+            name: 'Vigiar pasta',
+            description: 'Inicia o fluxo de trabalho sempre que aparece um ficheiro numa pasta.',
+          },
+          write: {
+            name: 'Escrever ficheiro',
+            description: 'Guarda texto num ficheiro, numa pasta à sua escolha.',
+          },
+        },
+        flow: {
+          delay: {
+            name: 'Atraso',
+            description: 'Espera e depois passa o valor sem alterações.',
+          },
+          if: {
+            name: 'Se',
+            description: 'Envia o valor por um caminho ou por outro, conforme uma condição.',
+          },
+          switch: {
+            name: 'Comutador',
+            description: 'Envia o valor por uma de várias rotas, conforme uma palavra.',
+          },
+        },
+        image: {
+          convert: {
+            name: 'Converter imagem',
+            description: 'Escreve uma imagem noutro formato.',
+          },
+          info: {
+            name: 'Informação da imagem',
+            description: 'Indica o tamanho e o formato de uma imagem sem a alterar.',
+          },
+          resize: {
+            name: 'Redimensionar imagem',
+            description:
+              'Altera o tamanho de uma imagem. Deixe um lado vazio para manter as proporções.',
+          },
+          thumbnail: {
+            name: 'Miniatura',
+            description: 'Cria uma pequena pré-visualização quadrada de uma imagem.',
+          },
+        },
+        net: {
+          http: {
+            name: 'Pedido HTTP',
+            description: 'Obtém um endereço web ou envia-lhe dados.',
+          },
+        },
+        system: {
+          clipboard: {
+            name: 'Copiar para a área de transferência',
+            description: 'Coloca texto na área de transferência, pronto a colar.',
+          },
+          notify: {
+            name: 'Notificar',
+            description: 'Mostra uma mensagem quando este passo é executado.',
+          },
+          timer: {
+            name: 'Temporizador',
+            description: 'Inicia o fluxo de trabalho vezes sem conta, segundo um horário.',
+          },
+        },
+      },
+    },
     header: {
       title: 'Componentes',
-      summary: '{count} instalados.',
-      summaryWithTriggers:
-        '{count} instalados — {triggerCount} deles iniciam um fluxo de trabalho por conta própria; o resto executa-se como um passo dentro de um.',
+      summary: {
+        one: '{count} instalado.',
+        other: '{count} instalados.',
+      },
+      summaryWithTriggers: {
+        one: '{count} instalados — {triggerCount} deles inicia um fluxo de trabalho por conta própria; o resto executa-se como um passo dentro de um.',
+        other:
+          '{count} instalados — {triggerCount} deles iniciam um fluxo de trabalho por conta própria; o resto executa-se como um passo dentro de um.',
+      },
       note: 'Tudo isto vem incluído com a aplicação; instalar outros precisa da sandbox para código de terceiros, que ainda não está construída.',
     },
     search: {
@@ -1564,6 +1692,12 @@ const pt: Messages = {
           label: 'Repor valores predefinidos',
           hint: 'Devolve cada definição deste ecrã ao estado da primeira utilização. Não afecta os seus projectos, permissões concedidas ou componentes instalados.',
           button: 'Repor todas as definições',
+          confirm: {
+            question:
+              'Repor todas as definições deste ecrã? Os seus projectos, permissões concedidas e componentes instalados não são afectados.',
+            confirm: 'Sim, repor',
+            cancel: 'Cancelar',
+          },
         },
       },
     },
@@ -1599,6 +1733,7 @@ const pt: Messages = {
           label: 'Exportar',
           hint: 'Guarda o mesmo relatório como ficheiro de texto.',
           button: 'Exportar…',
+          failed: 'Não foi possível guardar o relatório. Use Copiar em vez disso.',
         },
         note: 'Nada aqui inclui um caminho de projecto, um valor de preferência, ou um token — foi pensado para poder ser colado em qualquer lugar público sem problema. O relatório é copiado e exportado em inglês, para que qualquer pessoa do projecto o possa ler.',
       },
