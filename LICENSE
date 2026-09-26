@@ -1,91 +1,75 @@
-Encastra — Proprietary Licence
-Copyright (c) 2026 the Encastra author. All rights reserved.
+Required Notice: Copyright (c) 2026 the Encastra author
 
-This repository is public so that the work can be read and so that its automated checks can
-run in the open. It is not open-source software, and making it readable is not an offer of
-terms. The legal identity that holds this copyright — a person or a company — has not yet been
-asserted; see NOTICE and docs/legal/LICENSE_DECISION.md. Nothing here waives that copyright.
+# PolyForm Noncommercial License 1.0.0
 
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
 
-1. NO LICENCE IS GRANTED BY PUBLICATION
+## Acceptance
 
-Being able to read this source does not give you permission to use it. Except where this
-document says otherwise, or where a right cannot be excluded by law, no licence, right or
-interest in the software is granted to anyone, whether expressly, by implication, by estoppel
-or otherwise.
+In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
 
+## Copyright License
 
-2. WHAT IS NOT PERMITTED
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose.  However, you may only distribute the software according to [Distribution License](#distribution-license) and make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license).
 
-Without the copyright holder's prior express written permission, you may not:
+## Distribution License
 
-  a. copy the software, in source or compiled form, beyond what clause 4 allows;
-  b. modify it, adapt it, translate it, or create works derived from it;
-  c. redistribute, publish, sublicense, lease, rent, lend or otherwise make it available to
-     others;
-  d. sell it, resell it, or distribute copies of it, with or without charge;
-  e. incorporate it, in whole or in part, into another product, service or model, including
-     using it as training data;
-  f. remove, obscure or alter any copyright, licence or attribution notice it carries.
+The licensor grants you an additional copyright license to distribute copies of the software.  Your license to distribute covers distributing the software with changes and new works permitted by [Changes and New Works License](#changes-and-new-works-license).
 
-These restrictions apply to the software as a whole and to any part of it.
+## Notices
 
+You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
 
-3. THE COMPILED APPLICATION
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
 
-Installers and executables published under a release tag are supplied for use under their own
-end-user terms. Where those terms and this document differ for a given copy, the end-user terms
-govern that copy. Nothing in this document by itself grants a right to use, distribute or
-resell a build.
+## Changes and New Works License
 
+The licensor grants you an additional copyright license to make changes and new works based on the software for any permitted purpose.
 
-4. WHAT GITHUB'S TERMS ALLOW, AND ONLY THAT
+## Patent License
 
-Publishing a repository publicly on GitHub grants other GitHub users the viewing and forking
-permissions described in GitHub's Terms of Service. Those permissions are acknowledged here
-because they are a condition of using the platform. They are the only permissions this
-publication conveys: a fork made under them is subject to clauses 1 and 2 in every other
-respect, and confers no right to use, modify, distribute or exploit the software.
+The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
 
+## Noncommercial Purposes
 
-5. THIRD-PARTY COMPONENTS
+Any noncommercial purpose is a permitted purpose.
 
-The software is built with third-party software that is not covered by this document. Each such
-component is licensed by its own authors under its own terms, which continue to apply and are
-unaffected by anything written here. What ships, and under which licence, is listed in
-docs/THIRD-PARTY.md; the allowlist every Rust dependency must satisfy is deny.toml. Attribution
-those licences require is given in NOTICE and in docs/THIRD-PARTY.md, and must be preserved.
+## Personal Uses
 
-Where a third-party licence grants you rights this document does not, that licence governs
-that component.
+Personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, amateur pursuits, or religious observance, without any anticipated commercial application, is use for a permitted purpose.
 
+## Noncommercial Organizations
 
-6. NAME AND MARKS
+Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
 
-"Encastra" is used as a product name. No trademark registration for it exists at the time of
-writing (see docs/BRANDING.md). This document grants no right to use the name, or any logo or
-other mark, to identify or promote anything.
+## Fair Use
 
+You may have "fair use" rights for the software under the law. These terms do not limit them.
 
-7. PERMISSIONS BEYOND THIS DOCUMENT
+## No Other Rights
 
-Any permission wider than the above must be granted expressly and in writing by the copyright
-holder. Requests are made through the repository. Silence is not permission, and neither is a
-previous grant to someone else.
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else.  These terms do not imply any other licenses.
 
+## Patent Defense
 
-8. RIGHTS THAT CANNOT BE EXCLUDED
+If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately. If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
 
-Nothing in this document purports to exclude or limit any right that applicable law does not
-allow to be excluded or limited — among them, depending on your jurisdiction, acts permitted to
-a lawful user of a computer program, decompilation for interoperability, and quotation or other
-statutory exceptions. Where a clause here conflicts with such a right, that clause applies only
-so far as the law allows, and the rest of this document continues to apply.
+## Violations
 
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice.  Otherwise, all your licenses end immediately.
 
-9. NO WARRANTY
+## No Liability
 
-The software is provided "as is", without warranty of any kind, express or implied, to the
-extent permitted by law. To the extent permitted by law, the copyright holder is not liable for
-any claim, damages or other liability arising from the software or from dealings in it. This
-clause does not exclude liability that cannot lawfully be excluded.
+***As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these terms, and the **software** is the software the licensor makes available under these terms.
+
+**You** refers to the individual or entity agreeing to these terms.
+
+**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization.  **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
+
+**Your licenses** are all the licenses granted to you for the software under these terms.
+
+**Use** means anything you do with the software requiring one of your licenses.

@@ -793,7 +793,12 @@ def check_external(mode: str) -> list[Check]:
     drafts = sorted(p.name for p in legal.glob("*.md")) if legal.exists() else []
     # Read the tree rather than assert about it. This line used to say "the tree is UNLICENSED"
     # whatever the tree said, which stopped being true the moment a LICENCE was written.
-    licence = "LICENSE present, proprietary, drafted in-house and unreviewed" if (ROOT / "LICENSE").exists() else "the tree has no LICENSE"
+    licence_file = ROOT / "LICENSE"
+    if licence_file.exists():
+        heading = next((line.lstrip("# ").strip() for line in licence_file.read_text("utf-8", errors="replace").splitlines() if line.startswith("# ")), "an unnamed licence")
+        licence = f"LICENSE present ({heading}), not reviewed by counsel"
+    else:
+        licence = "the tree has no LICENSE"
     # Both are outside the repository in every mode. A beta ships without them, on record; a
     # release does not — the verdict, not the status, is what differs between the two modes.
     need = "required before a release version" if mode == "release" else "not required for a beta; recorded"

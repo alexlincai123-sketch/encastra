@@ -12,7 +12,7 @@ longer matches the tree — the same rule the conformance matrix and the fuzz co
 Exit codes: 0 ok · 1 stale under --check · 2 a tool this needs is missing.
 
 This is an inventory, not a legal opinion. Which of these licences oblige what, when a
-proprietary binary links them, is answered in `deny.toml` (the allowlist, with a reason per
+distributed binary links them, is answered in `deny.toml` (the allowlist, with a reason per
 entry) and left to a lawyer in `docs/LICENSING.md`.
 """
 

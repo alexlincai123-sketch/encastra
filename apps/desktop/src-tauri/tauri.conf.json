@@ -32,7 +32,7 @@
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
     "shortDescription": "Build software from parts that fit.",
     "longDescription": "Encastra runs a typed graph of components on your machine, each limited to the folders and hosts you grant it.",
-    "copyright": "Copyright (c) 2026 the Encastra author. All rights reserved. See LICENSE.txt.",
+    "copyright": "Copyright (c) 2026 the Encastra author. Free for noncommercial use under the PolyForm Noncommercial License 1.0.0 - see LICENSE.txt.",
     "resources": {
       "../../../LICENSE": "LICENSE.txt",
       "../../../NOTICE": "NOTICE.txt",
