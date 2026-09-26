@@ -4,9 +4,7 @@
       "mode": "full",
       "inject": [],
       "problems": [],
-      "netdev": [
-        "-netdev user,id=n0,restrict=on"
-      ],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
       "network": {
         "capture": "net.pcap",
         "sha256": "a5e74cc5a8933c43397a1c7a8b69c5309a928bdca11e852eebf2a3ae246d4b0f",
@@ -128,9 +126,7 @@
                 "credit_cards": 0
               },
               "missing_tables": [],
-              "autofill": [
-                "_r_0_-version=1.0.0"
-              ]
+              "autofill": ["_r_0_-version=1.0.0"]
             }
           }
         },
@@ -163,9 +159,7 @@
                 "credit_cards": 0
               },
               "missing_tables": [],
-              "autofill": [
-                "_r_0_-version=1.0.0"
-              ]
+              "autofill": ["_r_0_-version=1.0.0"]
             }
           }
         },
@@ -180,9 +174,7 @@
       "mode": "full",
       "inject": [],
       "problems": [],
-      "netdev": [
-        "-netdev user,id=n0,restrict=on"
-      ],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
       "network": {
         "capture": "net.pcap",
         "sha256": "f157405c726c26058cab188bd22a3efda0875ad10154f350c9bddda639b30ed1",
@@ -302,9 +294,7 @@
                 "credit_cards": 0
               },
               "missing_tables": [],
-              "autofill": [
-                "_r_0_-version=1.0.0"
-              ]
+              "autofill": ["_r_0_-version=1.0.0"]
             }
           }
         },
@@ -337,9 +327,7 @@
                 "credit_cards": 0
               },
               "missing_tables": [],
-              "autofill": [
-                "_r_0_-version=1.0.0"
-              ]
+              "autofill": ["_r_0_-version=1.0.0"]
             }
           }
         },
@@ -354,9 +342,7 @@
       "mode": "upgrade",
       "inject": [],
       "problems": [],
-      "netdev": [
-        "-netdev user,id=n0,restrict=on"
-      ],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
       "network": {
         "capture": "net.pcap",
         "sha256": "cc0b42175c810d7cc1f6b6b799bdf90c78b748185e85f579d03c0062f27c052e",
@@ -422,9 +408,7 @@
       "mode": "full",
       "inject": [],
       "problems": [],
-      "netdev": [
-        "-netdev user,id=n0,restrict=on"
-      ],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
       "network": {
         "capture": "net.pcap",
         "sha256": "e56024a03abfc3c81b146db6955e4435bfc5a462845b1f31e838719366d13d96",
@@ -480,9 +464,7 @@
       "mode": "full",
       "inject": [],
       "problems": [],
-      "netdev": [
-        "-netdev user,id=n0,restrict=on"
-      ],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
       "network": {
         "capture": "net.pcap",
         "sha256": "5a96d63bd49f4150624cbf17444e8f90f5b233faa07fb99fb1a21f56f84e3a32",
@@ -540,15 +522,9 @@
     },
     "N3-contaminated": {
       "mode": "full",
-      "inject": [
-        "stale",
-        "preinstalled",
-        "stray-process"
-      ],
+      "inject": ["stale", "preinstalled", "stray-process"],
       "problems": [],
-      "netdev": [
-        "-netdev user,id=n0,restrict=on"
-      ],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
       "network": {
         "capture": "net.pcap",
         "sha256": "61941b682ca6ed8a616671d315c367b3c65fd9ea4ef974499b28e466c145e9f1",
@@ -597,13 +573,9 @@
     },
     "N4-wrong-version": {
       "mode": "full",
-      "inject": [
-        "wrong-version"
-      ],
+      "inject": ["wrong-version"],
       "problems": [],
-      "netdev": [
-        "-netdev user,id=n0,restrict=on"
-      ],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
       "network": {
         "capture": "net.pcap",
         "sha256": "f6b42189e90d9dc6196076ccde26fb240508b7985ed1735f787b329bdb8eb765",
@@ -663,15 +635,9 @@
     },
     "N5-runtime": {
       "mode": "full",
-      "inject": [
-        "not-ready",
-        "hidden-fail",
-        "persist"
-      ],
+      "inject": ["not-ready", "hidden-fail", "persist"],
       "problems": [],
-      "netdev": [
-        "-netdev user,id=n0,restrict=on"
-      ],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
       "network": {
         "capture": "net.pcap",
         "sha256": "f874b9307e02aa9a6c69102d11c58fff3d780c64f7827afb96132a5dc62fd7c6",
@@ -826,20 +792,14 @@
   "negative": {
     "N1-tampered": {
       "expected": {
-        "harness": [
-          "--tamper-installer",
-          "--steps",
-          "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"
-        ],
+        "harness": ["--tamper-installer", "--steps", "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"],
         "must_fail": {
           "CLEAN-002": [
             "installer sha256 is the published digest",
             "copy in Downloads is byte-identical"
           ]
         },
-        "must_not_run": [
-          "CLEAN-003"
-        ]
+        "must_not_run": ["CLEAN-003"]
       },
       "observed": {
         "CLEAN-002": "FAIL as expected",
@@ -849,19 +809,11 @@
     },
     "N2-missing": {
       "expected": {
-        "harness": [
-          "--omit-installer",
-          "--steps",
-          "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"
-        ],
+        "harness": ["--omit-installer", "--steps", "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"],
         "must_fail": {
-          "CLEAN-002": [
-            "installer present on the harness disc"
-          ]
+          "CLEAN-002": ["installer present on the harness disc"]
         },
-        "must_not_run": [
-          "CLEAN-003"
-        ]
+        "must_not_run": ["CLEAN-003"]
       },
       "observed": {
         "CLEAN-002": "FAIL as expected",
@@ -889,10 +841,7 @@
             "no Encastra or Encastra WebView2 process"
           ]
         },
-        "must_not_run": [
-          "CLEAN-002",
-          "CLEAN-003"
-        ]
+        "must_not_run": ["CLEAN-002", "CLEAN-003"]
       },
       "observed": {
         "CLEAN-001": "FAIL as expected",
@@ -915,9 +864,7 @@
             "install_check PASS: installed ProductVersion"
           ]
         },
-        "must_not_run": [
-          "CLEAN-004"
-        ]
+        "must_not_run": ["CLEAN-004"]
       },
       "observed": {
         "CLEAN-003": "FAIL as expected",
@@ -940,18 +887,10 @@
           "CLEAN-001,CLEAN-002,CLEAN-003,CLEAN-004,CLEAN-005,CLEAN-012,CONTAMINATION"
         ],
         "must_fail": {
-          "CLEAN-004": [
-            "the application reaches ready"
-          ],
-          "CLEAN-005": [
-            "no FAIL or SKIP line anywhere"
-          ],
-          "CLEAN-012": [
-            "after uninstall, run_keys is as the baseline"
-          ],
-          "CLEAN-CONTAMINATION": [
-            "run_keys unchanged from the baseline"
-          ]
+          "CLEAN-004": ["the application reaches ready"],
+          "CLEAN-005": ["no FAIL or SKIP line anywhere"],
+          "CLEAN-012": ["after uninstall, run_keys is as the baseline"],
+          "CLEAN-CONTAMINATION": ["run_keys unchanged from the baseline"]
         }
       },
       "observed": {
