@@ -71,6 +71,13 @@ No OAuth or app registration is needed: nothing in the product authenticates.
   "not signed", which is true. Fixed on `fix/manifest-signature-probe` for the next build.
 - Commands that take a `.encastra` path from the web view without a chooser record
   (`save_project`, `open_project`, …) need a compromised renderer; accepted in `THREAT-MODEL.md`.
+- `release_check.py` decoded its tools' output with the Windows code page; one undecodable byte
+  crashed it before any verdict (seen from PowerShell 7). This candidate was judged with
+  `PYTHONUTF8=1`; the fix (UTF-8 with replacement, tested) is on `fix/manifest-signature-probe`
+  for rc.7.
+- The lab host (WSL2) froze one Clean VM cycle as a whole (guest clock stopped, `Time jumped
+  backwards` in the WSL kernel log, 0.5 GB free on the host); the cycle was set aside and re-run.
+  An infrastructure incident, recorded in the evidence summary, not a product result.
 - The Clean VM judge cannot detect a forger who rewrites `serial.log` on the lab host
   (`CLEAN_VM_ACCEPTANCE.md`, *Known limitations*).
 
