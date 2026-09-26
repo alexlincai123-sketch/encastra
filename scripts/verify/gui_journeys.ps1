@@ -3263,8 +3263,12 @@ function Journey1 {
         Report ($null -ne $browse -and -not $browse.Current.IsOffscreen) 'j1 Browse button on screen' "'$($browse.Current.Name)' enabled=$($browse.Current.IsEnabled)"
 
         # Cancel: nothing chosen, nothing recorded, the preference untouched.
+        # This is the first native dialog the process opens, so it pays for the shell's first load
+        # of IFileDialog; on a cold hosted runner that took longer than 10 s (run 36149362020: no
+        # dialog at 10 s, a 'Select Folder' left on screen after), where every later chooser opens in
+        # well under the 12 s they are given. The bound is longer, not gone: no dialog is still FAIL.
         Click $browse
-        $dlg = WaitDialog 10
+        $dlg = WaitDialog 30
         Report ($null -ne $dlg) 'j1 chooser opened for projects-location' "'$($dlg.Current.Name)'"
         CancelChooser $dlg 'j1'
         $afterCancel = ValueOf (ById 'pref-project-folder')
