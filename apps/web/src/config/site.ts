@@ -24,8 +24,18 @@ export const SITE = {
    * is used only to build canonical URLs and is not linked to as if it were live elsewhere.
    */
   url: 'https://encastra.dev',
-  repository: null,
+  /**
+   * The public repository. Public to be read, not to be copied — the source is proprietary under
+   * `LICENSE`. It is also the one contact channel that exists: see `SECURITY_REPORT_URL`.
+   */
+  repository: 'https://github.com/alexlincai123-sketch/encastra',
 } as const;
+
+/**
+ * Where a vulnerability is reported privately: GitHub's private vulnerability reporting on the
+ * repository above. There is no security@ address — the domain is not registered.
+ */
+export const SECURITY_REPORT_URL = `${SITE.repository}/security/advisories/new`;
 
 /**
  * What exists, what is in preview, and what is only a design document.

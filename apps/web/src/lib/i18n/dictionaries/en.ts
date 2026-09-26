@@ -59,7 +59,7 @@ const en: Messages = {
 
   footer: {
     navAriaLabel: 'Footer',
-    versionLine: 'Beta {version} · Windows only · builds are not code-signed',
+    versionLine: 'Release candidate {version} · Windows only · builds are not code-signed',
     legal: {
       // Split into a prefix and the link's own text, rather than one sentence with a `{link}`
       // placeholder — `Footer.tsx` wraps `nameLinkText`/`licenceLinkText` in a real `<Link>`, and
@@ -149,7 +149,7 @@ const en: Messages = {
       note: 'The installer is not code-signed, so Windows will warn about an unrecognised publisher. That warning is accurate. The published SHA-256 is what you have instead of a signature.',
     },
     closing: {
-      eyebrow: 'Beta {version}',
+      eyebrow: 'Release candidate {version}',
       title: 'Windows only, not code-signed, and honest about both',
       lead: 'SmartScreen will warn about an unrecognised publisher. That warning is accurate — nothing in the file proves who built it. The published SHA-256 is what you have instead.',
       downloadAndVerify: 'Download and verify',
@@ -225,7 +225,7 @@ const en: Messages = {
     },
     hero: {
       eyebrow: 'Download',
-      title: 'Get the beta',
+      title: 'Get the release candidate',
       lead: 'One installer, for Windows, not code-signed. Nothing else exists yet — no macOS build, no Linux build, no auto-update.',
     },
     target: {
@@ -256,7 +256,7 @@ const en: Messages = {
     },
     noHostCallout: {
       part1:
-        'There is no public download host for this build yet — the repository is not public and',
+        'There is no public download host for this build yet — the repository is public to read, but this build is not published as a release there, and',
       part2: 'is not registered (see',
       part3:
         '). What follows is the real record of the build that exists: its exact filename, size and SHA-256, taken from',
@@ -418,7 +418,8 @@ const en: Messages = {
       title: 'Reporting a vulnerability',
       lead: 'Please do not open a public issue for a security problem. A public report starts a clock that the people who can fix it may not be able to beat.',
       noAddress:
-        'A published security address does not exist yet — the domain in this project’s identifiers is not registered, so any address you might infer from this site goes nowhere. Until one is published, report through the repository host’s private vulnerability reporting, or see the coordinated-disclosure draft for what to include.',
+        'Report privately through GitHub’s private vulnerability reporting on the repository (a GitHub account is needed). There is no security email address — the domain in this project’s identifiers is not registered, so any address you might infer from this site goes nowhere. The coordinated-disclosure draft says what to include.',
+      reportPrivately: 'Report privately on GitHub',
       readDisclosure: 'Read the disclosure draft',
     },
   },
@@ -522,7 +523,7 @@ const en: Messages = {
     closing: {
       lead: 'This is what the whole product does today — nothing here waits on a feature that is not built yet.',
       buildIt: 'Build the same workflow yourself',
-      download: 'Download the beta',
+      download: 'Download the release candidate',
     },
   },
 
@@ -642,12 +643,12 @@ const en: Messages = {
   docs: {
     meta: {
       description:
-        'What is written down, and who it is written for. The repository is not public yet, so this page describes each document rather than hosting it.',
+        'What is written down, and who it is written for. Each document lives in the public repository; this page says what it is and links to it there.',
     },
     hero: {
       eyebrow: 'Documentation',
       title: 'What is written down',
-      lead: 'The reference material lives in the repository as docs/*.md, next to the code it describes. The repository is not public, so this page says what each document is and who it was written for, rather than hosting or linking to it.',
+      lead: 'The reference material lives in the repository as docs/*.md, next to the code it describes. The repository is public to read — the source is proprietary, so reading it is not a licence to copy it — and each entry below links to the current version of its document on the main branch, which can be ahead of the build on /download.',
     },
     forAnyone: { eyebrow: 'For anyone', title: 'Written for somebody who is not an engineer' },
     forEngineers: { eyebrow: 'For engineers', title: 'Reference material' },
@@ -908,7 +909,7 @@ const en: Messages = {
     closing: {
       lead: 'Two demo workflows ship alongside the one you just built: File Organiser and Thumbnails, both with their folders deliberately left empty.',
       templates: 'See the shipped templates',
-      download: 'Download the beta',
+      download: 'Download the release candidate',
     },
   },
 
@@ -923,10 +924,10 @@ const en: Messages = {
       lead: 'Nothing. There is no payment system, no account, and no plan to choose between — so there is one real price on this page and a stated absence rather than a pricing table with invented numbers on it.',
     },
     free: {
-      badge: 'Free — beta',
+      badge: 'Free — release candidate',
       title: 'Download and run it',
-      body: 'The Windows installer costs nothing and needs no account. Everything documented on this site — the runtime, the capability broker, all nineteen components — is available in the beta today, with the limitations stated on /security.',
-      cta: 'Download the beta',
+      body: 'The Windows installer costs nothing and needs no account. Everything documented on this site — the runtime, the capability broker, all nineteen components — is available in the release candidate today, with the limitations stated on /security.',
+      cta: 'Download the release candidate',
     },
     notYet: {
       eyebrow: 'Not yet',
@@ -993,11 +994,11 @@ const en: Messages = {
         'Workflows execute without a model in the loop, by design — no component, no scheduling decision, and no validation path calls one. An authoring aid that suggests a component or explains an error is a possible future addition, strictly outside the execution path; it is not a plan to make the runtime itself probabilistic.',
       noFinishedStrong: 'No claim of being finished.',
       noFinishedBody:
-        'The runtime, the type system, the capability broker and the project format are built and tested. The website you are reading, the onboarding flow, and accessibility fixes are what the current release adds on top of that — see /download for exactly which build is which.',
+        'The runtime, the type system, the capability broker and the project format are built and tested. This build is a release candidate: it carries the publish-and-import loop and the local library from 0.5, and what changed between candidates is how a build is produced and checked — built and reproduced by CI rather than on a developer machine, and a scripted acceptance on a clean Windows machine (install, upgrade, uninstall) that found a save defect in the previous candidate, fixed in this one. See /download for exactly which build this is.',
     },
     stands: {
       eyebrow: 'Where it stands',
-      title: 'Beta, and the word is meant',
+      title: 'Pre-release, and the word is meant',
       engine: {
         title: 'The engine',
         body: 'Runtime, type system, capability broker, project format, CLI: built, tested, and cross-checked between the TypeScript and Rust readers of the same rule table.',
@@ -1009,7 +1010,7 @@ const en: Messages = {
       website: {
         title: 'This website',
         bodyPrefix:
-          'New. Its whole purpose is to make the above legible to somebody who has not read the source — see docs/BETA-0.2-AUDIT.md’s own account of why it did not exist before.',
+          'Its whole purpose is to make the above legible to somebody who has not read the source — see docs/BETA-0.2-AUDIT.md’s own account of why, before 0.2, it did not exist.',
       },
       everythingElse: {
         title: 'Everything else',
@@ -1043,7 +1044,7 @@ const en: Messages = {
       body2LinkText: '/about',
       body2Suffix: 'for the project’s current stage.',
     },
-    cta: 'Download the beta instead',
+    cta: 'Download the release candidate instead',
   },
 
   contact: {
@@ -1066,13 +1067,17 @@ const en: Messages = {
     security: {
       eyebrow: 'Security',
       title: 'Found a vulnerability?',
-      body: 'This is the one channel that is specified today. Please do not open a public issue — report privately through the repository host’s private vulnerability reporting. See the disclosure draft for exactly what to include and what to expect.',
+      body: 'This is the one channel that is specified today. Please do not open a public issue — report privately through GitHub’s private vulnerability reporting on the repository. See the disclosure draft for exactly what to include and what to expect.',
+      reportCta: 'Report privately on GitHub',
       cta: 'Read the disclosure policy',
     },
     everythingElse: {
       eyebrow: 'Everything else',
       title: 'Bugs, questions, and feedback',
-      body: 'There is no support desk and no dedicated feedback channel yet. If you have found this site, you most likely also have access to the repository it describes — the commit history and its issue tracker, where they exist, are the closest thing to a contact channel this project currently has.',
+      bodyPrefix:
+        'There is no support desk and no dedicated feedback channel yet. The repository is public at',
+      bodySuffix:
+        '— its issue tracker is the closest thing to a channel for bugs, questions and feedback this project currently has. Not for security problems: those go through the private reporting above.',
     },
   },
 

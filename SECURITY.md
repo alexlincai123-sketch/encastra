@@ -1,14 +1,17 @@
 # Reporting a security problem
 
-**Do not open a public issue.** Send it to the address in the repository's contact details, or
-open a private security advisory on the repository if you have access to do so.
+**Do not open a public issue.** Report it privately through GitHub's private vulnerability
+reporting on this repository:
+<https://github.com/alexlincai123-sketch/encastra/security/advisories/new> (a GitHub account is
+needed; only you and the maintainer see the report). There is no security email address: the
+domain in the project's identifiers is not registered, so an address inferred from it goes nowhere.
 
 Include what you would want if you were on the other end: what you did, what happened, what you
 expected, and the smallest thing that reproduces it. A `.encastra` file that demonstrates the
 problem is worth more than a description of one — and please say so if it is a file you would not
 want anybody to open.
 
-You will get an acknowledgement. This is a small project and there is no team behind the address,
+You will get an acknowledgement. This is a small project and there is no team behind the channel,
 so the honest expectation is days rather than hours.
 
 ## What is in scope

@@ -230,8 +230,22 @@ Silent install, for a machine being set up by a script:
 .\Encastra_<version>_x64-setup.exe /S
 ```
 
-Uninstalling removes the application. It does not touch `.encastra` files, which live wherever
-the person saved them — the application keeps no hidden library and no separate copy.
+Uninstalling removes the application: the program folder, its Start Menu shortcut and its
+uninstall entry. It does not touch `.encastra` files, which live wherever the person saved them.
+
+The application does keep data of its own, outside the program folder, and the uninstaller leaves
+it in place by default:
+
+| Where | What |
+|---|---|
+| `%APPDATA%\dev.encastra.app\library\library.json` | The library index: for each project created, imported or prepared on this machine, its path, name, timestamps, size and content hash. A record, not a copy — the projects themselves stay where they are |
+| `%APPDATA%\dev.encastra.app\library\imports\` | A copy of every publication imported through the application. This is the one place the application stores project files itself; removing an import from the library removes its copy |
+| `%LOCALAPPDATA%\dev.encastra.app\` | The embedded WebView2's own profile (cache and the settings the interface keeps, such as language and welcome state) |
+
+Tauri's NSIS uninstaller, run interactively, offers a checkbox to delete the application's data;
+it is unticked by default, so unless it is ticked the folders above survive the uninstall and are
+picked up again by a later install. A silent uninstall (`/S`) keeps them. To remove everything,
+tick that option or delete the two `dev.encastra.app` folders by hand after uninstalling.
 
 ---
 

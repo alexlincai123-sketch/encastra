@@ -1,5 +1,12 @@
 # Commercial release closure — 2026-09-15
 
+> **Superseded — note added 2026-09-26.** This page is a record of the 2026-09-15 closure and is
+> kept unchanged below. Two of its premises no longer hold: the repository is now **public**
+> (still proprietary, under `LICENSE`), and its verdict concerns `0.5.0-rc.1`, which later
+> candidates replaced. For the current build and what can be checked about it, read
+> [`docs/RELEASE.md`](../RELEASE.md); for the clean-Windows acceptance procedure and its latest
+> result, read [`CLEAN_VM_ACCEPTANCE.md`](CLEAN_VM_ACCEPTANCE.md).
+
 `v0.5.0-beta.1` — publication commit `7608bb1`, build commit `349b2ff`, installer
 `5678e5d0…6f91`, executable `be1945f9…67a1` — is frozen and was not touched by this work.
 Everything here is a new cycle after that tag, on `rc/commercial-closure` (this session), merged

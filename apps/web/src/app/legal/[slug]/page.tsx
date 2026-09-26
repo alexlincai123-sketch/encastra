@@ -12,6 +12,32 @@ interface RouteParams {
   slug: string;
 }
 
+/**
+ * The documents in `config/legal.ts` are plain strings. The one kind of link they carry is an
+ * absolute `https://` address written out in full, so a reader can see where it goes before
+ * following it; this turns those, and only those, into anchors. Trailing sentence punctuation is
+ * left outside the link.
+ */
+const URL_IN_TEXT = /https:\/\/[^\s]+/g;
+
+function withLinks(paragraph: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const match of paragraph.matchAll(URL_IN_TEXT)) {
+    const url = match[0].replace(/[.,;:)]+$/, '');
+    const start = match.index;
+    if (start > last) parts.push(paragraph.slice(last, start));
+    parts.push(
+      <a key={start} href={url} rel="noopener noreferrer">
+        {url}
+      </a>,
+    );
+    last = start + url.length;
+  }
+  if (last < paragraph.length) parts.push(paragraph.slice(last));
+  return parts;
+}
+
 export function generateStaticParams(): RouteParams[] {
   return LEGAL_DOCS.map((doc) => ({ slug: doc.slug }));
 }
@@ -60,7 +86,7 @@ export default async function LegalDocPage({
           <div key={section.heading}>
             <h2>{section.heading}</h2>
             {section.body.map((paragraph) => (
-              <p key={paragraph.slice(0, 40)}>{paragraph}</p>
+              <p key={paragraph.slice(0, 40)}>{withLinks(paragraph)}</p>
             ))}
           </div>
         ))}
