@@ -41,10 +41,10 @@ function Get-IntegrityLevel {
 }
 
 # What the installer puts in the install directory, and nothing else: the program, its uninstaller,
-# and - since 0.5.0-rc.6 - the licence, the notices and the third-party inventory
+# and - since 0.5.0-rc.6 - the licence, the notices, the third-party inventory and (since the move to free distribution) every third-party licence text
 # (tauri.conf.json bundle.resources). A file beyond these after an install or an upgrade is one this
 # version did not ship: something left over from version A, or written by something else.
-$script:ExpectedInstallFiles = @('encastra-desktop.exe', 'uninstall.exe', 'LICENSE.txt', 'NOTICE.txt', 'THIRD-PARTY.md')
+$script:ExpectedInstallFiles = @('encastra-desktop.exe', 'uninstall.exe', 'LICENSE.txt', 'NOTICE.txt', 'THIRD-PARTY.md', 'THIRD-PARTY-LICENSES.md')
 function Test-InstallListingExact($listing) {
     $have = @($listing | ForEach-Object { $_.path } | Sort-Object)
     $want = @($script:ExpectedInstallFiles | Sort-Object)

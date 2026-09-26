@@ -1,0 +1,2 @@
+The published crate ships no licence file; these texts are from its upstream repository:
+LICENSE from https://github.com/wravery/webview2-rs/blob/de9a7e660e173136b351982a34f715af424ff812/LICENSE (blob de9a7e660e173136b351982a34f715af424ff812)

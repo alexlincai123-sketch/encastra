@@ -1,0 +1,1 @@
+The published crate ships no licence file. Its licence is MPL-2.0; this is the standard MPL-2.0 text as shipped by cssparser (cssparser-0.36.0), from the same project.

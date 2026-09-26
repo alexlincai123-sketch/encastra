@@ -36,7 +36,8 @@
     "resources": {
       "../../../LICENSE": "LICENSE.txt",
       "../../../NOTICE": "NOTICE.txt",
-      "../../../docs/THIRD-PARTY.md": "THIRD-PARTY.md"
+      "../../../docs/THIRD-PARTY.md": "THIRD-PARTY.md",
+      "../../../docs/THIRD-PARTY-LICENSES.md": "THIRD-PARTY-LICENSES.md"
     },
     "windows": {
       "digestAlgorithm": "sha256",

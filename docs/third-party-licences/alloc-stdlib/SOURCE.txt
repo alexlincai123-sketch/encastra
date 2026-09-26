@@ -1,0 +1,2 @@
+The published crate ships no licence file; these texts are from its upstream repository:
+LICENSE from https://github.com/dropbox/rust-alloc-no-stdlib/blob/cd496ba72eb37e83a44958358d1f89a8a28cbc15/LICENSE (blob cd496ba72eb37e83a44958358d1f89a8a28cbc15)
