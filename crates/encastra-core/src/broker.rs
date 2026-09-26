@@ -488,6 +488,25 @@ impl Broker {
                 ));
         }
 
+        // A grant is refused for a startup folder, but only the granted folder was checked, when
+        // it was granted. A grant of a wider folder that contains one (`%APPDATA%` holds
+        // `Microsoft\Windows\Start Menu\Programs\Startup`) would still let a step write into it,
+        // and a file there runs at the next logon. The destination is what gets written, so the
+        // destination is checked, every time.
+        if forbidden_trees()
+            .iter()
+            .any(|tree| resolved_dir.starts_with(tree))
+        {
+            return Err(self
+                .deny(
+                    node,
+                    "fs.write",
+                    detail,
+                    "that folder decides what runs when you log in",
+                )
+                .with_hint("Write the result somewhere that is not a startup folder."));
+        }
+
         // A grant is permission to put files into a folder, not to replace what is already in
         // it. The project chooses the name; the person chose the folder — and the folder they
         // chose is a real one, with their files in it. `fs::copy` truncates what it finds, so a
@@ -1532,6 +1551,49 @@ mod tests {
                 "a folder inside the startup folder must be refused too"
             );
         }
+    }
+
+    #[test]
+    fn a_wider_grant_does_not_let_a_step_write_into_the_startup_folder() {
+        // Found by the 0.5.0-rc.6 review: the startup folder was refused as a grant, but a grant
+        // of %APPDATA% - allowed, it is not a root - contains it, and save_to only checked that
+        // the destination was under a grant. The destination is now checked itself.
+        let Some(appdata) = std::env::var_os("APPDATA") else {
+            eprintln!("skipped: no APPDATA on this platform");
+            return;
+        };
+        let appdata = PathBuf::from(appdata);
+        let startup = appdata.join(r"Microsoft\Windows\Start Menu\Programs\Startup");
+        if !startup.is_dir() {
+            eprintln!("skipped: no startup folder on this machine");
+            return;
+        }
+        let target = startup.join(format!("encastra-test-write-{}", std::process::id()));
+        std::fs::create_dir_all(&target).expect("a scratch folder inside the startup folder");
+
+        let dir = tempdir::TempDir::new();
+        let node = NodeId("n".into());
+        let mut grants = GrantSet::new();
+        grants.grant(
+            &node,
+            "fs.write",
+            GrantScope::Directory(std::fs::canonicalize(&appdata).unwrap()),
+        );
+        let mut broker = Broker::new(dir.path().join("run"), grants).unwrap();
+        let out = broker
+            .create_output(&node, HandleKind::File, "evil.cmd")
+            .unwrap();
+        broker
+            .write_output(&node, out, b"echo run at logon")
+            .unwrap();
+
+        let result = broker.save_to(&node, out, &target, "evil.cmd");
+        let written = target.join("evil.cmd").exists();
+        let _ = std::fs::remove_dir_all(&target);
+        let err = result.expect_err("a write into the startup folder must be refused");
+        assert_eq!(err.code, "denied");
+        assert!(err.message.contains("decides what runs"), "{}", err.message);
+        assert!(!written, "nothing may be written there");
     }
 
     #[test]
