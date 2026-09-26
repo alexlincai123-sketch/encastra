@@ -64,7 +64,7 @@ const es: Messages = {
 
   footer: {
     navAriaLabel: 'Pie de página',
-    versionLine: 'Beta {version} · Solo Windows · las versiones no están firmadas',
+    versionLine: 'Versión candidata {version} · Solo Windows · las versiones no están firmadas',
     legal: {
       namePrefix:
         'Encastra es un nombre provisional. No se han revisado los registros de marcas, así que nada aquí afirma que el nombre esté legalmente libre —',
@@ -147,7 +147,7 @@ const es: Messages = {
       note: 'El instalador no está firmado, así que Windows avisará de un editor desconocido. Ese aviso es cierto. El SHA-256 publicado es lo que tienes en lugar de una firma.',
     },
     closing: {
-      eyebrow: 'Beta {version}',
+      eyebrow: 'Versión candidata {version}',
       title: 'Solo Windows, sin firmar, y sincero sobre ambas cosas',
       lead: 'SmartScreen avisará de un editor no reconocido. El aviso es acertado — nada en el archivo demuestra quién lo construyó. El SHA-256 publicado es lo que tienes en su lugar.',
       downloadAndVerify: 'Descargar y verificar',
@@ -207,7 +207,7 @@ const es: Messages = {
     },
     hero: {
       eyebrow: 'Descarga',
-      title: 'Consigue la beta',
+      title: 'Consigue la versión candidata',
       lead: 'Un instalador, para Windows, sin firmar. Todavía no existe nada más — sin build de macOS, sin build de Linux, sin actualización automática.',
     },
     target: {
@@ -238,7 +238,7 @@ const es: Messages = {
     },
     noHostCallout: {
       part1:
-        'Todavía no hay ningún servidor público de descarga para esta build — el repositorio no es público y',
+        'Todavía no hay ningún servidor público de descarga para esta build — el repositorio es público para leerlo, pero esta build no está publicada allí como release, y',
       part2: 'no está registrado (mira',
       part3:
         '). Lo que sigue es el registro real de la build que existe: su nombre de archivo exacto, tamaño y SHA-256, tomados de',
@@ -400,7 +400,8 @@ const es: Messages = {
       title: 'Reportar una vulnerabilidad',
       lead: 'Por favor, no abras un issue público para un problema de seguridad. Un reporte público pone en marcha un reloj que quienes pueden arreglarlo quizá no logren ganar.',
       noAddress:
-        'Todavía no existe una dirección de seguridad publicada — el dominio en los identificadores de este proyecto no está registrado, así que cualquier dirección que puedas deducir de este sitio no lleva a ningún sitio. Hasta que se publique una, repórtalo mediante el sistema privado de reporte de vulnerabilidades del host del repositorio, o consulta el borrador de divulgación coordinada para ver qué incluir.',
+        'Repórtalo en privado mediante el reporte privado de vulnerabilidades de GitHub en el repositorio (hace falta una cuenta de GitHub). No hay dirección de correo de seguridad — el dominio en los identificadores de este proyecto no está registrado, así que cualquier dirección que puedas deducir de este sitio no lleva a ningún sitio. El borrador de divulgación coordinada dice qué incluir.',
+      reportPrivately: 'Reportar en privado en GitHub',
       readDisclosure: 'Leer el borrador de divulgación',
     },
   },
@@ -505,7 +506,7 @@ const es: Messages = {
     closing: {
       lead: 'Esto es todo lo que hace hoy el producto entero — nada aquí espera a una función que todavía no está construida.',
       buildIt: 'Construye tú mismo el mismo flujo de trabajo',
-      download: 'Descarga la beta',
+      download: 'Descarga la versión candidata',
     },
   },
 
@@ -627,12 +628,12 @@ const es: Messages = {
   docs: {
     meta: {
       description:
-        'Lo que está escrito, y para quién. El repositorio todavía no es público, así que esta página describe cada documento en vez de alojarlo.',
+        'Lo que está escrito, y para quién. Cada documento vive en el repositorio público; esta página dice qué es y lo enlaza allí.',
     },
     hero: {
       eyebrow: 'Documentación',
       title: 'Lo que está escrito',
-      lead: 'El material de referencia vive en el repositorio como docs/*.md, junto al código que describe. El repositorio no es público, así que esta página dice qué es cada documento y para quién se escribió, en vez de alojarlo o enlazarlo.',
+      lead: 'El material de referencia vive en el repositorio como docs/*.md, junto al código que describe. El repositorio es público para leerlo — el código es propietario, así que leerlo no es una licencia para copiarlo — y cada entrada de abajo enlaza la versión actual de su documento en la rama main, que puede ir por delante de la build de /download.',
     },
     forAnyone: { eyebrow: 'Para cualquiera', title: 'Escrito para alguien que no es ingeniero' },
     forEngineers: { eyebrow: 'Para ingenieros', title: 'Material de referencia' },
@@ -898,7 +899,7 @@ const es: Messages = {
     closing: {
       lead: 'Junto al que acabas de construir se incluyen dos flujos de trabajo de demostración: File Organiser y Thumbnails, ambos con sus carpetas deliberadamente vacías.',
       templates: 'Ver las plantillas incluidas',
-      download: 'Descarga la beta',
+      download: 'Descarga la versión candidata',
     },
   },
 
@@ -913,10 +914,10 @@ const es: Messages = {
       lead: 'Nada. No hay sistema de pago, ni cuenta, ni plan entre el que elegir — así que en esta página hay un único precio real y una ausencia declarada, en vez de una tabla de precios con números inventados.',
     },
     free: {
-      badge: 'Gratis — beta',
+      badge: 'Gratis — versión candidata',
       title: 'Descárgalo y ejecútalo',
-      body: 'El instalador de Windows no cuesta nada y no necesita cuenta. Todo lo documentado en este sitio — el runtime, el broker de permisos, los diecinueve componentes — está disponible hoy en la beta, con las limitaciones indicadas en /security.',
-      cta: 'Descarga la beta',
+      body: 'El instalador de Windows no cuesta nada y no necesita cuenta. Todo lo documentado en este sitio — el runtime, el broker de permisos, los diecinueve componentes — está disponible hoy en la versión candidata, con las limitaciones indicadas en /security.',
+      cta: 'Descarga la versión candidata',
     },
     notYet: {
       eyebrow: 'Todavía no',
@@ -983,11 +984,11 @@ const es: Messages = {
         'Los flujos de trabajo se ejecutan sin ningún modelo en el bucle, por diseño — ningún componente, ninguna decisión de planificación, ni ninguna vía de validación llama a uno. Una ayuda de autoría que sugiera un componente o explique un error es una posible adición futura, estrictamente fuera de la vía de ejecución; no es un plan para volver probabilístico el propio runtime.',
       noFinishedStrong: 'Sin afirmar que esté terminado.',
       noFinishedBody:
-        'El runtime, el sistema de tipos, el broker de permisos y el formato de proyecto están construidos y probados. El sitio web que estás leyendo, el flujo de incorporación y las correcciones de accesibilidad son lo que añade la release actual sobre eso — mira /download para ver exactamente qué build es cuál.',
+        'El runtime, el sistema de tipos, el broker de permisos y el formato de proyecto están construidos y probados. Esta build es una versión candidata: trae el ciclo de publicar e importar y la biblioteca local de la 0.5, y lo que ha cambiado entre candidatas es cómo se produce y se comprueba una build — construida y reproducida por CI en vez de en una máquina de desarrollo, y una aceptación automatizada en una máquina Windows limpia (instalación, actualización, desinstalación) que encontró un defecto al guardar en la candidata anterior, corregido en esta. Mira /download para ver exactamente qué build es esta.',
     },
     stands: {
       eyebrow: 'Dónde está',
-      title: 'Beta, y lo dice en serio',
+      title: 'Pre-lanzamiento, y lo dice en serio',
       engine: {
         title: 'El motor',
         body: 'Runtime, sistema de tipos, broker de permisos, formato de proyecto, CLI: construidos, probados, y verificados de forma cruzada entre los lectores de TypeScript y de Rust de la misma tabla de reglas.',
@@ -999,7 +1000,7 @@ const es: Messages = {
       website: {
         title: 'Este sitio web',
         bodyPrefix:
-          'Nuevo. Todo su propósito es hacer legible lo anterior para alguien que no ha leído el código fuente — mira el propio relato de docs/BETA-0.2-AUDIT.md sobre por qué no existía antes.',
+          'Todo su propósito es hacer legible lo anterior para alguien que no ha leído el código fuente — mira el propio relato de docs/BETA-0.2-AUDIT.md sobre por qué, antes de la 0.2, no existía.',
       },
       everythingElse: {
         title: 'Todo lo demás',
@@ -1033,7 +1034,7 @@ const es: Messages = {
       body2LinkText: '/about',
       body2Suffix: 'para ver la etapa actual del proyecto.',
     },
-    cta: 'Descarga la beta en su lugar',
+    cta: 'Descarga la versión candidata en su lugar',
   },
 
   contact: {
@@ -1056,13 +1057,17 @@ const es: Messages = {
     security: {
       eyebrow: 'Seguridad',
       title: '¿Encontraste una vulnerabilidad?',
-      body: 'Este es el único canal especificado hoy. Por favor, no abras un issue público — repórtalo en privado mediante el sistema de reporte privado de vulnerabilidades del host del repositorio. Mira el borrador de divulgación para ver exactamente qué incluir y qué esperar.',
+      body: 'Este es el único canal especificado hoy. Por favor, no abras un issue público — repórtalo en privado mediante el reporte privado de vulnerabilidades de GitHub en el repositorio. Mira el borrador de divulgación para ver exactamente qué incluir y qué esperar.',
+      reportCta: 'Reportar en privado en GitHub',
       cta: 'Leer la política de divulgación',
     },
     everythingElse: {
       eyebrow: 'Todo lo demás',
       title: 'Bugs, preguntas y feedback',
-      body: 'Todavía no hay mesa de soporte ni un canal de feedback dedicado. Si has encontrado este sitio, lo más probable es que también tengas acceso al repositorio que describe — el historial de commits y su rastreador de issues, donde existan, son lo más parecido a un canal de contacto que tiene este proyecto ahora mismo.',
+      bodyPrefix:
+        'Todavía no hay mesa de soporte ni un canal de feedback dedicado. El repositorio es público en',
+      bodySuffix:
+        '— su rastreador de issues es lo más parecido a un canal para bugs, preguntas y feedback que tiene este proyecto ahora mismo. No para problemas de seguridad: esos van por el reporte privado de arriba.',
     },
   },
 

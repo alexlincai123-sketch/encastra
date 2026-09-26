@@ -1,5 +1,12 @@
 # Commercial release closure — 2026-09-15
 
+> **Superseded — note added 2026-09-26.** This page is a record of the 2026-09-15 closure and is
+> kept unchanged below. Two of its premises no longer hold: the repository is now **public**
+> (still proprietary, under `LICENSE`), and its verdict concerns `0.5.0-rc.1`, which later
+> candidates replaced. For the current build and what can be checked about it, read
+> [`docs/RELEASE.md`](../RELEASE.md); for the clean-Windows acceptance procedure and its latest
+> result, read [`CLEAN_VM_ACCEPTANCE.md`](CLEAN_VM_ACCEPTANCE.md).
+
 `v0.5.0-beta.1` — publication commit `7608bb1`, build commit `349b2ff`, installer
 `5678e5d0…6f91`, executable `be1945f9…67a1` — is frozen and was not touched by this work.
 Everything here is a new cycle after that tag, on `rc/commercial-closure` (this session), merged
@@ -45,7 +52,7 @@ credential, the machine or the provider, and the exact action.
 | Blocker | Who | Exact action | Then |
 |---|---|---|---|
 | Code-signing certificate | owner + a CA (money, legal identity) | buy an OV/EV certificate or a signing service in a jurisdiction that will issue to the seller (`docs/SIGNING.md`: Azure Artifact Signing is closed to individuals outside US/CA as of 2026-08-29); add `WINDOWS_CERTIFICATE` and `WINDOWS_CERTIFICATE_PASSWORD` as repository secrets | dispatch `release.yml`; `signing` turns PASS by itself |
-| Clean-VM verification | owner (a Windows VM, an hour) | `docs/release/CLEAN_WINDOWS_VM.md`: 10 steps, 4 scripted; keep the logs in `docs/release/vm/<version>/` | `release:check --evidence-vm <log>` turns `clean_vm` PASS |
+| Clean-VM verification | the Clean VM lab (`docs/release/CLEAN_VM_ACCEPTANCE.md`); SmartScreen on a downloaded file stays a person's step (`CLEAN_WINDOWS_VM.md`) | cycles A, B, upgrade and N1–N5 on the candidate's installer | `release_check.py --evidence-vm <acceptance dir>` re-judges the cycles and ties them to the artefacts; only then `clean_vm` PASS |
 | External penetration test | a provider (money) | hand over `docs/security/PENTEST_HANDOFF.md`; register findings as `ENC-EXT-NN` | `pentest` is recorded PASS by a person, not by a script |
 | Licence, terms, privacy, EULA, trademark | owner + lawyer | `docs/legal/README.md` lists each decision and its input; counsel review of `LICENSE` (proprietary since 2026-09-23); search the mark | `legal` is recorded by a person |
 | CI on the release commit | owner (a push) | the remote exists (`github.com/alexlincai123-sketch/encastra`, private); push the RC branch/tag — the parallel session does the pushes | `ci.evidence` reads the run through `gh` |

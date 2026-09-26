@@ -167,14 +167,16 @@ class ReleaseCheckTests(unittest.TestCase):
         _, report, _ = tree.check("--compare", str(other))
         self.assertEqual(status_of(report, "reproducibility"), "FAIL")
 
-    def test_a_clean_machine_log_is_evidence_only_when_every_line_passed(self) -> None:
+    def test_a_clean_machine_log_alone_is_never_clean_vm_evidence(self) -> None:
+        # One install_check log proves one install. The acceptance is the cycles, judged again in
+        # scripts/tests/test_release_check_vm.py; a log that passed is not enough, one that failed is.
         tree = self.fixture("0.6.0-beta.1")
         tree.binary("0.6.0-beta.1")
         tree.installer("0.6.0-beta.1")
         log = tree.root / "vm.log"
         log.write_text("PASS  a\nPASS  b\n", "utf-8")
         _, report, _ = tree.check("--evidence-vm", str(log))
-        self.assertEqual(status_of(report, "clean_vm"), "PASS")
+        self.assertEqual(status_of(report, "clean_vm"), "EXTERNAL_REQUIRED")
         log.write_text("PASS  a\nFAIL  b -> broken\n", "utf-8")
         _, report, _ = tree.check("--evidence-vm", str(log))
         self.assertEqual(status_of(report, "clean_vm"), "FAIL")

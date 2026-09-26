@@ -15,7 +15,7 @@ done by the people named there.
 | Privacy | the product makes no network connection, keeps no account, sends no telemetry; a statement saying so is drafted | `PRIVACY_POLICY_DRAFT.md` |
 | Terms of use / EULA | drafted for a proprietary desktop application distributed as an installer | `TERMS_DRAFT.md`, `EULA_DRAFT.md` |
 | Trademark | **not searched**; `docs/BRANDING.md` says so and no ™/® appears anywhere | `TRADEMARK_CHECKLIST.md` |
-| Export / sanctions | not assessed. The shipped executable **bundles** `rustls` 0.23 and `ring` 0.17 (TLS for the `net.http` component; see `docs/THIRD-PARTY.md`) — it does not rely on the platform's TLS. That is a fact an export-control assessment has to start from, and a line a lawyer should confirm | `TERMS_DRAFT.md` §Export |
+| Export / sanctions | not assessed. The shipped executable **bundles** `rustls` 0.23 and `ring` 0.17, with `webpki-roots` for certificate roots (TLS for the `net.http` component, via `ureq` with its `rustls` feature in the root `Cargo.toml`; see `docs/THIRD-PARTY.md`) — it does not use the platform's TLS or certificate store. That is a fact an export-control assessment has to start from, and a line a lawyer should confirm | `TERMS_DRAFT.md` §Export |
 | Company / seller of record | none named anywhere; every draft has `[COMPANY]` | all |
 
 ## Exactly what requires a lawyer
@@ -27,7 +27,7 @@ done by the people named there.
 | Privacy statement and, if any jurisdiction requires it, a data-protection assessment | which law applies depends on where the seller and the users are | `PRIVACY_POLICY_DRAFT.md`; the fact that no data leaves the machine |
 | Terms of sale, refunds, warranty disclaimers, limitation of liability | jurisdiction-specific and enforceability-specific | `TERMS_DRAFT.md`, `EULA_DRAFT.md` |
 | Trademark search and, if wanted, registration of the name | a search in the relevant registers and classes is a professional service | `TRADEMARK_CHECKLIST.md`, `docs/BRANDING.md` |
-| Export-control classification | depends on the encryption analysis and the seller's jurisdiction | the dependency list; `crates/encastra-builtins/src/net.rs` (TLS is the platform's) |
+| Export-control classification | depends on the encryption analysis and the seller's jurisdiction | the dependency list; `crates/encastra-builtins/src/net.rs` — TLS is **bundled, not the platform's**: `ureq` 3.4 built with its `rustls` feature pulls in `rustls` 0.23.45, `ring` 0.17.14 and `webpki-roots` 1.0.9 (a compiled-in root-certificate set) per `Cargo.lock` |
 | The seller of record (a person or a company), and the identity the code-signing certificate is issued to | a certificate authority verifies a legal identity; the drafts cannot name one | `docs/SIGNING.md` |
 
 ## What is decided by the owner, not by a lawyer

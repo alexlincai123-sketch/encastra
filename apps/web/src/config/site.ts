@@ -8,7 +8,7 @@
  */
 
 /** The release this website documents. Single module, imported everywhere. */
-export const VERSION = '0.5.0-rc.5';
+export const VERSION = '0.5.0-rc.6';
 
 export const SITE = {
   name: 'Encastra',
@@ -24,8 +24,18 @@ export const SITE = {
    * is used only to build canonical URLs and is not linked to as if it were live elsewhere.
    */
   url: 'https://encastra.dev',
-  repository: null,
+  /**
+   * The public repository. Public to be read, not to be copied — the source is proprietary under
+   * `LICENSE`. It is also the one contact channel that exists: see `SECURITY_REPORT_URL`.
+   */
+  repository: 'https://github.com/alexlincai123-sketch/encastra',
 } as const;
+
+/**
+ * Where a vulnerability is reported privately: GitHub's private vulnerability reporting on the
+ * repository above. There is no security@ address — the domain is not registered.
+ */
+export const SECURITY_REPORT_URL = `${SITE.repository}/security/advisories/new`;
 
 /**
  * What exists, what is in preview, and what is only a design document.
@@ -103,16 +113,16 @@ export const RELEASE: {
   installerFormat: string;
 } = {
   /** Exactly as published in docs/RELEASE.md. */
-  installerFilename: 'Encastra_0.5.0-rc.5_x64-setup.exe',
-  installerVersion: '0.5.0-rc.5',
+  installerFilename: 'Encastra_0.5.0-rc.6_x64-setup.exe',
+  installerVersion: '0.5.0-rc.6',
   installerSize: '3.5 MB',
-  installerSha256: 'afaec18b217d66171a5c9c9f530d94b6e7e591ca61af18a3101733cb01674f10',
+  installerSha256: '59a00802f15803d6092ddbe9160f7d697ea83f096146a38a29a78e6649825b50',
   binaryFilename: 'encastra-desktop.exe',
   binarySize: '9.4 MB',
-  binarySha256: '14dc5d615676830ce34882fe663f64f56be32910047b20f3d20a65fdd1a40402',
-  builtOn: '2026-09-23',
+  binarySha256: '23203bcadde9a7585422141517038b55cf1707ae6e449e827018447a0a8c265c',
+  builtOn: '2026-09-26',
   builtFor: 'Windows X64',
-  commit: '1ce8e864da3eba12043684d86f4accf51707e519',
+  commit: '627c293af312b892b1b94ce184227784216f0cde',
   signed: false,
   /** Installer format. Per user, no administrator required. See docs/RELEASE.md. */
   installerFormat: 'NSIS',

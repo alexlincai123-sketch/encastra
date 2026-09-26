@@ -15,6 +15,7 @@ import type { WorkflowStatus } from './events';
 import componentsFixture from './fixtures/components.json';
 import exampleRunFixture from './fixtures/example-run.json';
 import deniedRunFixture from './fixtures/example-run-denied.json';
+import { translate } from './i18n';
 import type {
   About,
   ComponentManifest,
@@ -35,6 +36,15 @@ import type {
   RunResult,
   Validation,
 } from './types';
+
+/**
+ * The file-type filter the native open and save dialogs show. Its name is the one piece of the
+ * dialog this side writes, so it is read in the person's language at the moment the dialog opens,
+ * not frozen in English. The extension is a filename, not a word, and stays as it is.
+ */
+export function projectFileFilters(): { name: string; extensions: string[] }[] {
+  return [{ name: translate('common.projectFileType'), extensions: ['encastra'] }];
+}
 
 export interface Ipc {
   /** Whether a real runtime is behind this. The UI tells the user when there is not. */
@@ -214,7 +224,7 @@ class TauriIpc implements Ipc {
     const { open } = await import('@tauri-apps/plugin-dialog');
     const chosen = await open({
       multiple: false,
-      filters: [{ name: 'Encastra project', extensions: ['encastra'] }],
+      filters: projectFileFilters(),
     });
     return typeof chosen === 'string' ? chosen : null;
   }
@@ -223,7 +233,7 @@ class TauriIpc implements Ipc {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const chosen = await save({
       defaultPath: `${suggested}.encastra`,
-      filters: [{ name: 'Encastra project', extensions: ['encastra'] }],
+      filters: projectFileFilters(),
     });
     return typeof chosen === 'string' ? chosen : null;
   }

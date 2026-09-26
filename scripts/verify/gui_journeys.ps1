@@ -1009,16 +1009,25 @@ $byPid = New-Object System.Windows.Automation.PropertyCondition($A::ProcessIdPro
 function AppWindow { $root.FindAll($T::Children, $byPid) | Where-Object { $_.Current.ClassName -eq 'Tauri Window' } | Select-Object -First 1 }
 function Descendants($el) { if (-not $el) { return @() }; @($el.FindAll($T::Descendants, $TRUE_COND)) }
 
+# Every lookup here is for something the PAGE draws. Some WebView2 runtimes also publish, under the
+# same window and ahead of the page in tree order, the browser frame's own hidden caption buttons -
+# `BrowserCaptionButtonContainer` > Button 'Minimize' / 'Maximize' / 'Close', class
+# `WindowsCaptionButton`, framework Chrome, rect Empty. The clean Windows 11 VM's inbox runtime
+# 140.0.3485.66 does (docs/release/CLEAN_VM_ACCEPTANCE.md, the DIAG-UIA dump); the runners' 152 did
+# not. There, `Wait 'Button' '^(Cerrar|Close)$'` at the end of j2 found that 'Close' before the
+# Publish panel's, invoked it, and closed the application - every later journey then failed for a
+# reason that was the harness's. Such a button is never page content, so it is never a match.
+function IsPageElement($e) { $e.Current.ClassName -ne 'WindowsCaptionButton' }
 function Find($scopeEl, $ctrl, $namePattern) {
     foreach ($e in (Descendants $scopeEl)) {
-        if ($e.Current.ControlType.ProgrammaticName -eq "ControlType.$ctrl" -and $e.Current.Name -match $namePattern) { return $e }
+        if ($e.Current.ControlType.ProgrammaticName -eq "ControlType.$ctrl" -and $e.Current.Name -match $namePattern -and (IsPageElement $e)) { return $e }
     }
     return $null
 }
 function FindEvery($scopeEl, $ctrl, $namePattern) {
     $out = @()
     foreach ($e in (Descendants $scopeEl)) {
-        if ($e.Current.ControlType.ProgrammaticName -eq "ControlType.$ctrl" -and $e.Current.Name -match $namePattern) { $out += $e }
+        if ($e.Current.ControlType.ProgrammaticName -eq "ControlType.$ctrl" -and $e.Current.Name -match $namePattern -and (IsPageElement $e)) { $out += $e }
     }
     return $out
 }
@@ -1209,9 +1218,12 @@ function ElementFacts($el) {
         if (-not $n) { $n = '' }
         if ($n.Length -gt 70) { $n = $n.Substring(0, 70) }
         $r = $c.BoundingRectangle
-        return ("type={0} automationId='{1}' name='{2}' enabled={3} offscreen={4} keyboardFocusable={5} rect=({6},{7} {8}x{9}) hwnd={10} helpText='{11}' patterns={12}" -f `
-            ($c.ControlType.ProgrammaticName -replace '^ControlType\.', ''), $c.AutomationId, $n, $c.IsEnabled, $c.IsOffscreen, $c.IsKeyboardFocusable, `
-            [int]$r.Left, [int]$r.Top, [int]$r.Width, [int]$r.Height, $c.NativeWindowHandle, (HelpTextOf $el), ($pats -join '+'))
+        # An element with no geometry reports Rect.Empty (infinite coordinates), and casting that to
+        # [int] throws - which once replaced the one line that would have named the element pressed.
+        $rect = if ($r.IsEmpty -or [double]::IsInfinity($r.Left) -or [double]::IsNaN($r.Left)) { 'Empty' } else { '{0},{1} {2}x{3}' -f [int]$r.Left, [int]$r.Top, [int]$r.Width, [int]$r.Height }
+        return ("type={0} automationId='{1}' name='{2}' class='{3}' enabled={4} offscreen={5} keyboardFocusable={6} rect=({7}) hwnd={8} helpText='{9}' patterns={10}" -f `
+            ($c.ControlType.ProgrammaticName -replace '^ControlType\.', ''), $c.AutomationId, $n, $c.ClassName, $c.IsEnabled, $c.IsOffscreen, $c.IsKeyboardFocusable, `
+            $rect, $c.NativeWindowHandle, (HelpTextOf $el), ($pats -join '+'))
     } catch { return "(the element could not be read: $($_.Exception.GetType().Name))" }
 }
 # The window Chromium renders into, which is where a keystroke aimed at the page has to be sent.
@@ -1839,11 +1851,20 @@ function HasValuePattern($el) {
     try { [void]$el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern); return $true } catch { return $false }
 }
 # Chromium's SetValue on a text input dispatches the input event React listens for, so the store
-# sees the change. The value is read back rather than assumed.
+# sees the change. The value is read back rather than assumed - and read until it is what was set,
+# for a bounded time: UI Automation publishes the new value when WebView2's accessibility tree
+# catches up, and on a machine that had just restarted one read 200 ms later still saw the old one
+# (0.5.0-rc.6, Clean VM CLEAN-007: namespace read back '' while the publication written from that
+# same draft carried it). What is returned is still what UI Automation says at the end, so a value
+# that never lands is reported exactly as before.
 function SetValue($el, $text) {
     $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($text)
-    Start-Sleep -Milliseconds 200
-    return (ValueOf $el)
+    $deadline = (Get-Date).AddSeconds(5)
+    do {
+        Start-Sleep -Milliseconds 200
+        $now = ValueOf $el
+    } while ($now -ne $text -and (Get-Date) -lt $deadline)
+    return $now
 }
 # Any sentence on screen matching a pattern - how a refusal is read back in the reader's own
 # language, rather than inferred from a state that is not shown.
@@ -2514,6 +2535,31 @@ function TypeIntoDialog($dlg, $field, $path, $what) {
             $edit = $h; $editHow = "the descendant Edit window with ctrlId=$id"; break
         }
     }
+    # A dialog that has only just opened may not have created its name edit yet. The first Save As
+    # after a cold restart on a loaded machine (Clean VM cycle A, CLEAN-007) had only the combo's
+    # AppControlHost in focus and no Edit anywhere - "edit windows=[]" - so the path was typed into
+    # nothing, while the next Save As a few seconds later found `class=Edit ctrlId=1001` as usual.
+    # So the edit is waited for, a bounded ten seconds, before falling back to typing.
+    $waitedForEdit = 0
+    while ($edit -eq $NULLPTR -and $waitedForEdit -lt 10000) {
+        Start-Sleep -Milliseconds 500
+        $waitedForEdit += 500
+        if ($field.Element) { try { $field.Element.SetFocus() } catch { } }
+        $focused = FocusedElement
+        $h = $NULLPTR
+        if ($focused) { try { $h = [IntPtr]$focused.Current.NativeWindowHandle } catch { $h = $NULLPTR } }
+        if ($h -ne $NULLPTR -and (HwndClass $h) -eq 'Edit') {
+            $edit = $h; $editHow = "the Edit focus reached after $waitedForEdit ms of waiting for the dialog to create it (#$h ctrlId=$([W32]::GetDlgCtrlID($h)))"
+            break
+        }
+        foreach ($h in @(ChildrenByClass $dh 'Edit' 5)) {
+            $id = [W32]::GetDlgCtrlID($h)
+            if ($id -ne 1148 -and $id -ne 1001) { continue }
+            if (LooksLikeSearch (HwndUiaName $h)) { continue }
+            $edit = $h; $editHow = "the descendant Edit window with ctrlId=$id, found after $waitedForEdit ms of waiting"; break
+        }
+    }
+    if ($waitedForEdit -gt 0) { $script:typeNotes += "$what : the name edit was not there when the dialog came up; waited $waitedForEdit ms, found=$($edit -ne $NULLPTR)" }
 
     # 4. Write, and read back twice from two different places.
     #
@@ -3217,8 +3263,12 @@ function Journey1 {
         Report ($null -ne $browse -and -not $browse.Current.IsOffscreen) 'j1 Browse button on screen' "'$($browse.Current.Name)' enabled=$($browse.Current.IsEnabled)"
 
         # Cancel: nothing chosen, nothing recorded, the preference untouched.
+        # This is the first native dialog the process opens, so it pays for the shell's first load
+        # of IFileDialog; on a cold hosted runner that took longer than 10 s (run 36149362020: no
+        # dialog at 10 s, a 'Select Folder' left on screen after), where every later chooser opens in
+        # well under the 12 s they are given. The bound is longer, not gone: no dialog is still FAIL.
         Click $browse
-        $dlg = WaitDialog 10
+        $dlg = WaitDialog 30
         Report ($null -ne $dlg) 'j1 chooser opened for projects-location' "'$($dlg.Current.Name)'"
         CancelChooser $dlg 'j1'
         $afterCancel = ValueOf (ById 'pref-project-folder')

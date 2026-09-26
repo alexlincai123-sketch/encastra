@@ -14,6 +14,7 @@
  */
 
 import {
+  type AriaLabelConfig,
   Background,
   BackgroundVariant,
   type Connection,
@@ -26,7 +27,8 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { selectPlural, splitOnPlaceholder, translate, useTranslation } from '../i18n';
+import { useComponentText } from '../component-text';
+import { selectPlural, translate, useI18n, useTranslation } from '../i18n';
 import { usePreferences } from '../preferences';
 import { type EditorNode, useEditor } from '../store';
 import { ComponentNode } from './ComponentNode';
@@ -44,6 +46,7 @@ import {
 } from './connect-mode';
 import { incidentEdges, stepIncident } from './edge-focus';
 import { canvasMenuIds, selectionToggleKey, stepToggleKey } from './menu';
+import { RefusalToast } from './RefusalToast';
 import { explainConnection, type RefusalNo } from './refusal';
 import { Wire } from './Wire';
 import { indexOf, step, walkOrder } from './walk';
@@ -90,9 +93,15 @@ export function Canvas() {
   /** The order the arrow keys walk. Its rules, and their reasons, live in `walk.ts`. */
   const ordered = useMemo(() => walkOrder(nodes), [nodes]);
 
+  // Read in the person's language, so the live region does not drop an English manifest name
+  // into the middle of a Spanish sentence.
+  const componentText = useComponentText();
   const nameOf = useCallback(
-    (node: EditorNode) => node.data.label ?? manifests[node.data.componentRef]?.name ?? node.id,
-    [manifests],
+    (node: EditorNode) => {
+      const manifest = manifests[node.data.componentRef];
+      return node.data.label ?? (manifest ? componentText.name(manifest) : node.id);
+    },
+    [manifests, componentText],
   );
 
   /**
@@ -742,13 +751,21 @@ export function Canvas() {
     [connecting, focusedEdgeId],
   );
 
-  // Rendered once as `{bridge}` intact — see `splitOnPlaceholder` — so the `<code>` element can
-  // be dropped in wherever the translated sentence actually puts the placeholder, rather than
-  // the two halves being separately-translated fragments whose order silently assumes English.
-  const bridge = refusal?.bridge ?? null;
-  const [bridgeBefore, bridgeAfter] = bridge
-    ? splitOnPlaceholder(t('canvas.refusal.bridge'), 'bridge')
-    : ['', ''];
+  // React Flow names its own controls — the zoom buttons, the minimap, the panel around them —
+  // and does it in English unless told otherwise. Only the labels this canvas actually shows are
+  // given: the interactivity toggle is hidden, and node and edge focus are off (see below).
+  const messages = useI18n((s) => s.messages);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `translate` reads locale and messages
+  const ariaLabelConfig = useMemo<Partial<AriaLabelConfig>>(
+    () => ({
+      'controls.ariaLabel': translate('canvas.controls.panel'),
+      'controls.zoomIn.ariaLabel': translate('canvas.controls.zoomIn'),
+      'controls.zoomOut.ariaLabel': translate('canvas.controls.zoomOut'),
+      'controls.fitView.ariaLabel': translate('canvas.controls.fitView'),
+      'minimap.ariaLabel': translate('canvas.controls.minimap'),
+    }),
+    [locale, messages],
+  );
 
   const selectionSentence = (() => {
     if (!selectedNodeId) return '';
@@ -834,6 +851,7 @@ export function Canvas() {
           fitView
           // Without a ceiling, a graph with one node fills the screen with one node.
           fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
+          ariaLabelConfig={ariaLabelConfig}
         >
           {showGrid ? <Background variant={BackgroundVariant.Dots} gap={16} size={1} /> : null}
           <Controls showInteractive={false} />
@@ -867,29 +885,7 @@ export function Canvas() {
         </div>
       ) : null}
 
-      {refusal ? (
-        <div className="refusal" role="status" aria-live="polite">
-          <div className="refusal__body">
-            <strong className="refusal__headline">{refusal.headline}</strong>
-            <span className="refusal__detail">{refusal.detail}</span>
-            {bridge ? (
-              <span className="refusal__bridge">
-                {bridgeBefore}
-                <code>{bridge}</code>
-                {bridgeAfter}
-              </span>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setRefusal(null)}
-            aria-label={t('common.dismiss')}
-          >
-            {t('common.close')}
-          </button>
-        </div>
-      ) : null}
+      {refusal ? <RefusalToast refusal={refusal} onClose={() => setRefusal(null)} /> : null}
 
       {/* Named by aria-describedby, so the keys are announced on entering the canvas rather
           than having to be discovered. Visible to screen readers only. */}

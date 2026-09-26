@@ -20,13 +20,14 @@
  * touching React or the DOM; see `../../test/run-panel.test.ts`.
  */
 
-import { describeNodeError, isKnownNodeError } from '../errors';
 // Plain functions rather than `useTranslation()`: everything below `dotModifier` is exported and
 // exercised directly by `../../test/run-panel.test.ts` with no React tree to render, and
 // `store.ts`'s own `summarise` calls `outcomeSummary`'s `runPanel.outcome.*` keys the same way —
 // see that file's note on why the status bar and this panel must never describe a run
 // differently. `translate()` reads the active locale itself at call time, the same pattern
 // `canvas/Canvas.tsx` uses inside `isConnectionLegal`.
+import { componentName } from '../component-text';
+import { describeNodeError, isKnownNodeError } from '../errors';
 import { selectPlural, splitOnPlaceholder, translate, useI18n, useTranslation } from '../i18n';
 import { usePreferences } from '../preferences';
 import { useEditor } from '../store';
@@ -213,7 +214,8 @@ function useStepName(): (id: string) => string {
   return (id: string) => {
     const node = nodes.find((n) => n.id === id);
     if (!node) return id; // The node may since have been deleted from the canvas.
-    return node.data.label ?? manifests[node.data.componentRef]?.name ?? id;
+    const manifest = manifests[node.data.componentRef];
+    return node.data.label ?? (manifest ? componentName(manifest) : id);
   };
 }
 

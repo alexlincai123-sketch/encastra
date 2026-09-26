@@ -8,20 +8,20 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.5.0-rc.5** · built 2026-09-23 on Windows X64 by GitHub Actions run [35890233574](https://github.com/alexlincai123-sketch/encastra/actions/runs/35890233574) · build commit `1ce8e864da3eba12043684d86f4accf51707e519`
+**Version 0.5.0-rc.6** · built 2026-09-26 on Windows X64 by GitHub Actions run [36210428063](https://github.com/alexlincai123-sketch/encastra/actions/runs/36210428063) · build commit `627c293af312b892b1b94ce184227784216f0cde`
 
-Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0 · MSVC 14.44.35207 · Windows SDK 10.0.26100.0 (AdvAPI32.Lib `ecafe89a632a35b1…`) · runner image win25-vs2026 20260907.229.1. Built twice in that run, on two machines, byte-identical; the release workflow builds the build commit a third time at the tag and requires these bytes again. `scripts/pe_diff.py` names any byte that differs.
+Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0 · MSVC 14.44.35207 · Windows SDK 10.0.26100.0 (AdvAPI32.Lib `ecafe89a632a35b1…`) · runner image win25-vs2026 20260922.246.2. Built twice in that run, on two machines, byte-identical; the release workflow builds the build commit a third time at the tag and requires these bytes again. `scripts/pe_diff.py` names any byte that differs.
 
 | Artefact | Size | Signature | SHA-256 |
 |---|---|---|---|
-| `Encastra_0.5.0-rc.5_x64-setup.exe` | 3.5 MB | **not signed** | `afaec18b217d66171a5c9c9f530d94b6e7e591ca61af18a3101733cb01674f10` |
-| `encastra-desktop.exe` | 9.4 MB | **not signed** | `14dc5d615676830ce34882fe663f64f56be32910047b20f3d20a65fdd1a40402` |
+| `Encastra_0.5.0-rc.6_x64-setup.exe` | 3.5 MB | **not signed** | `59a00802f15803d6092ddbe9160f7d697ea83f096146a38a29a78e6649825b50` |
+| `encastra-desktop.exe` | 9.4 MB | **not signed** | `23203bcadde9a7585422141517038b55cf1707ae6e449e827018447a0a8c265c` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.5.0-rc.5_x64-setup.exe -Algorithm SHA256
-Get-AuthenticodeSignature .\Encastra_0.5.0-rc.5_x64-setup.exe
+Get-FileHash .\Encastra_0.5.0-rc.6_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Encastra_0.5.0-rc.6_x64-setup.exe
 ```
 
 These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking — with the caveat that a hash published beside the download is only as trustworthy as the site serving both.
@@ -42,7 +42,8 @@ the artefact that actually travels.
 ## Producing a build
 
 Everything runs from the repository root, on a **clean, committed tree**. The binary records the
-commit it was built from (`build.rs` embeds it; Settings → About shows it as the build commit),
+commit it was built from (`build.rs` embeds it as `encastra-build-commit=<hash>;`; Settings shows
+the version, not the commit),
 and the manifest refuses to describe a build whose tree had uncommitted changes.
 
 **Since 0.5.0-rc.5 the published bytes are built by CI, not on a developer machine.** A developer
@@ -119,7 +120,7 @@ therefore has two commits, one apart:
 
 | | What it is | Where it is named |
 |---|---|---|
-| **Build commit** | The tree that produced the bytes | Inside `encastra-desktop.exe` (`encastra-build-commit=<hash>;`), Settings → About, the block above, `site.ts` |
+| **Build commit** | The tree that produced the bytes | Inside `encastra-desktop.exe` (`encastra-build-commit=<hash>;`), the block above, `site.ts` |
 | **Publication commit** | Build commit + `docs/RELEASE.md` + `site.ts` | The `v<version>` tag |
 
 `release_manifest.py --verify` is the check that the two are one publication apart and nothing
@@ -230,8 +231,22 @@ Silent install, for a machine being set up by a script:
 .\Encastra_<version>_x64-setup.exe /S
 ```
 
-Uninstalling removes the application. It does not touch `.encastra` files, which live wherever
-the person saved them — the application keeps no hidden library and no separate copy.
+Uninstalling removes the application: the program folder, its Start Menu shortcut and its
+uninstall entry. It does not touch `.encastra` files, which live wherever the person saved them.
+
+The application does keep data of its own, outside the program folder, and the uninstaller leaves
+it in place by default:
+
+| Where | What |
+|---|---|
+| `%APPDATA%\dev.encastra.app\library\library.json` | The library index: for each project created, imported or prepared on this machine, its path, name, timestamps, size and content hash. A record, not a copy — the projects themselves stay where they are |
+| `%APPDATA%\dev.encastra.app\library\imports\` | A copy of every publication imported through the application. This is the one place the application stores project files itself; removing an import from the library removes its copy |
+| `%LOCALAPPDATA%\dev.encastra.app\` | The embedded WebView2's own profile (cache and the settings the interface keeps, such as language and welcome state) |
+
+Tauri's NSIS uninstaller, run interactively, offers a checkbox to delete the application's data;
+it is unticked by default, so unless it is ticked the folders above survive the uninstall and are
+picked up again by a later install. A silent uninstall (`/S`) keeps them. To remove everything,
+tick that option or delete the two `dev.encastra.app` folders by hand after uninstalling.
 
 ---
 

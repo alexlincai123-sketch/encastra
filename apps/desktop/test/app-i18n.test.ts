@@ -49,6 +49,7 @@ const SOURCE_FILES = [
   'Sidebar.tsx',
   'canvas/Canvas.tsx',
   'canvas/ComponentNode.tsx',
+  'canvas/RefusalToast.tsx',
   'canvas/Wire.tsx',
   'canvas/ContextMenu.tsx',
   'panels/Import.tsx',

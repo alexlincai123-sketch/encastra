@@ -43,7 +43,9 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'This website',
         body: [
-          'This site loads no third-party script, no third-party font, no analytics, and no embeds — see the Content-Security-Policy enforced on every response. It sets no cookies of its own.',
+          'This site loads no third-party script, no third-party font, no analytics, and no embeds — see the Content-Security-Policy enforced on every response.',
+          'It sets one cookie, and only when you use the language switcher: `encastra-locale`, which holds the language you picked (`en` or `es`) so the next page is served in it. It lasts one year, is sent only to this site, cannot be read by page scripts, and identifies nothing about you. If you never change the language, it is never set.',
+          'The theme switch stores your choice (`light` or `dark`) in your browser’s localStorage under `encastra-theme`. That value never leaves your browser — it is not sent to this site or anywhere else — and clearing your site data removes both it and the cookie.',
           'If and when this site is hosted publicly, its infrastructure provider may record ordinary technical information about requests — such as an IP address and a timestamp — the way most web hosting does. That is a property of hosting, not a choice this project has made about tracking, and no such data is used for anything beyond operating the site.',
         ],
       },
@@ -64,19 +66,20 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
   {
     slug: 'terms-of-service',
     title: 'Terms of Service',
-    summary: 'Beta software, provided as is, with no accounts and no payments to speak of yet.',
+    summary:
+      'Pre-release software (a release candidate), provided as is, with no accounts and no payments to speak of yet.',
     sections: [
       {
         heading: 'What this covers',
         body: [
-          'These draft terms cover your use of this website and of the Encastra desktop application beta. They are not the source code licence: that is a separate document, `LICENSE` in the repository, and it is proprietary — see the note below.',
+          'These draft terms cover your use of this website and of the Encastra desktop application release candidate. They are not the source code licence: that is a separate document, `LICENSE` in the repository, and it is proprietary — see the note below.',
         ],
       },
       {
-        heading: 'Beta software, provided as is',
+        heading: 'Release-candidate software, provided as is',
         body: [
-          'The application is pre-release software. It is provided without warranty of any kind, express or implied, including any warranty of merchantability, fitness for a particular purpose, or non-infringement.',
-          'Known limitations are documented, not hidden — see /security for the capability model’s stated limits, and docs/BETA-0.2.md in the repository for what this specific release does and does not change.',
+          'The application is pre-release software: a release candidate, not a final release. It is provided without warranty of any kind, express or implied, including any warranty of merchantability, fitness for a particular purpose, or non-infringement.',
+          'Known limitations are documented, not hidden — see /security for the capability model’s stated limits, and docs/RELEASE.md in the repository for exactly which build this is and what can be checked about it.',
         ],
       },
       {
@@ -184,7 +187,8 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'Where to report',
         body: [
-          'A published security@ address does not exist yet — the domain in this project’s identifiers is not registered, so any address inferred from this site goes nowhere. Until one is published, use the repository host’s private vulnerability reporting, or contact the maintainer directly through a channel listed on /contact.',
+          'Report through GitHub’s private vulnerability reporting on the repository: https://github.com/alexlincai123-sketch/encastra/security/advisories/new (a GitHub account is needed). Only the maintainer and you can see the report.',
+          'A published security@ address does not exist — the domain in this project’s identifiers is not registered, so any address inferred from this site goes nowhere. Do not send a report to one.',
         ],
       },
       {
@@ -216,12 +220,15 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
   {
     slug: 'cookies',
     title: 'Cookie & Tracking Notice',
-    summary: 'This one is short, because this site sets none.',
+    summary:
+      'This one is short: one functional cookie for your language choice, one browser-stored theme setting, and no tracking.',
     sections: [
       {
         heading: 'What this site sets',
         body: [
-          'Nothing. This website does not set cookies, does not run analytics, and does not embed any third-party tracker. Its Content-Security-Policy blocks any script that is not served from this site itself.',
+          'One cookie, `encastra-locale`, set only when you choose a language with the language switcher. It holds that choice (`en` or `es`) so pages are served in it, lasts one year, is limited to this site, is marked HttpOnly so no script can read it, and carries no identifier. It is a functional cookie, not a tracking one.',
+          'One value in your browser’s localStorage, `encastra-theme`, written when you use the theme switch. It holds `light` or `dark`, is read only by this site’s own page script to pick the theme before the page paints, and is never sent anywhere.',
+          'Nothing else. This website does not run analytics and does not embed any third-party tracker. Its Content-Security-Policy blocks any script that is not served from this site itself. Clearing this site’s data in your browser removes both values.',
         ],
       },
       {

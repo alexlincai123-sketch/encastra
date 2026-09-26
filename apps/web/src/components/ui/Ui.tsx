@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { BuildState } from '@/config/site';
-import { STATE_LABEL } from '@/config/site';
+import { SITE, STATE_LABEL } from '@/config/site';
 import type { Locale } from '@/lib/i18n/locale';
 import { t } from '@/lib/i18n/translate';
 
@@ -167,20 +167,36 @@ export function SectionHeading({
   );
 }
 
-/** A reference to a file in the repository. Never a link — the repository is not public. */
+/**
+ * A reference to a file in the repository.
+ *
+ * The repository is public to read (the source is proprietary: reading it is not a licence to
+ * copy it). With `linked`, the path becomes a link to the file on the default branch of
+ * `SITE.repository`. Off by default: the default branch can move ahead of the build this site
+ * documents, so a caller links only where "the current version of this file" is what is meant.
+ */
 export function SourceRef({
   path,
   note,
   locale = 'en',
+  linked = false,
 }: {
   path: string;
   note?: string;
   locale?: Locale;
+  linked?: boolean;
 }): ReactNode {
+  const href = `${SITE.repository}/${path.endsWith('/') ? 'tree' : 'blob'}/main/${path}`;
   return (
     <p className={styles.sourceRef}>
       <span className={styles.sourceRefLabel}>{t(locale, 'ui.source')}</span>
-      <code>{path}</code>
+      {linked ? (
+        <a href={href} rel="noopener noreferrer">
+          <code>{path}</code>
+        </a>
+      ) : (
+        <code>{path}</code>
+      )}
       {note !== undefined ? <span className={styles.sourceRefNote}>{note}</span> : null}
     </p>
   );

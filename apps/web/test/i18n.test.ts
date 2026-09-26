@@ -84,11 +84,11 @@ describe('t()', () => {
   });
 
   it('interpolates a real templated key', () => {
-    expect(t('en', 'footer.versionLine', { version: '0.4.0-beta.1' })).toBe(
-      'Beta 0.4.0-beta.1 · Windows only · builds are not code-signed',
+    expect(t('en', 'footer.versionLine', { version: '1.2.3-rc.4' })).toBe(
+      'Release candidate 1.2.3-rc.4 · Windows only · builds are not code-signed',
     );
-    expect(t('es', 'footer.versionLine', { version: '0.4.0-beta.1' })).toBe(
-      'Beta 0.4.0-beta.1 · Solo Windows · las versiones no están firmadas',
+    expect(t('es', 'footer.versionLine', { version: '1.2.3-rc.4' })).toBe(
+      'Versión candidata 1.2.3-rc.4 · Solo Windows · las versiones no están firmadas',
     );
   });
 
