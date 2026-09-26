@@ -8,14 +8,14 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.5.0-rc.6** · built 2026-09-25 on Windows X64 by GitHub Actions run [36141602141](https://github.com/alexlincai123-sketch/encastra/actions/runs/36141602141) · build commit `7a7ab947ad68b1889283a13a8f0bfd4708ff9eed`
+**Version 0.5.0-rc.6** · built 2026-09-26 on Windows X64 by GitHub Actions run [36207932919](https://github.com/alexlincai123-sketch/encastra/actions/runs/36207932919) · build commit `dd70bb415641ffbcd3550bf31f49419d74ddaeae`
 
 Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0 · MSVC 14.44.35207 · Windows SDK 10.0.26100.0 (AdvAPI32.Lib `ecafe89a632a35b1…`) · runner image win25-vs2026 20260922.246.2. Built twice in that run, on two machines, byte-identical; the release workflow builds the build commit a third time at the tag and requires these bytes again. `scripts/pe_diff.py` names any byte that differs.
 
 | Artefact | Size | Signature | SHA-256 |
 |---|---|---|---|
-| `Encastra_0.5.0-rc.6_x64-setup.exe` | 3.5 MB | **not signed** | `e98f50d79fda7bb7ea94564ad8cf4f743bc159a4704f84bb750293e484d86284` |
-| `encastra-desktop.exe` | 9.4 MB | **not signed** | `b3f1e648ada59703edffb24d0c2fe145f74b67d9fd975cd0fa43973a99a2d394` |
+| `Encastra_0.5.0-rc.6_x64-setup.exe` | 3.5 MB | **not signed** | `9ddaeef3e6814cebf57c5836047023217732baa40780591c448192a42bca8e56` |
+| `encastra-desktop.exe` | 9.4 MB | **not signed** | `1ecc7f9d502810339e8ab07dceb25bf35390b30c3c49a6e411bfbc6d4be3901e` |
 
 Verify before installing:
 
