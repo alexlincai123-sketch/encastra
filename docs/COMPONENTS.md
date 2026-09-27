@@ -2,7 +2,7 @@
 
 Every part you have: **nineteen components and two triggers**. This is the whole set — there is
 no way to install any others, because the ability to run a stranger's component safely is
-designed and not built. See [§ What you cannot add](#what-you-cannot-add-yet) at the end.
+designed and not built. See [§ What you cannot add](#what-you-cannot-add--yet) at the end.
 
 Each entry states what the component is for, what goes in and comes out, what you can configure,
 and **what it can reach**. That last one is the interesting column. Seven of the nineteen can

@@ -1,5 +1,9 @@
 # Encastra
 
+[![CI](https://github.com/alexlincai123-sketch/encastra/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/alexlincai123-sketch/encastra/actions/workflows/ci.yml?query=branch%3Amain)
+[![Release](https://img.shields.io/github/v/release/alexlincai123-sketch/encastra?include_prereleases&sort=semver&label=release)](https://github.com/alexlincai123-sketch/encastra/releases)
+[![Licence: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/licence-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
+
 **Build software from parts that actually fit.**
 
 Encastra is a local-first runtime that executes a typed graph of components, with a visual
