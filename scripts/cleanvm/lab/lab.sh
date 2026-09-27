@@ -156,7 +156,9 @@ cycle() {
   # The command line the VM really ran with (report.py requires restrict=on in it), and every
   # frame the guest sent (net.pcap): restricted networking stops traffic, the capture records it.
   local qp=''
-  for _ in $(seq 30); do qp=$(pgrep -f -- "-name cleanvm-$name" | head -1); [ -n "$qp" ] && break; sleep 0.5; done
+  # QEMU may not have exec'd yet: under pipefail a miss from pgrep must not end the cycle and
+  # orphan the VM (rc.7 lost cycle U that way).
+  for _ in $(seq 30); do qp=$(pgrep -f -- "-name cleanvm-$name" | head -1 || true); [ -n "$qp" ] && break; sleep 0.5; done
   if [ -n "$qp" ]; then tr '\0' ' ' < "/proc/$qp/cmdline" > "$C/qemu.cmdline"; else log "cycle $name: QEMU command line not found"; fi
   ( sleep "$TIMEOUT"; kill -TERM "$qpid" 2>/dev/null && echo timeout > "$C/timed-out" ) &
   local guard=$!
