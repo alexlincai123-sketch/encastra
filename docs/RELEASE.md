@@ -8,20 +8,20 @@ How a build of Encastra is produced, what it contains, and what a person can che
 
 <!-- BUILD:START -->
 
-**Version 0.5.0-rc.6** · built 2026-09-26 on Windows X64 by GitHub Actions run [36210428063](https://github.com/alexlincai123-sketch/encastra/actions/runs/36210428063) · build commit `627c293af312b892b1b94ce184227784216f0cde`
+**Version 0.5.0-rc.7** · built 2026-09-26 on Windows X64 by GitHub Actions run [36280870081](https://github.com/alexlincai123-sketch/encastra/actions/runs/36280870081) · build commit `cdc4c356b35fad5ebc768e1c1dc1ac245b67d008`
 
 Toolchain: rustc 1.98.1 (48a229cea 2026-09-01) · node v24.15.0 · MSVC 14.44.35207 · Windows SDK 10.0.26100.0 (AdvAPI32.Lib `ecafe89a632a35b1…`) · runner image win25-vs2026 20260922.246.2. Built twice in that run, on two machines, byte-identical; the release workflow builds the build commit a third time at the tag and requires these bytes again. `scripts/pe_diff.py` names any byte that differs.
 
 | Artefact | Size | Signature | SHA-256 |
 |---|---|---|---|
-| `Encastra_0.5.0-rc.6_x64-setup.exe` | 3.5 MB | **not signed** | `59a00802f15803d6092ddbe9160f7d697ea83f096146a38a29a78e6649825b50` |
-| `encastra-desktop.exe` | 9.4 MB | **not signed** | `23203bcadde9a7585422141517038b55cf1707ae6e449e827018447a0a8c265c` |
+| `Encastra_0.5.0-rc.7_x64-setup.exe` | 3.5 MB | **not signed** | `2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438` |
+| `encastra-desktop.exe` | 9.4 MB | **not signed** | `460e9f86b7eba6d9983105ac9de1493b72ed3ca52aa5c142dff9fee2674e9764` |
 
 Verify before installing:
 
 ```powershell
-Get-FileHash .\Encastra_0.5.0-rc.6_x64-setup.exe -Algorithm SHA256
-Get-AuthenticodeSignature .\Encastra_0.5.0-rc.6_x64-setup.exe
+Get-FileHash .\Encastra_0.5.0-rc.7_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Encastra_0.5.0-rc.7_x64-setup.exe
 ```
 
 These builds are **not code-signed**, so Windows SmartScreen will warn about an unrecognised publisher. That warning is accurate: nothing here proves who built the file. The hash above is what you have instead, and it is worth checking — with the caveat that a hash published beside the download is only as trustworthy as the site serving both.
