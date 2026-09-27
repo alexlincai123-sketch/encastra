@@ -1,0 +1,207 @@
+{
+  "cycles": {
+    "D": {
+      "mode": "full",
+      "inject": [],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "33db506d185a4dc6d095a41f23fb945b528d42a93a15eaffce9aa076c293d4f3",
+        "state": "read",
+        "packets": 2296,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "config.edge.skype.com",
+          "cp801.prod.do.dsp.mp.microsoft.com",
+          "ctldl.windowsupdate.com",
+          "dns.msftncsi.com",
+          "ecs.office.com",
+          "edge.microsoft.com",
+          "fe2cr.update.microsoft.com",
+          "fs.microsoft.com",
+          "g.live.com",
+          "geo.prod.do.dsp.mp.microsoft.com",
+          "geover.prod.do.dsp.mp.microsoft.com",
+          "go.microsoft.com",
+          "officeclient.microsoft.com",
+          "searchapp.bundleassets.example",
+          "self.events.data.microsoft.com",
+          "settings-win.data.microsoft.com",
+          "to-do.microsoft.com",
+          "wdcp.microsoft.com",
+          "www.bing.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-002": {
+          "result": "PASS",
+          "assertions": 6,
+          "problems": []
+        },
+        "CLEAN-003": {
+          "result": "PASS",
+          "assertions": 34,
+          "problems": []
+        },
+        "CLEAN-004": {
+          "result": "PASS",
+          "assertions": 10,
+          "problems": []
+        },
+        "CLEAN-005": {
+          "result": "PASS",
+          "assertions": 19,
+          "problems": []
+        },
+        "CLEAN-006": {
+          "result": "PASS",
+          "assertions": 12,
+          "problems": []
+        },
+        "CLEAN-007": {
+          "result": "PASS",
+          "assertions": 27,
+          "problems": []
+        },
+        "CLEAN-008": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-009": {
+          "result": "PASS",
+          "assertions": 29,
+          "problems": []
+        },
+        "CLEAN-010": {
+          "result": "PASS",
+          "assertions": 10,
+          "problems": []
+        },
+        "CLEAN-012": {
+          "result": "PASS",
+          "assertions": 42,
+          "problems": [],
+          "webview2_profile": {
+            "Login Data": {
+              "state": "read",
+              "sha256": "b10aee4fd73538f34e604ce68d8d933656069868cf6a60a89199b8cfdb2d1c1b",
+              "rows": {
+                "logins": 0
+              },
+              "missing_tables": []
+            },
+            "Cookies": {
+              "state": "read",
+              "sha256": "de48f5c4308a2477450952a8fd6462c411cc966f9e0fb0065a252b3be831a482",
+              "rows": {
+                "cookies": 0
+              },
+              "missing_tables": []
+            },
+            "Web Data": {
+              "state": "read",
+              "sha256": "d02587610d47185dc9296676ff8cb0891450bf4ddcfe91d20ce5617baede86b4",
+              "rows": {
+                "autofill": 1,
+                "credit_cards": 0
+              },
+              "missing_tables": [],
+              "autofill": ["_r_0_-version=1.0.0"]
+            }
+          }
+        },
+        "CLEAN-013": {
+          "result": "PASS",
+          "assertions": 60,
+          "problems": [],
+          "webview2_profile": {
+            "Login Data": {
+              "state": "read",
+              "sha256": "b10aee4fd73538f34e604ce68d8d933656069868cf6a60a89199b8cfdb2d1c1b",
+              "rows": {
+                "logins": 0
+              },
+              "missing_tables": []
+            },
+            "Cookies": {
+              "state": "read",
+              "sha256": "de48f5c4308a2477450952a8fd6462c411cc966f9e0fb0065a252b3be831a482",
+              "rows": {
+                "cookies": 0
+              },
+              "missing_tables": []
+            },
+            "Web Data": {
+              "state": "read",
+              "sha256": "d02587610d47185dc9296676ff8cb0891450bf4ddcfe91d20ce5617baede86b4",
+              "rows": {
+                "autofill": 1,
+                "credit_cards": 0
+              },
+              "missing_tables": [],
+              "autofill": ["_r_0_-version=1.0.0"]
+            }
+          }
+        },
+        "CLEAN-CONTAMINATION": {
+          "result": "PASS",
+          "assertions": 22,
+          "problems": []
+        }
+      }
+    }
+  },
+  "matrix": {
+    "CLEAN-001@A": "NOT_RUN",
+    "CLEAN-002@A": "NOT_RUN",
+    "CLEAN-003@A": "NOT_RUN",
+    "CLEAN-004@A": "NOT_RUN",
+    "CLEAN-005@A": "NOT_RUN",
+    "CLEAN-006@A": "NOT_RUN",
+    "CLEAN-007@A": "NOT_RUN",
+    "CLEAN-008@A": "NOT_RUN",
+    "CLEAN-009@A": "NOT_RUN",
+    "CLEAN-010@A": "NOT_RUN",
+    "CLEAN-012@A": "NOT_RUN",
+    "CLEAN-013@A": "NOT_RUN",
+    "CLEAN-CONTAMINATION@A": "NOT_RUN",
+    "CLEAN-001@B": "NOT_RUN",
+    "CLEAN-002@B": "NOT_RUN",
+    "CLEAN-003@B": "NOT_RUN",
+    "CLEAN-004@B": "NOT_RUN",
+    "CLEAN-005@B": "NOT_RUN",
+    "CLEAN-006@B": "NOT_RUN",
+    "CLEAN-007@B": "NOT_RUN",
+    "CLEAN-008@B": "NOT_RUN",
+    "CLEAN-009@B": "NOT_RUN",
+    "CLEAN-010@B": "NOT_RUN",
+    "CLEAN-012@B": "NOT_RUN",
+    "CLEAN-013@B": "NOT_RUN",
+    "CLEAN-CONTAMINATION@B": "NOT_RUN",
+    "CLEAN-001@U": "NOT_RUN",
+    "CLEAN-002@U": "NOT_RUN",
+    "CLEAN-011@U": "NOT_RUN",
+    "CLEAN-CONTAMINATION@U": "NOT_RUN",
+    "CLEAN-014": "NOT_RUN",
+    "NEGATIVE": "NOT_RUN"
+  },
+  "negative": {},
+  "problems": [],
+  "repeatability": ["cycles A and B are both needed"],
+  "CLEAN_VM_ACCEPTANCE": "FAIL"
+}

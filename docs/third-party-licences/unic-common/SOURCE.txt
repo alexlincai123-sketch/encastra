@@ -1,0 +1,3 @@
+The published crate ships no licence file; these texts are from its upstream repository:
+LICENSE-APACHE from https://github.com/open-i18n/rust-unic/blob/16fe87b06e802f094b3fbb0894b137bca2b16ef1/LICENSE-APACHE (blob 16fe87b06e802f094b3fbb0894b137bca2b16ef1)
+LICENSE-MIT from https://github.com/open-i18n/rust-unic/blob/31aa79387f27e730e33d871925e152e35e428031/LICENSE-MIT (blob 31aa79387f27e730e33d871925e152e35e428031)

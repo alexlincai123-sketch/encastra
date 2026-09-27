@@ -1,5 +1,5 @@
 /**
- * The nine legal documents this site publishes.
+ * The seven legal documents this site publishes.
  *
  * Every one of them is a draft. None has been reviewed by a lawyer, and `/legal` says so above
  * every single document rather than once in a footer — the same discipline `docs/BRANDING.md`
@@ -7,8 +7,8 @@
  * finished policy; it exists so a reader can see what the project currently intends to promise,
  * and so a future review has a concrete draft to correct rather than a blank page.
  *
- * Facts asserted in these drafts (no accounts, no payments, no analytics, the source proprietary
- * under `LICENSE`, builds not signed) are drawn from `docs/SECURITY.md`, `docs/PROJECT-FORMAT.md`,
+ * Facts asserted in these drafts (no accounts, nothing sold, no analytics, the source under the
+ * PolyForm Noncommercial License 1.0.0 in `LICENSE`, builds not signed) are drawn from `docs/SECURITY.md`, `docs/PROJECT-FORMAT.md`,
  * `docs/PRODUCT-ROADMAP.md`, `docs/BRANDING.md`, `docs/RELEASE.md` and `lib/security.ts`, and
  * should stay in step with them.
  */
@@ -43,40 +43,41 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'This website',
         body: [
-          'This site loads no third-party script, no third-party font, no analytics, and no embeds — see the Content-Security-Policy enforced on every response. It sets no cookies of its own.',
+          'This site loads no third-party script, no third-party font, no analytics, and no embeds — see the Content-Security-Policy enforced on every response.',
+          'It sets one cookie, and only when you use the language switcher: `encastra-locale`, which holds the language you picked (`en` or `es`) so the next page is served in it. It lasts one year, is sent only to this site, cannot be read by page scripts, and identifies nothing about you. If you never change the language, it is never set.',
+          'The theme switch stores your choice (`light` or `dark`) in your browser’s localStorage under `encastra-theme`. That value never leaves your browser — it is not sent to this site or anywhere else — and clearing your site data removes both it and the cookie.',
           'If and when this site is hosted publicly, its infrastructure provider may record ordinary technical information about requests — such as an IP address and a timestamp — the way most web hosting does. That is a property of hosting, not a choice this project has made about tracking, and no such data is used for anything beyond operating the site.',
         ],
       },
       {
-        heading: 'Accounts and payments',
+        heading: 'Accounts',
         body: [
-          'There are no user accounts, no sign-in, and no payments in this build. When those exist, this document will describe exactly what they collect and why, before they collect anything.',
+          'There are no user accounts and no sign-in in this build, and nothing is sold: the application is free to download. If accounts ever exist, this document will describe exactly what they collect and why, before they collect anything.',
         ],
       },
       {
         heading: 'Contact',
-        body: [
-          'There is no dedicated privacy contact address published yet. See /contact for what channels currently exist.',
-        ],
+        body: ['There is no dedicated privacy address. See /contact for the channels that exist.'],
       },
     ],
   },
   {
     slug: 'terms-of-service',
     title: 'Terms of Service',
-    summary: 'Beta software, provided as is, with no accounts and no payments to speak of yet.',
+    summary:
+      'Pre-release software (a release candidate), free to download, provided as is, with no accounts.',
     sections: [
       {
         heading: 'What this covers',
         body: [
-          'These draft terms cover your use of this website and of the Encastra desktop application beta. They are not the source code licence: that is a separate document, `LICENSE` in the repository, and it is proprietary — see the note below.',
+          'These draft terms cover your use of this website and of the Encastra desktop application release candidate. They are not the source code licence: that is a separate document, `LICENSE` in the repository — see the note below.',
         ],
       },
       {
-        heading: 'Beta software, provided as is',
+        heading: 'Release-candidate software, provided as is',
         body: [
-          'The application is pre-release software. It is provided without warranty of any kind, express or implied, including any warranty of merchantability, fitness for a particular purpose, or non-infringement.',
-          'Known limitations are documented, not hidden — see /security for the capability model’s stated limits, and docs/BETA-0.2.md in the repository for what this specific release does and does not change.',
+          'The application is pre-release software: a release candidate, not a final release. It is provided without warranty of any kind, express or implied, including any warranty of merchantability, fitness for a particular purpose, or non-infringement.',
+          'Known limitations are documented, not hidden — see /security for the capability model’s stated limits, and docs/RELEASE.md in the repository for exactly which build this is and what can be checked about it.',
         ],
       },
       {
@@ -86,59 +87,21 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
         ],
       },
       {
-        heading: 'No accounts, no payments, no marketplace',
+        heading: 'No accounts, no marketplace, nothing sold',
         body: [
-          'None of these exist today. This document will be extended, not silently reinterpreted, when they do.',
+          'Neither accounts nor a marketplace exist today, and nothing is sold: the application is distributed free from the public GitHub repository. This document will be extended, not silently reinterpreted, if that changes.',
         ],
       },
       {
         heading: 'Source code licence',
         body: [
-          'Encastra is proprietary. The repository is public so the source can be read and its checks can run in the open, and the terms are in the LICENSE file at its root. That is not an open-source licence: no general right to copy, modify, redistribute or build works derived from it is granted, and anything wider has to be granted in writing. Third-party dependencies keep their own licences.',
+          'Encastra is source-available, free for personal, educational and other noncommercial use under the PolyForm Noncommercial License 1.0.0. The licence text is the LICENSE file at the root of the repository: https://github.com/alexlincai123-sketch/encastra/blob/main/LICENSE — that file, not this summary, is what applies. Commercial use needs a separate licence — write to alexcaioficial123@gmail.com, or ask through the GitHub repository: https://github.com/alexlincai123-sketch/encastra. Third-party dependencies keep their own licences.',
         ],
       },
       {
         heading: 'Changes',
         body: [
           'Because this entire document is a draft pending legal review, expect it to change materially, not just incrementally, before it is finalised.',
-        ],
-      },
-    ],
-  },
-  {
-    slug: 'eula',
-    title: 'End User License Agreement',
-    summary:
-      'Draft terms under which the application would be licensed to run. Not in force: the installer shows no licence page.',
-    sections: [
-      {
-        heading: 'Grant',
-        body: [
-          'Subject to these terms, you are granted a limited, personal, non-exclusive, non-transferable licence to install and run the Encastra desktop application for your own use.',
-        ],
-      },
-      {
-        heading: 'What you may not do',
-        body: [
-          'You may not redistribute the installer or binary as your own product, remove or alter any notices it displays, or use it in a way that violates applicable law.',
-        ],
-      },
-      {
-        heading: 'No warranty, no support commitment',
-        body: [
-          'The application is provided as is, without warranty, and without any commitment to provide support, bug fixes, or updates on any schedule. There is currently no update mechanism at all — see /download for exactly what that means today.',
-        ],
-      },
-      {
-        heading: 'Not code-signed',
-        body: [
-          'This build is not code-signed. Installing it means trusting a binary that Windows itself flags as coming from an unrecognised publisher. See /download and /security for what verification is possible today (a published SHA-256) and what it does and does not prove.',
-        ],
-      },
-      {
-        heading: 'Termination',
-        body: [
-          'This licence ends automatically if you breach these terms. Uninstalling the application ends it without any breach implied.',
         ],
       },
     ],
@@ -173,7 +136,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
     slug: 'security-disclosure',
     title: 'Security Disclosure Policy',
     summary:
-      'How to report a vulnerability privately. There is no bug bounty and no public address yet.',
+      'How to report a vulnerability privately. There is no bug bounty and no security email address.',
     sections: [
       {
         heading: 'Please do not open a public issue',
@@ -184,7 +147,8 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'Where to report',
         body: [
-          'A published security@ address does not exist yet — the domain in this project’s identifiers is not registered, so any address inferred from this site goes nowhere. Until one is published, use the repository host’s private vulnerability reporting, or contact the maintainer directly through a channel listed on /contact.',
+          'Report through GitHub’s private vulnerability reporting on the repository: https://github.com/alexlincai123-sketch/encastra/security/advisories/new (a GitHub account is needed). Only the maintainer and you can see the report.',
+          'A security@ address does not exist — the domain in this project’s identifiers is not registered, so any such address inferred from this site goes nowhere. The email address on /contact is for commercial licences and business enquiries; please do not send vulnerability reports there.',
         ],
       },
       {
@@ -216,12 +180,15 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
   {
     slug: 'cookies',
     title: 'Cookie & Tracking Notice',
-    summary: 'This one is short, because this site sets none.',
+    summary:
+      'This one is short: one functional cookie for your language choice, one browser-stored theme setting, and no tracking.',
     sections: [
       {
         heading: 'What this site sets',
         body: [
-          'Nothing. This website does not set cookies, does not run analytics, and does not embed any third-party tracker. Its Content-Security-Policy blocks any script that is not served from this site itself.',
+          'One cookie, `encastra-locale`, set only when you choose a language with the language switcher. It holds that choice (`en` or `es`) so pages are served in it, lasts one year, is limited to this site, is marked HttpOnly so no script can read it, and carries no identifier. It is a functional cookie, not a tracking one.',
+          'One value in your browser’s localStorage, `encastra-theme`, written when you use the theme switch. It holds `light` or `dark`, is read only by this site’s own page script to pick the theme before the page paints, and is never sent anywhere.',
+          'Nothing else. This website does not run analytics and does not embed any third-party tracker. Its Content-Security-Policy blocks any script that is not served from this site itself. Clearing this site’s data in your browser removes both values.',
         ],
       },
       {
@@ -265,7 +232,7 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'Source and content',
         body: [
-          'The source code is proprietary and its terms are in the repository’s LICENSE file — see /legal/terms-of-service. This notice covers naming and branding only, and is not a grant of rights to any code.',
+          'The source code is available under the PolyForm Noncommercial License 1.0.0, whose terms are in the repository’s LICENSE file — see /legal/terms-of-service. This notice covers naming and branding only, and is not a grant of rights to any code.',
         ],
       },
     ],
@@ -285,33 +252,13 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
       {
         heading: 'What the inventory is and is not',
         body: [
-          'It is an inventory. It lists each package’s licence identifier and where its source, and therefore its full licence text, lives. It does not reproduce every licence text inline, and it is not a legal opinion about what each licence obliges; a review of those obligations by counsel is among the steps before a non-beta release, alongside code signing. Encastra’s own licence is settled: it is proprietary, and its terms are in the repository’s LICENSE file.',
+          'It is an inventory. It lists each package’s licence identifier and where its source, and therefore its full licence text, lives. It does not reproduce every licence text inline, and it is not a legal opinion about what each licence obliges; a review of those obligations by counsel is among the steps before a non-beta release, alongside code signing. Encastra’s own licence is the PolyForm Noncommercial License 1.0.0, and its terms are in the repository’s LICENSE file.',
         ],
       },
       {
         heading: 'Requesting the list',
         body: [
           'The generated file ships with the source tree. If you need it for compliance purposes and do not have the repository, ask through /contact and it will be sent as generated for the release you name.',
-        ],
-      },
-    ],
-  },
-  {
-    slug: 'refunds',
-    title: 'Refund & Cancellation Policy',
-    summary:
-      'Nothing is sold today, so there is nothing to refund. This exists for when that changes.',
-    sections: [
-      {
-        heading: 'Nothing is sold',
-        body: [
-          'There are no payments, no subscriptions, and no paid plans anywhere in this build. The download is free, and there is no purchase to cancel or refund.',
-        ],
-      },
-      {
-        heading: 'When payments exist',
-        body: [
-          'The product roadmap treats payments as a sandboxed, later-stage capability, arriving well after a working marketplace listing model — real money movement is explicitly out of scope for the current milestone. This document will be rewritten with real terms before that capability ships, not adapted retroactively after it does.',
         ],
       },
     ],

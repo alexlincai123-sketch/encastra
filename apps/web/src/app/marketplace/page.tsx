@@ -41,7 +41,6 @@ export default async function MarketplacePage(): Promise<ReactNode> {
             <a href="/components">{t(locale, 'marketplace.notBuilt.body1LinkText')}</a>{' '}
             {t(locale, 'marketplace.notBuilt.body1Suffix')}
           </p>
-          <p>{t(locale, 'marketplace.notBuilt.body2')}</p>
         </NotBuilt>
         <ButtonRow>
           <CTA href="/ecosystem">{t(locale, 'marketplace.ctaEcosystem')}</CTA>

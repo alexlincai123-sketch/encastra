@@ -1,10 +1,25 @@
 # Licensing
 
-**Status: decided — proprietary. `LICENSE` at the root is the operative document; this one is the
-record of how that was reached and what it forecloses.** The options below are kept because a
-decision is only legible next to the ones it rejected. **None of them is on offer. Nothing in
-this document grants anything**, and a reader of the now-public repository should take the
-sections headed "Source available" and "Open source" as roads not taken, not as intent.
+**Status (2026-09-26): decided — source-available, free for noncommercial use, under the PolyForm
+Noncommercial License 1.0.0.** `LICENSE` at the root is the operative document (the official text,
+unmodified, with the Required Notice line); `Cargo.toml` and `package.json` carry the SPDX
+identifier `PolyForm-Noncommercial-1.0.0`. Personal, educational and other noncommercial use is
+licensed; commercial use is not, and needs a separate licence - write to
+alexcaioficial123@gmail.com (commercial licences and business enquiries). It is not open source in the OSI sense, and nothing here should call it that.
+
+Third-party components keep their own licences (docs/THIRD-PARTY.md, NOTICE); the one copyleft
+family among them, MPL-2.0, obliges per file and is compatible with distributing the combined
+binary under these terms. A lawyer has not reviewed this.
+
+**Everything below is the earlier record, kept as history:** until 2026-09-26 the repository was
+public and proprietary, and the sections that follow describe that decision and the roads it did
+not take then.
+
+---
+
+**Earlier status: decided — proprietary.** The options below were kept because a
+decision is only legible next to the ones it rejected, and a reader of the public repository
+should take the sections headed "Source available" and "Open source" as they were written then.
 
 ---
 

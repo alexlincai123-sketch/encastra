@@ -8,6 +8,7 @@
  */
 
 import { Fragment } from 'react';
+import { componentDescription, componentName } from '../component-text';
 import { describeNodeError, isKnownNodeError } from '../errors';
 import { splitOnPlaceholder, useTranslation } from '../i18n';
 import { ipc } from '../ipc';
@@ -429,6 +430,9 @@ function RunRecord({ record }: { record: NodeRecord }) {
           {!isKnownNodeError(record.error) && record.error.hint ? (
             <span className="note__hint">{record.error.hint}</span>
           ) : null}
+          {record.error.code === 'denied' && denied.some((call) => call.denied_because) ? (
+            <span className="note__hint">{t('inspector.runRecord.seeRefusalReason')}</span>
+          ) : null}
           <span className="note__hint">
             {t('inspector.runRecord.code', { code: record.error.code })}
           </span>
@@ -480,6 +484,13 @@ function RunRecord({ record }: { record: NodeRecord }) {
                 </span>
                 <span>{call.kind}</span>
                 <span style={{ color: 'var(--ink-faint)' }}>{call.detail}</span>
+                {/* The broker's own reason, when it refused. It is the only place that says
+                    *why* — "a file of that name is already there" — where the step's error only
+                    says that something was refused. Shown as the runtime wrote it: it names the
+                    rule that was applied, and a paraphrase could name a different one. */}
+                {!call.allowed && call.denied_because ? (
+                  <span className="trace__reason">— {call.denied_because}</span>
+                ) : null}
               </div>
             ))}
           </div>
@@ -544,14 +555,16 @@ export function Inspector() {
 
   return (
     <aside className="panel panel--inspector">
-      <h2 className="panel__title">{manifest.name}</h2>
+      <h2 className="panel__title">{componentName(manifest)}</h2>
 
       <div className="panel__section">
         <dl className="kv">
           <dt>{t('inspector.component')}</dt>
           <dd>{node.data.componentRef}</dd>
         </dl>
-        {manifest.description ? <p className="field__doc">{manifest.description}</p> : null}
+        {componentDescription(manifest) ? (
+          <p className="field__doc">{componentDescription(manifest)}</p>
+        ) : null}
         <button
           type="button"
           className="btn"

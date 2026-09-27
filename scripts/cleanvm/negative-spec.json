@@ -1,0 +1,73 @@
+{
+  "N1-tampered": {
+    "harness": ["--tamper-installer", "--steps", "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"],
+    "must_fail": {
+      "CLEAN-002": [
+        "installer sha256 is the published digest",
+        "copy in Downloads is byte-identical"
+      ]
+    },
+    "must_not_run": ["CLEAN-003"]
+  },
+  "N2-missing": {
+    "harness": ["--omit-installer", "--steps", "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"],
+    "must_fail": { "CLEAN-002": ["installer present on the harness disc"] },
+    "must_not_run": ["CLEAN-003"]
+  },
+  "N3-contaminated": {
+    "harness": [
+      "--inject",
+      "stale",
+      "--inject",
+      "preinstalled",
+      "--inject",
+      "stray-process",
+      "--steps",
+      "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"
+    ],
+    "must_fail": {
+      "CLEAN-001": [
+        "no marker from an earlier cycle",
+        "no file or folder named *encastra*",
+        "no Encastra uninstall entry",
+        "no Encastra or Encastra WebView2 process"
+      ]
+    },
+    "must_not_run": ["CLEAN-002", "CLEAN-003"]
+  },
+  "N4-wrong-version": {
+    "harness": [
+      "--inject",
+      "wrong-version",
+      "--steps",
+      "CLEAN-001,CLEAN-002,CLEAN-003,CLEAN-004,CONTAMINATION"
+    ],
+    "must_fail": {
+      "CLEAN-003": [
+        "install_check reported no FAIL line",
+        "install_check PASS: installed ProductVersion"
+      ]
+    },
+    "must_not_run": ["CLEAN-004"]
+  },
+  "N5-runtime": {
+    "harness": [
+      "--inject",
+      "not-ready",
+      "--inject",
+      "hidden-fail",
+      "--inject",
+      "persist",
+      "--repeat",
+      "1",
+      "--steps",
+      "CLEAN-001,CLEAN-002,CLEAN-003,CLEAN-004,CLEAN-005,CLEAN-012,CONTAMINATION"
+    ],
+    "must_fail": {
+      "CLEAN-004": ["the application reaches ready"],
+      "CLEAN-005": ["no FAIL or SKIP line anywhere"],
+      "CLEAN-012": ["after uninstall, run_keys is as the baseline"],
+      "CLEAN-CONTAMINATION": ["run_keys unchanged from the baseline"]
+    }
+  }
+}

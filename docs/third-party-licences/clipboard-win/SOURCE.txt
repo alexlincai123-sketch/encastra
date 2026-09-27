@@ -1,0 +1,2 @@
+The published crate ships no licence file; these texts are from its upstream repository:
+LICENSE from https://github.com/DoumanAsh/clipboard-win/blob/36b7cd93cdfbac762f5be4c6ce276df2ea6305c2/LICENSE (blob 36b7cd93cdfbac762f5be4c6ce276df2ea6305c2)

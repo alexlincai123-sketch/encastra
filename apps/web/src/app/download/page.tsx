@@ -1,8 +1,15 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { Callout, Card, PageHeader, SectionHeading, StatusBadge } from '@/components/ui/Ui';
-import { RELEASE, RELEASE_MATCHES_VERSION, REQUIREMENTS, STATUS, VERSION } from '@/config/site';
+import { Callout, Card, CTA, PageHeader, SectionHeading, StatusBadge } from '@/components/ui/Ui';
+import {
+  RELEASE,
+  RELEASE_MATCHES_VERSION,
+  RELEASES_URL,
+  REQUIREMENTS,
+  STATUS,
+  VERSION,
+} from '@/config/site';
 import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import { DownloadTarget } from './DownloadTarget';
@@ -60,9 +67,7 @@ export default async function DownloadPage(): Promise<ReactNode> {
               />
               <h3>{t(locale, 'download.platforms.windowsTitle')}</h3>
               <p>{t(locale, 'download.platforms.windowsBody')}</p>
-              <span className={styles.unavailableButton} aria-disabled="true">
-                {t(locale, 'download.platforms.noHostYet')}
-              </span>
+              <CTA href={RELEASES_URL}>{t(locale, 'download.platforms.downloadCta')}</CTA>
             </div>
           </Card>
           <Card>
@@ -82,10 +87,10 @@ export default async function DownloadPage(): Promise<ReactNode> {
         </div>
 
         <Callout tone="note">
-          {t(locale, 'download.noHostCallout.part1')} <code>encastra.dev</code>{' '}
-          {t(locale, 'download.noHostCallout.part2')} <a href="/about#name">/about</a>
-          {t(locale, 'download.noHostCallout.part3')} <code>docs/RELEASE.md</code>
-          {t(locale, 'download.noHostCallout.part4')}
+          {t(locale, 'download.releasesCallout.part1')}{' '}
+          <a href={RELEASES_URL}>{t(locale, 'download.releasesCallout.linkText')}</a>
+          {t(locale, 'download.releasesCallout.part2')} <code>docs/RELEASE.md</code>
+          {t(locale, 'download.releasesCallout.part3')}
         </Callout>
 
         <div className={styles.artefact}>

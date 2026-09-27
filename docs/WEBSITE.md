@@ -42,7 +42,6 @@ can become a component — so a beat that cannot name what it explains does not 
 | `/docs` | The reference material |
 | `/security` | The permission model, and what it does not protect against |
 | `/download` | The beta, its hash, and its signing status |
-| `/pricing` | What it costs today |
 | `/about`, `/contact` | Who and where |
 | `/community`, `/marketplace` | **Not built.** Shown as designed, never as working |
 | `/legal` + `/legal/[slug]` | Nine draft documents |

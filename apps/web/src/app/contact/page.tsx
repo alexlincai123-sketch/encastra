@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { Callout, Card, CTA, PageHeader, SectionHeading } from '@/components/ui/Ui';
+import { ButtonRow, Callout, Card, CTA, PageHeader, SectionHeading } from '@/components/ui/Ui';
+import { CONTACT_EMAIL, SECURITY_REPORT_URL, SITE } from '@/config/site';
 import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,10 +26,10 @@ export default async function ContactPage(): Promise<ReactNode> {
         lead={t(locale, 'contact.hero.lead')}
       />
 
-      <Callout tone="note" title={t(locale, 'contact.noAddress.title')}>
-        {t(locale, 'contact.noAddress.bodyPrefix')} <code>encastra.dev</code>,{' '}
-        {t(locale, 'contact.noAddress.bodyMiddle')} <a href="/about#name">/about</a>
-        {t(locale, 'contact.noAddress.bodySuffix')}
+      <Callout tone="note" title={t(locale, 'contact.email.title')}>
+        {t(locale, 'contact.email.bodyPrefix')}{' '}
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        {t(locale, 'contact.email.bodySuffix')}
       </Callout>
 
       <section className="section">
@@ -38,9 +39,12 @@ export default async function ContactPage(): Promise<ReactNode> {
         />
         <Card>
           <p className="prose">{t(locale, 'contact.security.body')}</p>
-          <CTA href="/legal/security-disclosure" variant="secondary">
-            {t(locale, 'contact.security.cta')}
-          </CTA>
+          <ButtonRow>
+            <CTA href={SECURITY_REPORT_URL}>{t(locale, 'contact.security.reportCta')}</CTA>
+            <CTA href="/legal/security-disclosure" variant="secondary">
+              {t(locale, 'contact.security.cta')}
+            </CTA>
+          </ButtonRow>
         </Card>
       </section>
 
@@ -49,7 +53,13 @@ export default async function ContactPage(): Promise<ReactNode> {
           eyebrow={t(locale, 'contact.everythingElse.eyebrow')}
           title={t(locale, 'contact.everythingElse.title')}
         />
-        <p className="prose">{t(locale, 'contact.everythingElse.body')}</p>
+        <p className="prose">
+          {t(locale, 'contact.everythingElse.bodyPrefix')}{' '}
+          <a href={SITE.repository} rel="noopener noreferrer">
+            {SITE.repository.replace('https://', '')}
+          </a>{' '}
+          {t(locale, 'contact.everythingElse.bodySuffix')}
+        </p>
       </section>
     </div>
   );

@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useFocusTrap } from '../a11y/focus';
-import { chooseFolderOrExplain } from '../chooser';
+import { chooseFolderOrExplain, describeFailure } from '../chooser';
 import { useTranslation } from '../i18n';
 import { ipc } from '../ipc';
 import { type DraftFields, draftProblems, listingId } from '../publish';
@@ -77,7 +77,9 @@ export function Publish() {
     try {
       setReview(await ipc.reviewPublication(projectPath, { id: licence }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      // `describeFailure`, not `String(cause)`: the runtime rejects with a plain `AppError` object,
+      // and `String` of that is "[object Object]".
+      setError(describeFailure(cause));
       setReview(null);
     } finally {
       setBusy(false);
@@ -140,7 +142,9 @@ export function Publish() {
       // finds out, rather than editing its own copy and hoping the two agree.
       await useEditor.getState().loadLibrary();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      // `describeFailure`, not `String(cause)`: the runtime rejects with a plain `AppError` object,
+      // and `String` of that is "[object Object]".
+      setError(describeFailure(cause));
     } finally {
       setBusy(false);
     }

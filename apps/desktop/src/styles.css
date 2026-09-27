@@ -781,6 +781,14 @@ select.input {
   color: var(--danger);
 }
 
+/* Why the broker refused a call. Faint like the detail beside it, and allowed to wrap: it is a
+   sentence, and a mono line that ran off the side of the panel would hide the end of it. */
+.trace__reason {
+  color: var(--ink-faint);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* ---------------------------------------------------------------------------------------
  * Status bar
  * ------------------------------------------------------------------------------------ */

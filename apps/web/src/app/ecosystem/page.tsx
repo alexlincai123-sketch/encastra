@@ -52,8 +52,12 @@ const REFUSALS = ['secret', 'path', 'unknown', 'changed', 'licence'] as const;
 /** What a registry would have to guarantee before anybody installs anything from it. */
 const GUARANTEES = ['immutable', 'disclosure', 'namespace', 'noScripts', 'verified'] as const;
 
-/** The order from `docs/PLATFORM-ARCHITECTURE.md` §6. It is a sequence, not a list. */
-const ORDER = ['review', 'sandbox', 'signing', 'licence', 'registry', 'legal', 'money'] as const;
+/**
+ * The order from `docs/PLATFORM-ARCHITECTURE.md` §6, without its last step (payments): Encastra
+ * is distributed free and this site does not describe anything commercial. It is a sequence,
+ * not a list.
+ */
+const ORDER = ['review', 'sandbox', 'signing', 'licence', 'registry', 'legal'] as const;
 
 function Steps({ locale }: { locale: Locale }): ReactNode {
   return (
@@ -138,18 +142,6 @@ export default async function EcosystemPage(): Promise<ReactNode> {
               ))}
             </ol>
             <p>{t(locale, 'ecosystem.order.why')}</p>
-          </div>
-        </section>
-
-        <section className="section">
-          <SectionHeading
-            eyebrow={t(locale, 'ecosystem.money.eyebrow')}
-            title={t(locale, 'ecosystem.money.title')}
-            lead={t(locale, 'ecosystem.money.lead')}
-          />
-          <div className="prose">
-            <p>{t(locale, 'ecosystem.money.body')}</p>
-            <p>{t(locale, 'ecosystem.money.rule')}</p>
           </div>
         </section>
 

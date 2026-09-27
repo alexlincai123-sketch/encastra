@@ -9,7 +9,7 @@
  * meant to be read verbatim rather than styled as prose.
  */
 
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 
 // --- Layout ---------------------------------------------------------------------------------
 
@@ -185,9 +185,18 @@ export function Button({ children, onClick }: { children: ReactNode; onClick: ()
   );
 }
 
-export function DangerButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+export function DangerButton({
+  children,
+  onClick,
+  ref,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  /** So a confirmation that replaces this button can hand focus back to it when it closes. */
+  ref?: Ref<HTMLButtonElement>;
+}) {
   return (
-    <button type="button" className="btn s-btn--danger" onClick={onClick}>
+    <button type="button" className="btn s-btn--danger" onClick={onClick} ref={ref}>
       {children}
     </button>
   );

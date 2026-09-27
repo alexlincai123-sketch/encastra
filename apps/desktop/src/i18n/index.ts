@@ -310,7 +310,12 @@ export function formatRelative(
  *
  * Pairs with a message tree shaped `{ one: '...', other: '...' }`: look up the category, then
  * translate that key, rather than gluing a count onto an English-only "s".
+ *
+ * Only those two categories ever come out. `Intl.PluralRules` knows more than the message trees
+ * do — CLDR gives Spanish, French, Italian and Portuguese a `'many'` for round millions — and a
+ * category no tree has a branch for would render the raw key. Everything that is not `'one'` is
+ * `'other'`, which is what `'many'` means in every language shipped here.
  */
-export function selectPlural(locale: Locale, count: number): Intl.LDMLPluralRule {
-  return new Intl.PluralRules(locale).select(count);
+export function selectPlural(locale: Locale, count: number): 'one' | 'other' {
+  return new Intl.PluralRules(locale).select(count) === 'one' ? 'one' : 'other';
 }

@@ -15,6 +15,7 @@
 import { namedTypesIn, tryParseType, typeDef } from '@encastra/protocol';
 import { Handle, type NodeProps, Position } from '@xyflow/react';
 import type React from 'react';
+import { componentName } from '../component-text';
 import { useTranslation } from '../i18n';
 import { type EditorNode, useEditor } from '../store';
 import type { Port } from '../types';
@@ -137,7 +138,7 @@ export function ComponentNode({ id, data, selected }: NodeProps<EditorNode>) {
       <span className="node__state" aria-hidden="true" />
       <div className="node__header">
         <StateGlyph state={state} />
-        <span className="node__name">{data.label ?? manifest.name}</span>
+        <span className="node__name">{data.label ?? componentName(manifest)}</span>
         {record?.duration_ms !== undefined ? (
           <span className="port__type">{record.duration_ms}ms</span>
         ) : null}

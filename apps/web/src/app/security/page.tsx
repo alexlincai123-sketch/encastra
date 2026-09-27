@@ -1,7 +1,16 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { Callout, Card, CTA, PageHeader, SectionHeading, SourceRef } from '@/components/ui/Ui';
+import {
+  ButtonRow,
+  Callout,
+  Card,
+  CTA,
+  PageHeader,
+  SectionHeading,
+  SourceRef,
+} from '@/components/ui/Ui';
+import { SECURITY_REPORT_URL } from '@/config/site';
 import { getLocale, pageMetadata, t } from '@/lib/i18n';
 
 import styles from './page.module.css';
@@ -201,9 +210,14 @@ export default async function SecurityPage(): Promise<ReactNode> {
             <p>{t(locale, 'security.reporting.noAddress')}</p>
           </Callout>
           <div className={styles.disclosureCta}>
-            <CTA href="/legal/security-disclosure" variant="secondary">
-              {t(locale, 'security.reporting.readDisclosure')}
-            </CTA>
+            <ButtonRow>
+              <CTA href={SECURITY_REPORT_URL}>
+                {t(locale, 'security.reporting.reportPrivately')}
+              </CTA>
+              <CTA href="/legal/security-disclosure" variant="secondary">
+                {t(locale, 'security.reporting.readDisclosure')}
+              </CTA>
+            </ButtonRow>
           </div>
         </div>
       </section>

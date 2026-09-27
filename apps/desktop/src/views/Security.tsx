@@ -6,6 +6,7 @@
  * workflow that is open, and what the product does **not** protect against.
  */
 
+import { componentName } from '../component-text';
 import { splitOnPlaceholder, useTranslation } from '../i18n';
 import { ipc } from '../ipc';
 import { capabilityLabel } from '../settings/categories';
@@ -55,7 +56,7 @@ export function Security() {
                 return (
                   <tr key={`${manifest.id}@${manifest.version}`}>
                     <td>
-                      <strong>{manifest.name}</strong>
+                      <strong>{componentName(manifest)}</strong>
                       <br />
                       <code className="table__id">{manifest.id}</code>
                     </td>
@@ -100,7 +101,7 @@ export function Security() {
               const manifest = node ? manifests[node.data.componentRef] : undefined;
               return (
                 <li key={`${grant.node}-${grant.kind}`}>
-                  <strong>{manifest?.name ?? grant.node}</strong>
+                  <strong>{manifest ? componentName(manifest) : grant.node}</strong>
                   <span className="grants__what">{capabilityLabel(grant.kind, t)}</span>
                   {grant.folder ? <code>{grant.folder}</code> : null}
                   {grant.hosts?.length ? <code>{grant.hosts.join(', ')}</code> : null}

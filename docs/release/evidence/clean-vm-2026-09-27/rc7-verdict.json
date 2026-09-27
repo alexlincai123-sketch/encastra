@@ -1,0 +1,948 @@
+{
+  "cycles": {
+    "A": {
+      "mode": "full",
+      "inject": [],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "ac0ebb3029db5a8e77fa671912c040d3d44fd46c49137e6bae07eb66d06599c6",
+        "state": "read",
+        "packets": 2824,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "config.edge.skype.com",
+          "ctldl.windowsupdate.com",
+          "displaycatalog.mp.microsoft.com",
+          "dns.msftncsi.com",
+          "ecs.office.com",
+          "edge.microsoft.com",
+          "fd.api.iris.microsoft.com",
+          "fs.microsoft.com",
+          "g.live.com",
+          "geo.prod.do.dsp.mp.microsoft.com",
+          "go.microsoft.com",
+          "msedge.api.cdp.microsoft.com",
+          "officeclient.microsoft.com",
+          "searchapp.bundleassets.example",
+          "self.events.data.microsoft.com",
+          "settings-win.data.microsoft.com",
+          "tas02.sls.update.microsoft.com",
+          "to-do.microsoft.com",
+          "wdcp.microsoft.com",
+          "www.bing.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-002": {
+          "result": "PASS",
+          "assertions": 6,
+          "problems": []
+        },
+        "CLEAN-003": {
+          "result": "PASS",
+          "assertions": 34,
+          "problems": []
+        },
+        "CLEAN-004": {
+          "result": "PASS",
+          "assertions": 10,
+          "problems": []
+        },
+        "CLEAN-005": {
+          "result": "PASS",
+          "assertions": 19,
+          "problems": []
+        },
+        "CLEAN-006": {
+          "result": "PASS",
+          "assertions": 12,
+          "problems": []
+        },
+        "CLEAN-007": {
+          "result": "PASS",
+          "assertions": 27,
+          "problems": []
+        },
+        "CLEAN-008": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-009": {
+          "result": "PASS",
+          "assertions": 29,
+          "problems": []
+        },
+        "CLEAN-010": {
+          "result": "PASS",
+          "assertions": 10,
+          "problems": []
+        },
+        "CLEAN-012": {
+          "result": "PASS",
+          "assertions": 42,
+          "problems": [],
+          "webview2_profile": {
+            "Login Data": {
+              "state": "read",
+              "sha256": "b10aee4fd73538f34e604ce68d8d933656069868cf6a60a89199b8cfdb2d1c1b",
+              "rows": {
+                "logins": 0
+              },
+              "missing_tables": []
+            },
+            "Cookies": {
+              "state": "read",
+              "sha256": "de48f5c4308a2477450952a8fd6462c411cc966f9e0fb0065a252b3be831a482",
+              "rows": {
+                "cookies": 0
+              },
+              "missing_tables": []
+            },
+            "Web Data": {
+              "state": "read",
+              "sha256": "6c9ba6f0fd6c364bddd276f2dc11c32d4d74e02f02e12447777d1f3ae1e30952",
+              "rows": {
+                "autofill": 1,
+                "credit_cards": 0
+              },
+              "missing_tables": [],
+              "autofill": ["_r_0_-version=1.0.0"]
+            }
+          }
+        },
+        "CLEAN-013": {
+          "result": "PASS",
+          "assertions": 60,
+          "problems": [],
+          "webview2_profile": {
+            "Login Data": {
+              "state": "read",
+              "sha256": "b10aee4fd73538f34e604ce68d8d933656069868cf6a60a89199b8cfdb2d1c1b",
+              "rows": {
+                "logins": 0
+              },
+              "missing_tables": []
+            },
+            "Cookies": {
+              "state": "read",
+              "sha256": "de48f5c4308a2477450952a8fd6462c411cc966f9e0fb0065a252b3be831a482",
+              "rows": {
+                "cookies": 0
+              },
+              "missing_tables": []
+            },
+            "Web Data": {
+              "state": "read",
+              "sha256": "6c9ba6f0fd6c364bddd276f2dc11c32d4d74e02f02e12447777d1f3ae1e30952",
+              "rows": {
+                "autofill": 1,
+                "credit_cards": 0
+              },
+              "missing_tables": [],
+              "autofill": ["_r_0_-version=1.0.0"]
+            }
+          }
+        },
+        "CLEAN-CONTAMINATION": {
+          "result": "PASS",
+          "assertions": 22,
+          "problems": []
+        }
+      }
+    },
+    "B": {
+      "mode": "full",
+      "inject": [],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "0a75297a88769e6a0b70cb3ed99a3afc7c6708e70fc3e1ed74f3bc48bab571d3",
+        "state": "read",
+        "packets": 3454,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "assets.msn.com",
+          "config.edge.skype.com",
+          "ctldl.windowsupdate.com",
+          "displaycatalog.mp.microsoft.com",
+          "dns.msftncsi.com",
+          "ecs.office.com",
+          "edge.microsoft.com",
+          "fd.api.iris.microsoft.com",
+          "fs.microsoft.com",
+          "g.live.com",
+          "geo.prod.do.dsp.mp.microsoft.com",
+          "go.microsoft.com",
+          "msedge.api.cdp.microsoft.com",
+          "officeclient.microsoft.com",
+          "searchapp.bundleassets.example",
+          "self.events.data.microsoft.com",
+          "settings-win.data.microsoft.com",
+          "tas02.sls.update.microsoft.com",
+          "wdcp.microsoft.com",
+          "windows.msn.com",
+          "www.bing.com",
+          "www.microsoft.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-002": {
+          "result": "PASS",
+          "assertions": 6,
+          "problems": []
+        },
+        "CLEAN-003": {
+          "result": "PASS",
+          "assertions": 34,
+          "problems": []
+        },
+        "CLEAN-004": {
+          "result": "PASS",
+          "assertions": 10,
+          "problems": []
+        },
+        "CLEAN-005": {
+          "result": "PASS",
+          "assertions": 19,
+          "problems": []
+        },
+        "CLEAN-006": {
+          "result": "PASS",
+          "assertions": 12,
+          "problems": []
+        },
+        "CLEAN-007": {
+          "result": "PASS",
+          "assertions": 27,
+          "problems": []
+        },
+        "CLEAN-008": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-009": {
+          "result": "PASS",
+          "assertions": 29,
+          "problems": []
+        },
+        "CLEAN-010": {
+          "result": "PASS",
+          "assertions": 10,
+          "problems": []
+        },
+        "CLEAN-012": {
+          "result": "PASS",
+          "assertions": 42,
+          "problems": [],
+          "webview2_profile": {
+            "Login Data": {
+              "state": "read",
+              "sha256": "b10aee4fd73538f34e604ce68d8d933656069868cf6a60a89199b8cfdb2d1c1b",
+              "rows": {
+                "logins": 0
+              },
+              "missing_tables": []
+            },
+            "Cookies": {
+              "state": "read",
+              "sha256": "de48f5c4308a2477450952a8fd6462c411cc966f9e0fb0065a252b3be831a482",
+              "rows": {
+                "cookies": 0
+              },
+              "missing_tables": []
+            },
+            "Web Data": {
+              "state": "read",
+              "sha256": "01c74201357e03504afc38ef67e34e947f99106a4db1cd73e06ff6746cd6ca90",
+              "rows": {
+                "autofill": 1,
+                "credit_cards": 0
+              },
+              "missing_tables": [],
+              "autofill": ["_r_0_-version=1.0.0"]
+            }
+          }
+        },
+        "CLEAN-013": {
+          "result": "PASS",
+          "assertions": 60,
+          "problems": [],
+          "webview2_profile": {
+            "Login Data": {
+              "state": "read",
+              "sha256": "b10aee4fd73538f34e604ce68d8d933656069868cf6a60a89199b8cfdb2d1c1b",
+              "rows": {
+                "logins": 0
+              },
+              "missing_tables": []
+            },
+            "Cookies": {
+              "state": "read",
+              "sha256": "de48f5c4308a2477450952a8fd6462c411cc966f9e0fb0065a252b3be831a482",
+              "rows": {
+                "cookies": 0
+              },
+              "missing_tables": []
+            },
+            "Web Data": {
+              "state": "read",
+              "sha256": "01c74201357e03504afc38ef67e34e947f99106a4db1cd73e06ff6746cd6ca90",
+              "rows": {
+                "autofill": 1,
+                "credit_cards": 0
+              },
+              "missing_tables": [],
+              "autofill": ["_r_0_-version=1.0.0"]
+            }
+          }
+        },
+        "CLEAN-CONTAMINATION": {
+          "result": "PASS",
+          "assertions": 22,
+          "problems": []
+        }
+      }
+    },
+    "U": {
+      "mode": "upgrade",
+      "inject": [],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "89271e75f8a3839d0908c83ad3f21eadbd554709a9a9304383991390c6491f55",
+        "state": "read",
+        "packets": 1217,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "config.edge.skype.com",
+          "dns.msftncsi.com",
+          "edge.microsoft.com",
+          "fd.api.iris.microsoft.com",
+          "g.live.com",
+          "geo.prod.do.dsp.mp.microsoft.com",
+          "go.microsoft.com",
+          "searchapp.bundleassets.example",
+          "tas02.sls.update.microsoft.com",
+          "to-do.microsoft.com",
+          "wdcp.microsoft.com",
+          "www.bing.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-002": {
+          "result": "PASS",
+          "assertions": 12,
+          "problems": []
+        },
+        "CLEAN-011": {
+          "result": "PASS",
+          "assertions": 98,
+          "problems": []
+        },
+        "CLEAN-CONTAMINATION": {
+          "result": "PASS",
+          "assertions": 22,
+          "problems": []
+        }
+      }
+    },
+    "N1-tampered": {
+      "mode": "full",
+      "inject": [],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "f6f587bd1aa7f34bd0e4a5f248117cd3a3d27ccf6e841c8b257e5abd77fdeb7e",
+        "state": "read",
+        "packets": 788,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "config.edge.skype.com",
+          "ctldl.windowsupdate.com",
+          "dns.msftncsi.com",
+          "ecs.office.com",
+          "fd.api.iris.microsoft.com",
+          "g.live.com",
+          "geover.prod.do.dsp.mp.microsoft.com",
+          "go.microsoft.com",
+          "msedge.api.cdp.microsoft.com",
+          "searchapp.bundleassets.example",
+          "tas02.sls.update.microsoft.com",
+          "wdcp.microsoft.com",
+          "www.bing.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-002": {
+          "result": "FAIL",
+          "assertions": 6,
+          "problems": [
+            "FAIL: candidate installer sha256 is the published digest -> 28b0ddaf475e62eb3944e49f5bfe1897a2114c9ec9c271485727597367b1d6fa",
+            "FAIL: candidate the copy in Downloads is byte-identical -> 28b0ddaf475e62eb3944e49f5bfe1897a2114c9ec9c271485727597367b1d6fa"
+          ]
+        }
+      }
+    },
+    "N2-missing": {
+      "mode": "full",
+      "inject": [],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "d24135abeddbe2ec3f6488e278294a3625d112c3cac7d01a7f68ccef8904a3c4",
+        "state": "read",
+        "packets": 724,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "config.edge.skype.com",
+          "ctldl.windowsupdate.com",
+          "dns.msftncsi.com",
+          "fd.api.iris.microsoft.com",
+          "g.live.com",
+          "geo.prod.do.dsp.mp.microsoft.com",
+          "go.microsoft.com",
+          "msedge.api.cdp.microsoft.com",
+          "officeclient.microsoft.com",
+          "searchapp.bundleassets.example",
+          "self.events.data.microsoft.com",
+          "tas02.sls.update.microsoft.com",
+          "wdcp.microsoft.com",
+          "www.bing.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-002": {
+          "result": "FAIL",
+          "assertions": 1,
+          "problems": [
+            "FAIL: candidate installer present on the harness disc -> D:\\artifacts\\Encastra_0.5.0-rc.7_x64-setup.exe",
+            "required check missing: 'installer sha256 is the published digest'",
+            "required check missing: 'host verified the'",
+            "required check missing: 'signature state'",
+            "required check missing: 'byte-identical'"
+          ]
+        }
+      }
+    },
+    "N3-contaminated": {
+      "mode": "full",
+      "inject": ["stale", "preinstalled", "stray-process"],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "122c720d69cbf65c7f74f92b95fbb54f06506c9eec07342497047925808b46e2",
+        "state": "read",
+        "packets": 893,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "config.edge.skype.com",
+          "ctldl.windowsupdate.com",
+          "displaycatalog.mp.microsoft.com",
+          "dns.msftncsi.com",
+          "ecs.office.com",
+          "edge.microsoft.com",
+          "fd.api.iris.microsoft.com",
+          "g.live.com",
+          "geo.prod.do.dsp.mp.microsoft.com",
+          "geover.prod.do.dsp.mp.microsoft.com",
+          "go.microsoft.com",
+          "msedge.api.cdp.microsoft.com",
+          "officeclient.microsoft.com",
+          "searchapp.bundleassets.example",
+          "tas02.sls.update.microsoft.com",
+          "wdcp.microsoft.com",
+          "www.bing.com",
+          "www.microsoft.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "FAIL",
+          "assertions": 17,
+          "problems": [
+            "FAIL: no marker from an earlier cycle (fresh overlay of the base) -> left by an earlier cycle (injected)",
+            "FAIL: no file or folder named *encastra* anywhere on C: -> 2: C:\\Users\\tester\\AppData\\Local\\Encastra C:\\Users\\tester\\AppData\\Local\\Encastra\\encastra-desktop.exe",
+            "FAIL: no Encastra uninstall entry in HKCU or HKLM -> hive key name version ---- --- ---- ------- HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall Encastra-injected Encastra",
+            "FAIL: no Encastra or Encastra WebView2 process -> encastra-desktop.exe"
+          ]
+        }
+      }
+    },
+    "N4-wrong-version": {
+      "mode": "full",
+      "inject": ["wrong-version"],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "359cbb004f87b2a79ac4abe19c32a5d4238a059ce913690afee433e0acae3fe5",
+        "state": "read",
+        "packets": 744,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "config.edge.skype.com",
+          "ctldl.windowsupdate.com",
+          "dns.msftncsi.com",
+          "edge.microsoft.com",
+          "fd.api.iris.microsoft.com",
+          "g.live.com",
+          "go.microsoft.com",
+          "msedge.api.cdp.microsoft.com",
+          "officeclient.microsoft.com",
+          "searchapp.bundleassets.example",
+          "self.events.data.microsoft.com",
+          "tas02.sls.update.microsoft.com",
+          "to-do.microsoft.com",
+          "wdcp.microsoft.com",
+          "www.bing.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-002": {
+          "result": "PASS",
+          "assertions": 6,
+          "problems": []
+        },
+        "CLEAN-003": {
+          "result": "FAIL",
+          "assertions": 34,
+          "problems": [
+            "FAIL: install_check reported no FAIL line -> 2: FAIL installed ProductVersion -> 0.5.0-rc.7 (FileVersion 0.5.0-rc.7) FAIL HKCU uninstall entry -> DisplayVersion=0.5.0-rc.7 InstallLocation=\"C:\\Users\\tester\\AppData\\Local\\Encastra\"",
+            "FAIL: install_check PASS: installed ProductVersion -> (null)",
+            "FAIL: install_check PASS: HKCU uninstall entry -> (null)"
+          ]
+        }
+      }
+    },
+    "N5-runtime": {
+      "mode": "full",
+      "inject": ["not-ready", "hidden-fail", "persist"],
+      "problems": [],
+      "netdev": ["-netdev user,id=n0,restrict=on"],
+      "network": {
+        "capture": "net.pcap",
+        "sha256": "8043d7419a661e4e0c0168c3b6f370972f60e29a9cfa86c9cdd43704305481dc",
+        "state": "read",
+        "packets": 1169,
+        "guest_destinations": [
+          "udp 10.0.2.255:137",
+          "udp 224.0.0.252:5355",
+          "udp 239.255.255.250:1900",
+          "udp [fec0:0:0:ffff::1]:53",
+          "udp [fec0:0:0:ffff::2]:53",
+          "udp [fec0:0:0:ffff::3]:53"
+        ],
+        "dns_queries": [
+          "aefd.nelreports.net",
+          "config.edge.skype.com",
+          "ctldl.windowsupdate.com",
+          "displaycatalog.mp.microsoft.com",
+          "dns.msftncsi.com",
+          "edge.microsoft.com",
+          "fd.api.iris.microsoft.com",
+          "g.live.com",
+          "go.microsoft.com",
+          "msedge.api.cdp.microsoft.com",
+          "officeclient.microsoft.com",
+          "oneclient.sfx.ms",
+          "searchapp.bundleassets.example",
+          "self.events.data.microsoft.com",
+          "settings-win.data.microsoft.com",
+          "tas02.sls.update.microsoft.com",
+          "wdcp.microsoft.com",
+          "www.bing.com",
+          "www.microsoft.com"
+        ]
+      },
+      "scenarios": {
+        "CLEAN-001": {
+          "result": "PASS",
+          "assertions": 17,
+          "problems": []
+        },
+        "CLEAN-002": {
+          "result": "PASS",
+          "assertions": 6,
+          "problems": []
+        },
+        "CLEAN-003": {
+          "result": "PASS",
+          "assertions": 34,
+          "problems": []
+        },
+        "CLEAN-004": {
+          "result": "FAIL",
+          "assertions": 9,
+          "problems": [
+            "FAIL: the application reaches ready (interface rendered, IPC round trip) -> not ready after 90s; last: no CDP endpoint on 127.0.0.1:9222 (fetch failed); the application has to be started with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222",
+            "FAIL: WebView2 browser processes for this application run from the Windows WebView2 runtime -> 0; (null); elsewhere: (null)",
+            "required check missing: 'first-run welcome'"
+          ]
+        },
+        "CLEAN-005": {
+          "result": "FAIL",
+          "assertions": 19,
+          "problems": [
+            "FAIL: no FAIL or SKIP line anywhere in the log (not only in the SUMMARY) -> 1: FAIL j3 import landed in the library -> nothing (injected) [iteration 1/1]",
+            "FAIL: the SUMMARY pass count equals the PASS lines in the log -> SUMMARY passed=60 failed=0 skipped=0 repeat=1 stamp=cdc4c356b35fad5ebc768e1c1dc1ac245b67d008",
+            "FAIL: at least 100 PASS lines (100 per iteration) -> 59",
+            "FAIL: the refusals were exercised (a folder nobody chose is refused) -> 0: (null)",
+            "gui-journeys.log: 1 FAIL/SKIP line(s), first: FAIL  j3 import landed in the library -> nothing (injected)  [iteration 1/1]"
+          ]
+        },
+        "CLEAN-012": {
+          "result": "FAIL",
+          "assertions": 42,
+          "problems": [
+            "FAIL: uninstall: while installed and used, run_keys is as the baseline had it -> Name Value ---- ----- added {HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run|Encastra-injected=C:\\Users\\teste... removed {}",
+            "FAIL: after uninstall, run_keys is as the baseline had it -> Name Value ---- ----- added {HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run|Encastra-injected=C:\\Users\\teste... removed {}"
+          ],
+          "webview2_profile": {
+            "Login Data": {
+              "state": "read",
+              "sha256": "b10aee4fd73538f34e604ce68d8d933656069868cf6a60a89199b8cfdb2d1c1b",
+              "rows": {
+                "logins": 0
+              },
+              "missing_tables": []
+            },
+            "Cookies": {
+              "state": "read",
+              "sha256": "de48f5c4308a2477450952a8fd6462c411cc966f9e0fb0065a252b3be831a482",
+              "rows": {
+                "cookies": 0
+              },
+              "missing_tables": []
+            },
+            "Web Data": {
+              "state": "read",
+              "sha256": "8ab0c3dbfc4b13c94b1dcbe4b938745f0f7aaa266526ebfa188f15de7288a9b7",
+              "rows": {
+                "autofill": 0,
+                "credit_cards": 0
+              },
+              "missing_tables": []
+            }
+          }
+        },
+        "CLEAN-CONTAMINATION": {
+          "result": "FAIL",
+          "assertions": 22,
+          "problems": [
+            "FAIL: run_keys unchanged from the baseline -> Name Value ---- ----- added {HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run|Encastra-injected=C:\\Users\\teste... removed {}"
+          ]
+        }
+      }
+    }
+  },
+  "matrix": {
+    "CLEAN-001@A": "PASS",
+    "CLEAN-002@A": "PASS",
+    "CLEAN-003@A": "PASS",
+    "CLEAN-004@A": "PASS",
+    "CLEAN-005@A": "PASS",
+    "CLEAN-006@A": "PASS",
+    "CLEAN-007@A": "PASS",
+    "CLEAN-008@A": "PASS",
+    "CLEAN-009@A": "PASS",
+    "CLEAN-010@A": "PASS",
+    "CLEAN-012@A": "PASS",
+    "CLEAN-013@A": "PASS",
+    "CLEAN-CONTAMINATION@A": "PASS",
+    "CLEAN-001@B": "PASS",
+    "CLEAN-002@B": "PASS",
+    "CLEAN-003@B": "PASS",
+    "CLEAN-004@B": "PASS",
+    "CLEAN-005@B": "PASS",
+    "CLEAN-006@B": "PASS",
+    "CLEAN-007@B": "PASS",
+    "CLEAN-008@B": "PASS",
+    "CLEAN-009@B": "PASS",
+    "CLEAN-010@B": "PASS",
+    "CLEAN-012@B": "PASS",
+    "CLEAN-013@B": "PASS",
+    "CLEAN-CONTAMINATION@B": "PASS",
+    "CLEAN-001@U": "PASS",
+    "CLEAN-002@U": "PASS",
+    "CLEAN-011@U": "PASS",
+    "CLEAN-CONTAMINATION@U": "PASS",
+    "CLEAN-014": "PASS",
+    "NEGATIVE": "PASS"
+  },
+  "negative": {
+    "N1-tampered": {
+      "expected": {
+        "harness": ["--tamper-installer", "--steps", "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"],
+        "must_fail": {
+          "CLEAN-002": [
+            "installer sha256 is the published digest",
+            "copy in Downloads is byte-identical"
+          ]
+        },
+        "must_not_run": ["CLEAN-003"]
+      },
+      "observed": {
+        "CLEAN-002": "FAIL as expected",
+        "CLEAN-003": "not run, as expected"
+      },
+      "ok": true
+    },
+    "N2-missing": {
+      "expected": {
+        "harness": ["--omit-installer", "--steps", "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"],
+        "must_fail": {
+          "CLEAN-002": ["installer present on the harness disc"]
+        },
+        "must_not_run": ["CLEAN-003"]
+      },
+      "observed": {
+        "CLEAN-002": "FAIL as expected",
+        "CLEAN-003": "not run, as expected"
+      },
+      "ok": true
+    },
+    "N3-contaminated": {
+      "expected": {
+        "harness": [
+          "--inject",
+          "stale",
+          "--inject",
+          "preinstalled",
+          "--inject",
+          "stray-process",
+          "--steps",
+          "CLEAN-001,CLEAN-002,CLEAN-003,CONTAMINATION"
+        ],
+        "must_fail": {
+          "CLEAN-001": [
+            "no marker from an earlier cycle",
+            "no file or folder named *encastra*",
+            "no Encastra uninstall entry",
+            "no Encastra or Encastra WebView2 process"
+          ]
+        },
+        "must_not_run": ["CLEAN-002", "CLEAN-003"]
+      },
+      "observed": {
+        "CLEAN-001": "FAIL as expected",
+        "CLEAN-002": "not run, as expected",
+        "CLEAN-003": "not run, as expected"
+      },
+      "ok": true
+    },
+    "N4-wrong-version": {
+      "expected": {
+        "harness": [
+          "--inject",
+          "wrong-version",
+          "--steps",
+          "CLEAN-001,CLEAN-002,CLEAN-003,CLEAN-004,CONTAMINATION"
+        ],
+        "must_fail": {
+          "CLEAN-003": [
+            "install_check reported no FAIL line",
+            "install_check PASS: installed ProductVersion"
+          ]
+        },
+        "must_not_run": ["CLEAN-004"]
+      },
+      "observed": {
+        "CLEAN-003": "FAIL as expected",
+        "CLEAN-004": "not run, as expected"
+      },
+      "ok": true
+    },
+    "N5-runtime": {
+      "expected": {
+        "harness": [
+          "--inject",
+          "not-ready",
+          "--inject",
+          "hidden-fail",
+          "--inject",
+          "persist",
+          "--repeat",
+          "1",
+          "--steps",
+          "CLEAN-001,CLEAN-002,CLEAN-003,CLEAN-004,CLEAN-005,CLEAN-012,CONTAMINATION"
+        ],
+        "must_fail": {
+          "CLEAN-004": ["the application reaches ready"],
+          "CLEAN-005": ["no FAIL or SKIP line anywhere"],
+          "CLEAN-012": ["after uninstall, run_keys is as the baseline"],
+          "CLEAN-CONTAMINATION": ["run_keys unchanged from the baseline"]
+        }
+      },
+      "observed": {
+        "CLEAN-004": "FAIL as expected",
+        "CLEAN-005": "FAIL as expected",
+        "CLEAN-012": "FAIL as expected",
+        "CLEAN-CONTAMINATION": "FAIL as expected"
+      },
+      "ok": true
+    }
+  },
+  "problems": [],
+  "subject": {
+    "installer": {
+      "file": "Encastra_0.5.0-rc.7_x64-setup.exe",
+      "sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+      "version": "0.5.0-rc.7",
+      "build_commit": "cdc4c356b35fad5ebc768e1c1dc1ac245b67d008",
+      "exe_sha256": "460e9f86b7eba6d9983105ac9de1493b72ed3ca52aa5c142dff9fee2674e9764",
+      "tag": null,
+      "tag_commit": "85fc59e91656f36b88dbdbde726853646b08d9d1",
+      "signature": "NotSigned"
+    },
+    "upgrade_from": {
+      "file": "Encastra_0.5.0-rc.5_x64-setup.exe",
+      "sha256": "afaec18b217d66171a5c9c9f530d94b6e7e591ca61af18a3101733cb01674f10",
+      "version": "0.5.0-rc.5",
+      "tag": "v0.5.0-rc.5"
+    },
+    "base_sha256": "bbc062866d5aa7d92433f6381e175b82269e66224c92d887ed8483ed2a97a2f0",
+    "judge": {
+      "report_py_sha256": "864ef5a2302851c1519f3464aada64078b4be4b5b2c0cd05eeff8cdfeac3b23f",
+      "negative_spec_sha256": "f740db9f165fba3eceff3726f3dc719cda77da7bb60127974689f557da05b885"
+    },
+    "cycles": {
+      "A": {
+        "mode": "full",
+        "installer_sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+        "evidence_sha256": "9f0e69f74c6d4835b96be0af84a394e095bd2803906b16aa5f626d6a0ff91d97"
+      },
+      "B": {
+        "mode": "full",
+        "installer_sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+        "evidence_sha256": "d8eb56699acf391189c7ee72d49fba8907ff3094b635b4cbf3ef4fa48d5a6690"
+      },
+      "U": {
+        "mode": "upgrade",
+        "installer_sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+        "evidence_sha256": "e3b435fcfc25c3537725755b1a81334c63b83df50369e3461e0b5efbc6adc8e4"
+      },
+      "N1-tampered": {
+        "mode": "full",
+        "installer_sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+        "evidence_sha256": "c095a02f62cee9b44dfa4b1ceb2d825bd326b57e1fb02260b60a8dab4f906fa0"
+      },
+      "N2-missing": {
+        "mode": "full",
+        "installer_sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+        "evidence_sha256": "1d588445ba39939ca9e08443ec10f0de495c60ad308e0bde45617318c2f8da66"
+      },
+      "N3-contaminated": {
+        "mode": "full",
+        "installer_sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+        "evidence_sha256": "a0b013e3008edab2ac5f6ce077abf0a01b4ee4f0816c84fdc9d2de4d5d82f051"
+      },
+      "N4-wrong-version": {
+        "mode": "full",
+        "installer_sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+        "evidence_sha256": "5a3390ea72228025eda90d9e36296bce3252a634766856c32503e035fab8ed2d"
+      },
+      "N5-runtime": {
+        "mode": "full",
+        "installer_sha256": "2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438",
+        "evidence_sha256": "dcd3918520ce84152b80324988555a5eafb1c87feb2251676924b0598043ac66"
+      }
+    }
+  },
+  "repeatability": [],
+  "CLEAN_VM_ACCEPTANCE": "PASS"
+}

@@ -8,7 +8,7 @@
  */
 
 /** The release this website documents. Single module, imported everywhere. */
-export const VERSION = '0.5.0-rc.5';
+export const VERSION = '0.5.0-rc.7';
 
 export const SITE = {
   name: 'Encastra',
@@ -24,8 +24,37 @@ export const SITE = {
    * is used only to build canonical URLs and is not linked to as if it were live elsewhere.
    */
   url: 'https://encastra.dev',
-  repository: null,
+  /**
+   * The public repository. The source is available under the PolyForm Noncommercial License
+   * 1.0.0 (`LICENSE`); builds are published on its Releases page. Its issue tracker is the
+   * channel for bugs, and its private vulnerability reporting the channel for security problems
+   * (`SECURITY_REPORT_URL`). Commercial licences and business enquiries go to `CONTACT_EMAIL`.
+   */
+  repository: 'https://github.com/alexlincai123-sketch/encastra',
 } as const;
+
+/**
+ * Where builds are published, free to download: GitHub Releases on the repository above.
+ *
+ * The list, not `/releases/latest`: release candidates are published as GitHub pre-releases, and
+ * `/latest` skips pre-releases, so while only candidates exist it would lead nowhere.
+ */
+export const RELEASES_URL = `${SITE.repository}/releases`;
+
+/** The licence text itself, in the repository. The site describes it; this file is what binds. */
+export const LICENSE_URL = `${SITE.repository}/blob/main/LICENSE`;
+
+/**
+ * The project's one email address: for commercial licences and business enquiries. Not for
+ * security reports (see `SECURITY_REPORT_URL`) and not for bugs (the repository's issues).
+ */
+export const CONTACT_EMAIL = 'alexcaioficial123@gmail.com';
+
+/**
+ * Where a vulnerability is reported privately: GitHub's private vulnerability reporting on the
+ * repository above. There is no security@ address — the domain is not registered.
+ */
+export const SECURITY_REPORT_URL = `${SITE.repository}/security/advisories/new`;
 
 /**
  * What exists, what is in preview, and what is only a design document.
@@ -77,7 +106,6 @@ export const STATUS = {
   marketplace: 'planned',
   community: 'planned',
   accounts: 'planned',
-  payments: 'planned',
 } as const satisfies Record<string, BuildState>;
 
 /**
@@ -103,16 +131,16 @@ export const RELEASE: {
   installerFormat: string;
 } = {
   /** Exactly as published in docs/RELEASE.md. */
-  installerFilename: 'Encastra_0.5.0-rc.5_x64-setup.exe',
-  installerVersion: '0.5.0-rc.5',
+  installerFilename: 'Encastra_0.5.0-rc.7_x64-setup.exe',
+  installerVersion: '0.5.0-rc.7',
   installerSize: '3.5 MB',
-  installerSha256: 'afaec18b217d66171a5c9c9f530d94b6e7e591ca61af18a3101733cb01674f10',
+  installerSha256: '2e340eb4b462a408feaf35052b2d6743002a8ed0fc706eddeb5b69cbf0ebd438',
   binaryFilename: 'encastra-desktop.exe',
   binarySize: '9.4 MB',
-  binarySha256: '14dc5d615676830ce34882fe663f64f56be32910047b20f3d20a65fdd1a40402',
-  builtOn: '2026-09-23',
+  binarySha256: '460e9f86b7eba6d9983105ac9de1493b72ed3ca52aa5c142dff9fee2674e9764',
+  builtOn: '2026-09-26',
   builtFor: 'Windows X64',
-  commit: '1ce8e864da3eba12043684d86f4accf51707e519',
+  commit: 'cdc4c356b35fad5ebc768e1c1dc1ac245b67d008',
   signed: false,
   /** Installer format. Per user, no administrator required. See docs/RELEASE.md. */
   installerFormat: 'NSIS',

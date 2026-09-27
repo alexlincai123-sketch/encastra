@@ -18,7 +18,7 @@
  * The pure parts are exported so they can be tested without a DOM.
  */
 
-import { type RefObject, useEffect } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 
 /**
  * What counts as reachable by Tab. Disabled controls and anything removed from the sequence with
@@ -109,4 +109,31 @@ export function useRestoreFocusOnUnmount(): void {
       if (opener?.isConnected) opener.focus();
     };
   }, []);
+}
+
+/**
+ * Keeps focus somewhere sensible when a confirmation row replaces the button that opened it.
+ *
+ * The button somebody pressed is unmounted by pressing it, in both directions — opening the row
+ * removes the opener, and answering it removes the row — and focus that was on an element that no
+ * longer exists lands on `<body>`, which for a keyboard or screen-reader user is the top of the
+ * page. So: opening moves focus to the question (give it `tabIndex={-1}`), which is what a screen
+ * reader should read first, and closing moves it back to the opener.
+ *
+ * Compares against the previous value rather than skipping the first run, so a component that
+ * mounts closed — or a development double-run of effects — moves nothing.
+ */
+export function useConfirmFocus<
+  Question extends HTMLElement = HTMLParagraphElement,
+  Opener extends HTMLElement = HTMLButtonElement,
+>(open: boolean): { question: RefObject<Question | null>; opener: RefObject<Opener | null> } {
+  const question = useRef<Question | null>(null);
+  const opener = useRef<Opener | null>(null);
+  const previous = useRef(open);
+  useEffect(() => {
+    if (previous.current === open) return;
+    previous.current = open;
+    (open ? question.current : opener.current)?.focus();
+  }, [open]);
+  return { question, opener };
 }

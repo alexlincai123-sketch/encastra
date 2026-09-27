@@ -200,6 +200,28 @@ describe('selectPlural', () => {
     expect(selectPlural('fr', 1)).toBe('one');
     expect(selectPlural('fr', 2)).toBe('other');
   });
+
+  it('never returns a category the message trees have no branch for', () => {
+    // CLDR puts a round million in `'many'` for Spanish, French, Italian and Portuguese. No
+    // locale file has a `many` branch, so passing that through rendered the raw key.
+    for (const locale of ['es', 'fr', 'it', 'pt'] as const) {
+      expect(selectPlural(locale, 1_000_000)).toBe('other');
+    }
+    expect(selectPlural('es', 1)).toBe('one');
+  });
+
+  it('turns a million into a real sentence in Spanish, not a raw key', () => {
+    const original = useI18n.getState();
+    try {
+      useI18n.setState({ locale: 'es', messages: { en, es } });
+      const key = `home.continue.steps.${selectPlural('es', 1_000_000)}`;
+      const text = translate(key, { count: 1_000_000 });
+      expect(text).not.toBe(key);
+      expect(text).toContain('1000000');
+    } finally {
+      useI18n.setState(original, true);
+    }
+  });
 });
 
 describe('regional formatting', () => {

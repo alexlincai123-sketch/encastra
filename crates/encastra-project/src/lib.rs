@@ -268,8 +268,15 @@ impl Project {
         // Written beside the target and moved into place, so a crash mid-write leaves the
         // previous project intact rather than a truncated file where it used to be.
         let temporary = path.with_extension("encastra-writing");
-        std::fs::write(&temporary, &bytes)?;
-        std::fs::rename(&temporary, path)?;
+        if let Err(error) =
+            std::fs::write(&temporary, &bytes).and_then(|()| std::fs::rename(&temporary, path))
+        {
+            // The move did not happen - the target is read-only, or is a folder, or the disk
+            // filled up mid-write - so the copy beside the target is not the project anybody
+            // has. It must not be left there looking like one: the save failed and says so.
+            let _ = std::fs::remove_file(&temporary);
+            return Err(error.into());
+        }
         Ok(())
     }
 
@@ -610,6 +617,37 @@ mod tests {
             },
         );
         project
+    }
+
+    /// Found by the Clean VM acceptance run: a save over a read-only project failed, correctly,
+    /// and left `<name>.encastra-writing` - a full copy of the project - beside it. The failure is
+    /// reproduced portably by making the target a folder, which no platform lets a file be moved
+    /// over.
+    #[test]
+    fn a_save_that_cannot_be_moved_into_place_leaves_nothing_beside_the_target() {
+        let dir = std::env::temp_dir().join(format!(
+            "encastra-project-save-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let target = dir.join("blocked.encastra");
+        std::fs::create_dir_all(target.join("inside")).expect("a folder where the file should go");
+
+        assert!(sample().save(&target).is_err(), "the save cannot succeed");
+        assert!(
+            !dir.join("blocked.encastra-writing").exists(),
+            "the temporary copy was left beside the target"
+        );
+        assert!(target.join("inside").is_dir(), "the target was not touched");
+
+        // And a save that can succeed still does, and leaves no temporary either.
+        let fine = dir.join("fine.encastra");
+        sample().save(&fine).expect("saves");
+        assert!(fine.is_file() && !dir.join("fine.encastra-writing").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -20,7 +20,8 @@
  * `window.confirm` — a modal from the browser is not this application speaking.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useConfirmFocus } from '../a11y/focus';
 import { formatDate, selectPlural, useTranslation } from '../i18n';
 import { canBeginImport } from '../import-machine';
 import { ipc } from '../ipc';
@@ -28,12 +29,21 @@ import { arrange, LIBRARY_SORTS, type LibrarySort, mayDeleteCopy } from '../libr
 import { useEditor } from '../store';
 import type { EntryWithStatus } from '../types';
 
-function Row({ row }: { row: EntryWithStatus }) {
+function Row({ row, onGone }: { row: EntryWithStatus; onGone: () => void }) {
   const openFromLibrary = useEditor((s) => s.openFromLibrary);
   const removeFromLibrary = useEditor((s) => s.removeFromLibrary);
   const busy = useEditor((s) => s.busy);
   const { t, locale } = useTranslation();
   const [confirming, setConfirming] = useState(false);
+  const focus = useConfirmFocus(confirming);
+
+  // Answering the question closes it (focus goes back to Remove), and a removal that went through
+  // then takes the whole row away — Remove included — so the list hands focus on from there.
+  const remove = async (deleteCopy: boolean) => {
+    setConfirming(false);
+    await removeFromLibrary(row, deleteCopy);
+    if (!useEditor.getState().library.some((r) => r.entry.id === row.entry.id)) onGone();
+  };
 
   const { entry, status } = row;
   const imported = entry.origin === 'imported';
@@ -108,7 +118,7 @@ function Row({ row }: { row: EntryWithStatus }) {
 
       {confirming ? (
         <div className="library__confirm">
-          <p className="library__confirm-question">
+          <p className="library__confirm-question" tabIndex={-1} ref={focus.question}>
             {imported ? t('library.remove.importedNote') : t('library.remove.keepsFile')}
           </p>
           <div className="library__actions">
@@ -120,10 +130,7 @@ function Row({ row }: { row: EntryWithStatus }) {
                 type="button"
                 className="btn btn--danger"
                 disabled={busy}
-                onClick={() => {
-                  setConfirming(false);
-                  void removeFromLibrary(row, true);
-                }}
+                onClick={() => void remove(true)}
               >
                 {t('library.remove.andDeleteCopy')}
               </button>
@@ -132,10 +139,7 @@ function Row({ row }: { row: EntryWithStatus }) {
               type="button"
               className="btn"
               disabled={busy}
-              onClick={() => {
-                setConfirming(false);
-                void removeFromLibrary(row, false);
-              }}
+              onClick={() => void remove(false)}
             >
               {imported ? t('library.remove.keepCopy') : t('library.remove.forget')}
             </button>
@@ -158,7 +162,12 @@ function Row({ row }: { row: EntryWithStatus }) {
           >
             {t('library.actions.open')}
           </button>
-          <button type="button" className="btn" onClick={() => setConfirming(true)}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setConfirming(true)}
+            ref={focus.opener}
+          >
             {t('library.actions.remove')}
           </button>
         </div>
@@ -227,6 +236,9 @@ export function Library() {
   const mayImport = useEditor((s) => canBeginImport(s.importState));
   const busy = useEditor((s) => s.busy);
   const { t, locale } = useTranslation();
+  // Where focus goes when the row that held it has been removed: the top of the screen, rather
+  // than `<body>`, which a screen reader announces as nothing at all.
+  const heading = useRef<HTMLHeadingElement | null>(null);
 
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<LibrarySort>('recent');
@@ -243,7 +255,9 @@ export function Library() {
   return (
     <main className="view view--library">
       <header className="view__header">
-        <h1>{t('library.heading')}</h1>
+        <h1 tabIndex={-1} ref={heading}>
+          {t('library.heading')}
+        </h1>
         <p>{t('library.intro')}</p>
       </header>
 
@@ -298,7 +312,7 @@ export function Library() {
         <>
           <ul className="library__list">
             {shown.map((row) => (
-              <Row row={row} key={row.entry.id} />
+              <Row row={row} key={row.entry.id} onGone={() => heading.current?.focus()} />
             ))}
           </ul>
           {shown.length === 0 ? <p className="library__none">{t('library.noMatches')}</p> : null}

@@ -4,7 +4,9 @@ This page takes you from "I have just installed this" to "I ran something and I 
 came out". It assumes nothing. If you have never seen a tool like this before, you are the
 person it is written for.
 
-Everything else in `docs/` is reference material for people building on Encastra.
+Installing it, checking the download and a first run from the customer's side are in
+[user/GETTING_STARTED](user/GETTING_STARTED.md). Everything else in `docs/` is reference material
+for people building on Encastra.
 [CONCEPTS](CONCEPTS.md) is the vocabulary; [TUTORIALS](TUTORIALS.md) is the first workflow built
 step by step; [COMPONENTS](COMPONENTS.md) is the list of parts you have.
 
@@ -58,7 +60,7 @@ Uninstalling removes the application and leaves your `.encastra` files alone.
 The window has a strip of icons down the left, a toolbar across the top, your work in the middle,
 and a status bar along the bottom that stays the same wherever you are.
 
-The left strip has five places. Five, not fifteen — there is no Marketplace or Community button,
+The left strip has six places. Six, not fifteen — there is no Marketplace or Community button,
 because there is no marketplace and no community, and a menu item that opens a "coming soon"
 page teaches you that half the application is decoration.
 
@@ -71,6 +73,9 @@ that ship with the application.
 arrange them, and an **inspector** on the other side that shows the settings for whichever block
 is selected. The inspector is also the debugger — after a run it shows what that block actually
 did — and it is where permission questions appear.
+
+**Library** is where the projects you have saved or imported are listed, so you can open one again
+without hunting for the file.
 
 **Components** is the catalogue: all nineteen blocks and both triggers, each stating what it
 does, what it takes in, what it gives out, and what it can reach. The wording there is the same
@@ -196,8 +201,9 @@ consequence is honest and worth knowing: **a workflow that needs a password or a
 nowhere safe to keep it in this build.** The mechanism that would make that safe is designed and
 not yet built.
 
-Permissions are not saved either. They last one run and are assembled fresh each time, so
-opening a workflow someone sent you grants nothing until you say yes yourself.
+Permissions are not saved either. They last while the project stays open and are cleared when you
+open or start another one, and they are never written into the `.encastra` file — so opening a
+workflow someone sent you grants nothing until you say yes yourself.
 
 ---
 

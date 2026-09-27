@@ -64,7 +64,7 @@ export default async function DocsPage(): Promise<ReactNode> {
                 </span>
                 <h3>{t(locale, `docs.items.${key}.title`)}</h3>
                 <p>{t(locale, `docs.items.${key}.summary`)}</p>
-                <SourceRef path={`docs/${doc.slug}`} locale={locale} />
+                <SourceRef path={`docs/${doc.slug}`} locale={locale} linked />
               </div>
             </Card>
           );
@@ -87,7 +87,7 @@ export default async function DocsPage(): Promise<ReactNode> {
                   </span>
                   <h3>{t(locale, `docs.items.${key}.title`)}</h3>
                   <p>{t(locale, `docs.items.${key}.summary`)}</p>
-                  <SourceRef path={`docs/${doc.slug}`} locale={locale} />
+                  <SourceRef path={`docs/${doc.slug}`} locale={locale} linked />
                 </div>
               </Card>
             );

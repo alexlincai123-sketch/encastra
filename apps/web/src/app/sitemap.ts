@@ -10,7 +10,7 @@ import { SITE } from '@/config/site';
  * navigation is built from" — was not true: the list below it was typed by hand, and `/ecosystem`
  * was in both navigations and in neither this list nor any crawler's idea of the site. It is now
  * literally true. `SITE_ROUTES` is derived from `config/nav.ts`; the legal documents come from
- * `config/legal.ts`, which is the only place that knows all ten of them; nothing here is a third
+ * `config/legal.ts`, which is the only place that knows all seven of them; nothing here is a third
  * copy of either, and `test/sitemap.test.ts` fails if a navigable page stops being covered.
  */
 export default function sitemap(): MetadataRoute.Sitemap {

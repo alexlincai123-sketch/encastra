@@ -12,6 +12,7 @@ const fr: Messages = {
     choose: 'Choisir…',
     itCannot: 'Il ne peut pas',
     recordingBadge: 'enregistrement',
+    projectFileType: 'Projet Encastra',
   },
 
   sidebar: {
@@ -83,6 +84,13 @@ const fr: Messages = {
   },
 
   canvas: {
+    controls: {
+      panel: 'Contrôles du canevas',
+      zoomIn: 'Zoom avant',
+      zoomOut: 'Zoom arrière',
+      fitView: 'Ajuster à la vue',
+      minimap: 'Mini-carte',
+    },
     ariaLabel: 'Canevas du flux de travail',
     refusal: {
       selfCycle: {
@@ -590,11 +598,138 @@ const fr: Messages = {
   },
 
   components: {
+    categories: {
+      all: 'Tous',
+      other: 'Autres',
+      data: 'Données',
+      file: 'Fichiers',
+      flow: 'Flux',
+      media: 'Médias',
+      network: 'Réseau',
+      system: 'Système',
+    },
+    core: {
+      encastra: {
+        data: {
+          csv: {
+            read: {
+              name: 'Lire un CSV',
+              description: 'Transforme un texte séparé par des virgules en une liste de lignes.',
+            },
+            write: {
+              name: 'Écrire un CSV',
+              description: 'Transforme une liste de lignes en texte séparé par des virgules.',
+            },
+          },
+          json: {
+            name: 'Analyser du JSON',
+            description: 'Transforme du texte en données structurées.',
+            write: {
+              name: 'Écrire du JSON',
+              description: 'Retransforme des données structurées en texte.',
+            },
+          },
+        },
+        file: {
+          move: {
+            name: 'Déplacer un fichier',
+            description: 'Déplace un fichier dans un autre dossier. L’original est supprimé.',
+          },
+          read: {
+            name: 'Lire un fichier',
+            description: 'Lit le contenu texte du fichier qui lui est connecté.',
+          },
+          rename: {
+            name: 'Renommer un fichier',
+            description: 'Donne un nouveau nom à un fichier, sans le déplacer.',
+          },
+          save: {
+            name: 'Enregistrer un fichier',
+            description:
+              'Place un fichier dans un dossier de votre choix. Garde le nom d’origine, sauf si vous en donnez un autre.',
+          },
+          watch: {
+            name: 'Surveiller un dossier',
+            description:
+              'Démarre le flux de travail chaque fois qu’un fichier apparaît dans un dossier.',
+          },
+          write: {
+            name: 'Écrire un fichier',
+            description: 'Enregistre du texte dans un fichier, dans un dossier de votre choix.',
+          },
+        },
+        flow: {
+          delay: {
+            name: 'Délai',
+            description: 'Attend, puis transmet la valeur sans la modifier.',
+          },
+          if: {
+            name: 'Si',
+            description: 'Envoie la valeur d’un côté ou de l’autre selon une condition.',
+          },
+          switch: {
+            name: 'Aiguillage',
+            description: 'Envoie la valeur vers l’une de plusieurs routes selon un mot.',
+          },
+        },
+        image: {
+          convert: {
+            name: 'Convertir une image',
+            description: 'Écrit une image dans un autre format.',
+          },
+          info: {
+            name: 'Infos sur l’image',
+            description: 'Indique la taille et le format d’une image sans la modifier.',
+          },
+          resize: {
+            name: 'Redimensionner une image',
+            description:
+              'Change la taille d’une image. Laissez un côté vide pour garder les proportions.',
+          },
+          thumbnail: {
+            name: 'Miniature',
+            description: 'Crée un petit aperçu carré d’une image.',
+          },
+        },
+        net: {
+          http: {
+            name: 'Requête HTTP',
+            description: 'Récupère une adresse web, ou lui envoie des données.',
+          },
+        },
+        system: {
+          clipboard: {
+            name: 'Copier dans le presse-papiers',
+            description: 'Place du texte dans le presse-papiers, prêt à être collé.',
+          },
+          notify: {
+            name: 'Notifier',
+            description: 'Affiche un message quand cette étape s’exécute.',
+          },
+          timer: {
+            name: 'Minuteur',
+            description: 'Démarre le flux de travail encore et encore, selon un horaire.',
+          },
+        },
+      },
+    },
     header: {
       title: 'Composants',
-      summary: '{count} installés.',
-      summaryWithTriggers:
-        '{count} installés — {triggerCount} d’entre eux démarrent un flux de travail par eux-mêmes ; le reste s’exécute comme une étape à l’intérieur d’un autre.',
+      summary: {
+        one: '{count} installé.',
+        other: '{count} installés.',
+      },
+      // The installed count on its own, agreeing with {count}, for `summaryWithTriggers` to
+      // place where the sentence wants it; that sentence then agrees with {triggerCount}.
+      installed: {
+        one: '{count} installé',
+        other: '{count} installés',
+      },
+      summaryWithTriggers: {
+        one: '{installed} — {triggerCount} démarre un flux de travail par lui-même ; le reste s’exécute comme une étape à l’intérieur d’un autre.',
+        other:
+          '{installed} — {triggerCount} d’entre eux démarrent un flux de travail par eux-mêmes ; le reste s’exécute comme une étape à l’intérieur d’un autre.',
+      },
       note: 'Tout ceci est fourni avec l’application ; en installer d’autres nécessite le bac à sable pour le code tiers, qui n’est pas encore construit.',
     },
     search: {
@@ -739,6 +874,7 @@ const fr: Messages = {
       in: 'entrée {port}',
       out: 'sortie {port}',
       permissionsUsed: 'Permissions utilisées',
+      seeRefusalReason: 'La raison du refus figure plus bas, sous Permissions utilisées.',
       refused: ' · {count} refusées',
       logs: 'Journaux',
     },
@@ -1584,6 +1720,12 @@ const fr: Messages = {
           label: 'Restaurer les valeurs par défaut',
           hint: 'Remet chaque réglage de cet écran à son état du premier lancement. Ne touche pas à vos projets, autorisations accordées, ni composants installés.',
           button: 'Réinitialiser tous les réglages',
+          confirm: {
+            question:
+              'Réinitialiser tous les réglages de cet écran ? Vos projets, autorisations accordées et composants installés ne sont pas touchés.',
+            confirm: 'Oui, réinitialiser',
+            cancel: 'Annuler',
+          },
         },
       },
     },
@@ -1619,6 +1761,7 @@ const fr: Messages = {
           label: 'Exporter',
           hint: 'Enregistre le même rapport sous forme de fichier texte.',
           button: 'Exporter…',
+          failed: 'Impossible d’enregistrer le rapport. Utilisez Copier à la place.',
         },
         note: 'Rien ici n’inclut de chemin de projet, de valeur de préférence, ni de jeton — c’est pensé pour pouvoir être collé quelque part de public sans risque. Le rapport est copié et exporté en anglais, afin que toute l’équipe puisse le lire.',
       },
