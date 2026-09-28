@@ -6,6 +6,14 @@
 
 **Build software from parts that actually fit.**
 
+> [!WARNING]
+> **Windows will warn you when you run the installer.** Encastra is not code-signed, so Microsoft
+> Defender SmartScreen shows *"Windows protected your PC"* the first time you open it. This is
+> expected for an unsigned file: the warning means Windows cannot tell who made it, not that it
+> found anything wrong in it. Check the installer's SHA-256
+> against the one on the [Releases page](https://github.com/alexlincai123-sketch/encastra/releases),
+> then choose **More info → Run anyway**. Details: [Download and install](#download-and-install-free).
+
 Encastra is a local-first runtime that executes a typed graph of components, with a visual
 editor around it. The rest of the ecosystem — a sandbox for strangers' components, a registry,
 an SDK, a marketplace — is designed and not built; the status table below says which is which.
